@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ title or "WebAXIS RoomSys" }}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+
+  <style>
+    body {
+      font-family: "Segoe UI", sans-serif;
+      background-color: #f8f9fa;
+      overflow-x: hidden;
+    }
+    .sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 230px;
+      background-color: #212529;
+      color: #fff;
+      transition: all 0.3s;
+      z-index: 100;
+    }
+    .sidebar.collapsed {
+      width: 70px;
+    }
+    .sidebar .nav-link {
+      color: #adb5bd;
+      font-weight: 500;
+    }
+    .sidebar .nav-link.active {
+      background-color: #0d6efd;
+      color: #fff;
+      border-radius: 8px;
+    }
+    .sidebar .nav-link:hover {
+      background-color: rgba(255,255,255,0.1);
+      color: #fff;
+    }
+    .sidebar-header {
+      padding: 1rem;
+      font-weight: 700;
+      font-size: 1.2rem;
+      text-align: center;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    .content-area {
+      margin-left: 230px;
+      transition: all 0.3s;
+      padding: 2rem;
+    }
+    .collapsed + .content-area {
+      margin-left: 70px;
+    }
+    .topbar {
+      position: fixed;
+      top: 0;
+      left: 230px;
+      right: 0;
+      height: 56px;
+      background-color: #fff;
+      border-bottom: 1px solid #dee2e6;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 1rem;
+      transition: left 0.3s;
+      z-index: 90;
+    }
+    .collapsed + .topbar {
+      left: 70px;
+    }
+    .user-info {
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+ {% if current_user.is_authenticated %}
+  <!-- Sidebar -->
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      WebAXIS
+    </div>
+    <nav class="nav flex-column px-3 py-2">
+      <a class="nav-link d-flex align-items-center gap-2 {% if request.endpoint == 'main_menu' %}active{% endif %}"
+         href="{{ url_for('main_menu') }}" data-bs-toggle="tooltip" data-bs-placement="right" title="Dashboard">
+        <i class="bi bi-bar-chart-fill"></i><span class="link-text">Dashboard</span>
+      </a>
+
+      <a class="nav-link d-flex align-items-center gap-2 {% if request.endpoint == 'room_list' %}active{% endif %}"
+         href="{{ url_for('room_list') }}" data-bs-toggle="tooltip" data-bs-placement="right" title="Rooms">
+        <i class="bi bi-building"></i><span class="link-text">Rooms</span>
+      </a>
+
+      <a class="nav-link d-flex align-items-center gap-2 {% if request.endpoint == 'admin_dashboard' %}active{% endif %}"
+         href="{{ url_for('admin_dashboard') }}" data-bs-toggle="tooltip" data-bs-placement="right" title="Reservations">
+        <i class="bi bi-calendar-check"></i><span class="link-text">Reservations</span>
+      </a>
+
+      <a class="nav-link d-flex align-items-center gap-2 {% if request.endpoint == 'confirm' %}active{% endif %}"
+         href="{{ url_for('confirm') }}" data-bs-toggle="tooltip" data-bs-placement="right" title="Confirmations">
+        <i class="bi bi-check2-square"></i><span class="link-text">Confirmations</span>
+      </a>
+
+      {% if current_user.is_authenticated and current_user.is_admin() %}
+      <hr class="text-secondary">
+      <a class="nav-link d-flex align-items-center gap-2 {% if request.endpoint == 'user_maintenance' %}active{% endif %}"
+         href="{{ url_for('user_maintenance') }}" data-bs-toggle="tooltip" data-bs-placement="right" title="User Maintenance">
+        <i class="bi bi-people-fill"></i><span class="link-text">User Maintenance</span>
+      </a>
+      {% endif %}
+    </nav>
+  </div>
+
+  <!-- Topbar -->
+  <div class="topbar" id="topbar">
+    <div>
+      <button class="btn btn-sm btn-outline-secondary" id="toggleSidebar">☰</button>
+    </div>
+    <div class="user-info">
+      {% if current_user.is_authenticated %}
+        <span>👋 {{ current_user.display_name or current_user.username }} ({{ current_user.role }})</span>
+        <a href="{{ url_for('logout') }}" class="btn btn-sm btn-outline-danger ms-3">Logout</a>
+      {% endif %}
+    </div>
+  </div>
+{% endif %}
+
+
+  <!-- Main content -->
+  <div class="content-area" id="content-area">
+    <div style="margin-top: 80px;">
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+
+  <script>
+    const toggleBtn = document.getElementById('toggleSidebar');
+    const sidebar = document.getElementById('sidebar');
+    const topbar = document.getElementById('topbar');
+    const contentArea = document.getElementById('content-area');
+    toggleBtn.addEventListener('click', () => {
+      sidebar.classList.toggle('collapsed');
+      topbar.classList.toggle('collapsed');
+      contentArea.classList.toggle('collapsed');
+    });
+  </script>
+
+</body>
+</html>

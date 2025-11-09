@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}User Maintenance | WebAXIS{% endblock %}
+
+{% block content %}
+<div class="mb-3 text-end">
+  <a href="{{ url_for('main_menu') }}" class="btn btn-secondary">
+    ← Back to Dashboard
+  </a>
+</div>
+
+<div class="container mt-5">
+  <h2 class="fw-bold mb-4">👥 User Maintenance</h2>
+
+  <!-- Add User Form -->
+  <form method="POST" class="card p-4 shadow-sm mb-4">
+    <h5 class="mb-3">Add New User</h5>
+    <div class="row g-3">
+      <div class="col-md-3"><input type="text" name="username" class="form-control" placeholder="Domain Username" required></div>
+      <div class="col-md-3"><input type="text" name="display_name" class="form-control" placeholder="Display Name"></div>
+      <div class="col-md-3"><input type="email" name="email" class="form-control" placeholder="Email"></div>
+      <div class="col-md-2">
+        <select name="role" class="form-select">
+          <option value="user">User</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+      <div class="col-md-1">
+        <select name="status" class="form-select">
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
+      </div>
+    </div>
+    <div class="text-end mt-3">
+      <button type="submit" class="btn btn-primary">➕ Add User</button>
+    </div>
+  </form>
+
+  <!-- User Table -->
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <h5 class="fw-bold mb-3">Registered Users</h5>
+      <table class="table table-striped align-middle">
+        <thead class="table-dark">
+          <tr>
+            <th>ID</th>
+            <th>Username</th>
+            <th>Display Name</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+          <tr>
+            <form method="POST" action="{{ url_for('user_edit', user_id=u[0]) }}">
+              <td>{{ u[0] }}</td>
+              <td>{{ u[1] }}</td>
+              <td><input name="display_name" class="form-control form-control-sm" value="{{ u[2] or '' }}"></td>
+              <td><input name="email" class="form-control form-control-sm" value="{{ u[3] or '' }}"></td>
+              <td>
+                <select name="role" class="form-select form-select-sm">
+                  <option value="user" {% if u[4]=='user' %}selected{% endif %}>User</option>
+                  <option value="admin" {% if u[4]=='admin' %}selected{% endif %}>Admin</option>
+                </select>
+              </td>
+              <td>
+                <select name="status" class="form-select form-select-sm">
+                  <option value="active" {% if u[5]=='active' %}selected{% endif %}>Active</option>
+                  <option value="inactive" {% if u[5]=='inactive' %}selected{% endif %}>Inactive</option>
+                </select>
+              </td>
+              <td class="text-nowrap">
+                <button type="submit" class="btn btn-sm btn-success">💾 Save</button>
+                <form method="POST" action="{{ url_for('user_delete', user_id=u[0]) }}" style="display:inline;">
+                  <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this user?');">🗑️</button>
+                </form>
+              </td>
+            </form>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

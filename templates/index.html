@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}Available Rooms{% endblock %}
+
+{% block content %}
+<h1>Available Rooms</h1>
+<table border="1">
+    <tr>
+        <th>Room Name</th>
+        <th>Capacity</th>
+        <th>Location</th>
+        <th>Description</th>
+        <th>Action</th>
+    </tr>
+    {% for room in rooms %}
+    <tr>
+        <td>{{ room[1] }}</td>
+        <td>{{ room[2] }}</td>
+        <td>{{ room[3] }}</td>
+        <td>{{ room[4] }}</td>
+        <td><a href="{{ url_for('reserve', room_id=room[0]) }}">Reserve</a></td>
+    </tr>
+    {% endfor %}
+</table>
+{% endblock %}

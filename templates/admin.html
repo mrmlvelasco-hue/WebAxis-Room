@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+  <h2 class="fw-bold mb-3">Admin Dashboard</h2>
+  <a href="{{ url_for('room_list') }}" class="text-decoration-none">📅 Back to Rooms</a>
+
+  <div class="card mt-3 shadow-sm">
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>ID</th>
+              <th>Room</th>
+              <th>Reserved By</th>
+              <th>Email</th>
+              <th>Start</th>
+              <th>End</th>
+              <th>Status</th>
+              <th>Remarks</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for res in reservations %}
+            <tr>
+              <td>{{ res.id }}</td>
+              <td>{{ res.room_name }}</td>
+              <td>{{ res.reserved_by }}</td>
+              <td>{{ res.email }}</td>
+              <td>{{ res.start_time }}</td>
+              <td>{{ res.end_time }}</td>
+              <td>
+                {% if res.status == 'Approved' %}
+                  <span class="badge bg-success">{{ res.status }}</span>
+                {% elif res.status == 'Pending' %}
+                  <span class="badge bg-warning text-dark">{{ res.status }}</span>
+                {% elif res.status == 'Cancelled' %}
+                  <span class="badge bg-danger">{{ res.status }}</span>
+                {% else %}
+                  <span class="badge bg-secondary">{{ res.status }}</span>
+                {% endif %}
+              </td>
+              <td>{{ res.remarks or '' }}</td>
+              <td>
+                <form action="{{ url_for('update_status', res_id=res.id, new_status='Approved') }}" method="POST" class="d-inline">
+                  <button class="btn btn-success btn-sm" type="submit">✅ Approve</button>
+                </form>
+                <form action="{{ url_for('update_status', res_id=res.id, new_status='Cancelled') }}" method="POST" class="d-inline">
+                  <button class="btn btn-danger btn-sm" type="submit">❌ Cancel</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

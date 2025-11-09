@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Reserve {{ room[1] }}</title>
+</head>
+<body>
+    <h2>Reserve {{ room[1] }}</h2>
+    <form method="POST">
+        <label>Name:</label><br>
+        <input type="text" name="reserved_by" required><br><br>
+
+        <label>Email:</label><br>
+        <input type="email" name="email"><br><br>
+
+        <label>Start Time:</label><br>
+        <input type="datetime-local" name="start_time" required><br><br>
+
+        <label>End Time:</label><br>
+        <input type="datetime-local" name="end_time" required><br><br>
+
+        <label>Remarks:</label><br>
+        <textarea name="remarks"></textarea><br><br>
+
+        <button type="submit">Submit Reservation</button>
+    </form>
+</body>
+</html>
