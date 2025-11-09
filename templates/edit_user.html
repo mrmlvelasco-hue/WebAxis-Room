@@ -1,0 +1,47 @@
+{% extends "base_dashboard.html" %}
+{% block title %}Edit User | WebAXIS{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm p-4">
+  <h2 class="fw-bold mb-3"><i class="bi bi-pencil-square"></i> Edit User</h2>
+  <form method="POST" action="{{ url_for('user_edit', user_id=user.id) }}">
+    <div class="row g-3">
+      <div class="col-md-3">
+        <label class="form-label">Username</label>
+        <input type="text" class="form-control" value="{{ user.username }}" readonly>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Display Name</label>
+        <input type="text" name="display_name" class="form-control" value="{{ user.display_name }}" required>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Email</label>
+        <input type="email" name="email" class="form-control" value="{{ user.email }}" required>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Role</label>
+        <select name="role" class="form-select">
+          <option value="user" {% if user.role == 'user' %}selected{% endif %}>User</option>
+          <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>Admin</option>
+        </select>
+      </div>
+      <div class="col-md-1">
+        <label class="form-label">Status</label>
+        <select name="status" class="form-select">
+          <option value="active" {% if user.status == 'active' %}selected{% endif %}>Active</option>
+          <option value="inactive" {% if user.status == 'inactive' %}selected{% endif %}>Inactive</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="text-end mt-4">
+      <button type="submit" class="btn btn-primary fw-semibold">
+        <i class="bi bi-save"></i> Save Changes
+      </button>
+      <a href="{{ url_for('user_maintenance') }}" class="btn btn-outline-secondary fw-semibold ms-2">
+        <i class="bi bi-arrow-left"></i> Cancel
+      </a>
+    </div>
+  </form>
+</div>
+{% endblock %}

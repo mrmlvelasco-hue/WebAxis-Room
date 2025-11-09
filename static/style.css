@@ -1,69 +1,31 @@
+/* =======================================
+   GLOBAL PLACEHOLDER (OPTIONAL)
+   This file is no longer used for layout.
+   Login → style_login.css
+   Dashboard → style_dashboard.css
+   ======================================= */
+
+/* Basic font setup for fallback */
 body {
-    font-family: Arial, sans-serif;
-    margin: 40px;
-}
-table {
-    border-collapse: collapse;
-    width: 80%;
-}
-th, td {
-    padding: 8px;
-    text-align: left;
-}
-.flash {
-    color: red;
-    list-style-type: none;
+  font-family: "Segoe UI", sans-serif;
+  margin: 0;
+  padding: 0;
 }
 
-
-body {
-    font-family: Arial, sans-serif;
-    margin: 40px;
+/* Optional: fix Bootstrap alert spacing if ever needed */
+.alert {
+  border-radius: 0;
+  margin: 0;
 }
 
-h1 {
-    color: #333;
+/* Optional: light scrollbar style for all pages */
+::-webkit-scrollbar {
+  width: 8px;
 }
-
-table {
-    border-collapse: collapse;
-    width: 100%;
-    margin-top: 10px;
+::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.2);
+  border-radius: 4px;
 }
-
-th, td {
-    border: 1px solid #ddd;
-    padding: 8px;
-    text-align: left;
-}
-
-th {
-    background-color: #f2f2f2;
-}
-
-button {
-    background-color: #4CAF50;
-    border: none;
-    color: white;
-    padding: 5px 10px;
-    cursor: pointer;
-    border-radius: 4px;
-}
-
-button:hover {
-    background-color: #45a049;
-}
-
-.flash {
-    color: #d9534f;
-    list-style: none;
-}
-.sidebar.collapsed .link-text {
-  display: none;
-}
-.sidebar.collapsed .nav-link {
-  justify-content: center;
-}
-.sidebar.collapsed .nav-link i {
-  font-size: 1.2rem;
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0,0,0,0.3);
 }

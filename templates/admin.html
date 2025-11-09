@@ -1,62 +1,125 @@
-{% extends "base.html" %}
+{% extends "base_dashboard.html" %}
+{% block title %}Admin Dashboard | WebAXIS{% endblock %}
 
 {% block content %}
-<div class="container-fluid mt-4">
-  <h2 class="fw-bold mb-3">Admin Dashboard</h2>
-  <a href="{{ url_for('room_list') }}" class="text-decoration-none">📅 Back to Rooms</a>
-
-  <div class="card mt-3 shadow-sm">
-    <div class="card-body">
-      <div class="table-responsive">
-        <table class="table table-hover align-middle">
-          <thead class="table-light">
-            <tr>
-              <th>ID</th>
-              <th>Room</th>
-              <th>Reserved By</th>
-              <th>Email</th>
-              <th>Start</th>
-              <th>End</th>
-              <th>Status</th>
-              <th>Remarks</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for res in reservations %}
-            <tr>
-              <td>{{ res.id }}</td>
-              <td>{{ res.room_name }}</td>
-              <td>{{ res.reserved_by }}</td>
-              <td>{{ res.email }}</td>
-              <td>{{ res.start_time }}</td>
-              <td>{{ res.end_time }}</td>
-              <td>
-                {% if res.status == 'Approved' %}
-                  <span class="badge bg-success">{{ res.status }}</span>
-                {% elif res.status == 'Pending' %}
-                  <span class="badge bg-warning text-dark">{{ res.status }}</span>
-                {% elif res.status == 'Cancelled' %}
-                  <span class="badge bg-danger">{{ res.status }}</span>
-                {% else %}
-                  <span class="badge bg-secondary">{{ res.status }}</span>
-                {% endif %}
-              </td>
-              <td>{{ res.remarks or '' }}</td>
-              <td>
-                <form action="{{ url_for('update_status', res_id=res.id, new_status='Approved') }}" method="POST" class="d-inline">
-                  <button class="btn btn-success btn-sm" type="submit">✅ Approve</button>
-                </form>
-                <form action="{{ url_for('update_status', res_id=res.id, new_status='Cancelled') }}" method="POST" class="d-inline">
-                  <button class="btn btn-danger btn-sm" type="submit">❌ Cancel</button>
-                </form>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ 'success' if category=='success' else 'info' }} text-center fw-semibold">
+        {{ message }}
       </div>
-    </div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<div class="card shadow-sm p-4">
+  <!-- Page header section -->
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+    <h2 class="fw-bold page-title mb-2 mb-md-0">
+      <i class="bi bi-check2-square"></i> Admin Dashboard
+    </h2>
+
+    <a href="{{ url_for('room_list') }}" class="btn btn-outline-secondary fw-semibold back-btn">
+      <i class="bi bi-calendar2-week"></i> Back to Rooms
+    </a>
+  </div>
+
+  <!-- Table content -->
+  <div class="table-responsive">
+    <table class="table table-hover align-middle table-bordered">
+      <thead class="table-primary">
+        <tr class="text-center">
+          <th>ID</th>
+          <th>Room</th>
+          <th>Reserved By</th>
+          <th>Email</th>
+          <th>Start</th>
+          <th>End</th>
+          <th>Status</th>
+          <th>Remarks</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in reservations %}
+        <tr>
+          <td class="text-center">{{ r.id }}</td>
+          <td>{{ r.room_name }}</td>
+          <td>{{ r.reserved_by }}</td>
+          <td>{{ r.email }}</td>
+          <td>{{ r.start_time }}</td>
+          <td>{{ r.end_time }}</td>
+          <td class="text-center">
+            {% if r.status == 'Pending' %}
+            <span class="badge bg-warning text-dark">Pending</span>
+            {% elif r.status == 'Approved' %}
+            <span class="badge bg-success">Approved</span>
+            {% else %}
+            <span class="badge bg-danger">Cancelled</span>
+            {% endif %}
+          </td>
+          <td>{{ r.remarks }}</td>
+         <td class="text-center">
+          {% if r.status == 'Pending' %}
+            <a href="{{ url_for('reserve', room_id=r.room_id) }}?action=approve"
+               class="btn btn-success btn-sm">
+              <i class="bi bi-check-lg"></i> Approve
+            </a>
+            <a href="{{ url_for('reserve', room_id=r.room_id) }}?action=cancel"
+               class="btn btn-danger btn-sm">
+              <i class="bi bi-x-circle"></i> Cancel
+            </a>
+          {% else %}
+            <span class="text-muted small fst-italic">No actions available</span>
+          {% endif %}
+        </td>
+
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="text-center text-muted">No reservations found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+      <script>
+document.addEventListener("DOMContentLoaded", function () {
+  // 🔹 Approve Reservation
+  document.querySelectorAll("a[href*='?action=approve']").forEach(link => {
+    link.addEventListener("click", function (e) {
+      e.preventDefault();
+      Swal.fire({
+        title: "Approve Reservation?",
+        text: "This will confirm and approve the selected reservation.",
+        icon: "question",
+        showCancelButton: true,
+        confirmButtonColor: "#198754",
+        cancelButtonColor: "#6c757d",
+        confirmButtonText: "Yes, Approve",
+      }).then((result) => {
+        if (result.isConfirmed) window.location.href = link.href;
+      });
+    });
+  });
+
+  // 🔹 Cancel Reservation
+  document.querySelectorAll("a[href*='?action=cancel']").forEach(link => {
+    link.addEventListener("click", function (e) {
+      e.preventDefault();
+      Swal.fire({
+        title: "Cancel Reservation?",
+        text: "The reservation will be marked as cancelled.",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonColor: "#d33",
+        cancelButtonColor: "#6c757d",
+        confirmButtonText: "Yes, Cancel It",
+      }).then((result) => {
+        if (result.isConfirmed) window.location.href = link.href;
+      });
+    });
+  });
+});
+</script>
+
   </div>
 </div>
 {% endblock %}

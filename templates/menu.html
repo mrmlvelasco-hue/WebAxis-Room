@@ -1,149 +1,124 @@
-{% extends "base.html" %}
-{% block title %}Dashboard | WebAXIS RoomSys{% endblock %}
+{% extends "base_dashboard.html" %}
+{% block title %}Dashboard | WebAXIS{% endblock %}
 
 {% block content %}
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<h2 class="fw-bold page-title mb-4">
+  <i class="bi bi-graph-up-arrow"></i> WebAXIS Room Reservation Dashboard
 
-<div class="container mt-5">
-  <div class="text-center mb-5">
-    <h1 class="fw-bold">📊 WebAXIS Room Reservation Dashboard</h1>
-      <div class="alert alert-light border rounded shadow-sm mt-3 mb-4 p-3" role="alert">
-  <div class="d-flex justify-content-between align-items-center flex-wrap">
-    <div><strong>{{ db_status }}</strong></div>
-    <div><strong>{{ ad_status }}</strong></div>
-    <div><strong>👤 Logged in as:</strong> {{ user_info }}</div>
-  </div>
-</div>
+</h2>
 
-    <p class="text-muted">Quick overview of current booking statistics and trends.</p>
-  </div>
-
-  <!-- KPI Cards -->
-  <div class="row g-4 mb-5">
-    <div class="col-md-3">
-      <div class="card text-center border-0 shadow-sm">
-        <div class="card-body">
-          <h5 class="text-muted">Total Rooms</h5>
-          <h2 class="fw-bold text-primary">{{ room_count }}</h2>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-3">
-      <div class="card text-center border-0 shadow-sm">
-        <div class="card-body">
-          <h5 class="text-muted">Pending</h5>
-          <h2 class="fw-bold text-warning">{{ pending_count }}</h2>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-3">
-      <div class="card text-center border-0 shadow-sm">
-        <div class="card-body">
-          <h5 class="text-muted">Approved</h5>
-          <h2 class="fw-bold text-success">{{ approved_count }}</h2>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-3">
-      <div class="card text-center border-0 shadow-sm">
-        <div class="card-body">
-          <h5 class="text-muted">Cancelled</h5>
-          <h2 class="fw-bold text-danger">{{ cancelled_count }}</h2>
-        </div>
-      </div>
+<!-- KPI Cards -->
+<div class="row g-3 mb-4">
+  <div class="col-12 col-md-3">
+    <div class="card text-center p-4">
+      <h6 class="fw-semibold text-secondary mb-2"><i class="bi bi-building"></i> Total Rooms</h6>
+      <h2 class="text-primary mb-0">{{ room_count }}</h2>
     </div>
   </div>
-
-  <!-- Reservation Trend Chart -->
-  <div class="card shadow-sm border-0 mb-5">
-    <div class="card-body">
-      <h5 class="fw-bold text-dark mb-3">📅 Reservation Activity (Last 7 Days)</h5>
-      <canvas id="reservationChart" height="100"></canvas>
+  <div class="col-12 col-md-3">
+    <div class="card text-center p-4">
+      <h6 class="fw-semibold text-secondary mb-2"><i class="bi bi-hourglass-split"></i> Pending</h6>
+      <h2 class="text-warning mb-0">{{ pending_count }}</h2>
     </div>
   </div>
-
-  <!-- Quick Actions -->
-  <div class="row justify-content-center g-4">
-    <div class="col-md-4">
-      <div class="card text-center border-0 shadow h-100 hover-card">
-        <div class="card-body">
-          <h4 class="card-title mb-3">📋 View Rooms</h4>
-          <a href="{{ url_for('room_list') }}" class="btn btn-primary w-100">Go</a>
-
-        </div>
-      </div>
+  <div class="col-12 col-md-3">
+    <div class="card text-center p-4">
+      <h6 class="fw-semibold text-secondary mb-2"><i class="bi bi-check-circle-fill"></i> Approved</h6>
+      <h2 class="text-success mb-0">{{ approved_count }}</h2>
     </div>
-
-    <div class="col-md-4">
-      <div class="card text-center border-0 shadow h-100 hover-card">
-        <div class="card-body">
-          <h4 class="card-title mb-3">🧑‍💼 Manage Reservations</h4>
-          <a href="{{ url_for('admin_dashboard') }}" class="btn btn-success w-100">Open</a>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-md-4">
-      <div class="card text-center border-0 shadow h-100 hover-card">
-        <div class="card-body">
-          <h4 class="card-title mb-3">✅ Confirm Reservation</h4>
-          <a href="{{ url_for('confirm') }}" class="btn btn-info w-100">View</a>
-        </div>
-      </div>
+  </div>
+  <div class="col-12 col-md-3">
+    <div class="card text-center p-4">
+      <h6 class="fw-semibold text-secondary mb-2"><i class="bi bi-x-circle-fill"></i> Cancelled</h6>
+      <h2 class="text-danger mb-0">{{ cancelled_count }}</h2>
     </div>
   </div>
 </div>
 
-<!-- Chart.js -->
+<!-- Chart Section -->
+<div class="card p-4 mb-5">
+  <h5 class="fw-bold mb-3">
+    <i class="bi bi-calendar-week"></i> Reservation Activity (Last 7 Days)
+  </h5>
+  <canvas id="reservationChart" height="120"></canvas>
+</div>
+
+<div class="footer">
+  © 2025 PCPPI | WebAXIS Room Reservation System
+</div>
+{% endblock %}
+
+{% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-const ctx = document.getElementById('reservationChart').getContext('2d');
-const chart = new Chart(ctx, {
-  type: 'bar',
-  data: {
-    labels: {{ chart_labels|tojson }},
-    datasets: [
-      {
-        label: 'Approved',
-        data: {{ chart_approved|tojson }},
-        backgroundColor: 'rgba(46, 204, 113, 0.8)'
-      },
-      {
-        label: 'Pending',
-        data: {{ chart_pending|tojson }},
-        backgroundColor: 'rgba(241, 196, 15, 0.8)'
-      }
-    ]
-  },
-  options: {
-    responsive: true,
-    plugins: {
-      legend: { position: 'top' },
-      title: {
-        display: false
-      }
+let reservationChart;
+
+function renderReservationChart(isDarkMode) {
+  const ctx = document.getElementById('reservationChart').getContext('2d');
+
+  const chartColors = {
+    pending: isDarkMode ? '#ffcc00' : '#ffc107',
+    approved: isDarkMode ? '#4dd599' : '#198754',
+    text: isDarkMode ? '#ddd' : '#333',
+    grid: isDarkMode ? '#444' : '#ccc',
+  };
+
+  if (reservationChart) {
+    reservationChart.destroy();
+  }
+
+  reservationChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: {{ chart_labels|tojson }},
+      datasets: [
+        {
+          label: 'Pending',
+          data: {{ chart_pending|tojson }},
+          backgroundColor: chartColors.pending,
+        },
+        {
+          label: 'Approved',
+          data: {{ chart_approved|tojson }},
+          backgroundColor: chartColors.approved,
+        }
+      ]
     },
-    scales: {
-      x: {
-        grid: { display: false },
-        ticks: { font: { size: 12 } }
+    options: {
+      responsive: true,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { color: chartColors.text, font: { size: 12 } }
+        }
       },
-      y: {
-        beginAtZero: true,
-        ticks: { stepSize: 1 }
+      scales: {
+        x: {
+          grid: { color: chartColors.grid },
+          ticks: { color: chartColors.text }
+        },
+        y: {
+          beginAtZero: true,
+          grid: { color: chartColors.grid },
+          ticks: { color: chartColors.text, stepSize: 1 }
+        }
       }
     }
-  }
+  });
+}
+
+// === Initial render based on theme ===
+document.addEventListener('DOMContentLoaded', () => {
+  const isDarkMode = document.body.classList.contains('dark-mode');
+  renderReservationChart(isDarkMode);
+});
+
+// === Re-render chart when theme toggled ===
+document.getElementById('toggleTheme').addEventListener('click', () => {
+  setTimeout(() => {
+    const isDarkMode = document.body.classList.contains('dark-mode');
+    renderReservationChart(isDarkMode);
+  }, 200);
 });
 </script>
-
-<style>
-.hover-card {
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-.hover-card:hover {
-  transform: translateY(-6px);
-  box-shadow: 0 8px 20px rgba(0,0,0,0.15);
-}
-</style>
 {% endblock %}

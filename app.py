@@ -38,6 +38,8 @@ FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY")
 app = Flask(__name__)
 app.secret_key = FLASK_SECRET_KEY or os.urandom(24)
 
+app.permanent_session_lifetime = timedelta(days=7)
+
 # --- DB connection helper ---
 def get_db_connection():
     """
@@ -196,78 +198,62 @@ def authenticate_ldap(username, password, timeout=3):
 
 # --- Routes ---
 
+# ✅ Correct version of login route
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    # If already authenticated, go to dashboard
+    """Handle login for AD or local DB users."""
+    # If already logged in, go straight to dashboard
     if current_user.is_authenticated:
         return redirect(url_for('main_menu'))
 
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '').strip()
+        remember = bool(request.form.get('remember'))
 
-        # Basic presence check
         if not username or not password:
             flash("Please enter username and password.")
             return redirect(url_for('login'))
 
-        # Check local registration
-        try:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT id, username, email, display_name, role, status, password_hash
-                FROM dbo.users WHERE username = ?
-            """, (username,))
-            row = cursor.fetchone()
-            conn.close()
-        except Exception as e:
-            print("⚠️ DB error during login lookup:", e)
-            flash("System error. Contact administrator.")
-            return redirect(url_for('login'))
-
-        if not row:
-            flash("❌ User not registered. Contact admin.")
-            log_audit("LOGIN_FAILED", f"Unregistered user attempted login: {username}")
-            return redirect(url_for('login'))
-
-        user_id, uname, email, display_name, role, status, password_hash = row
-
-        if (status or '').lower() != 'active':
-            flash("⚠️ Account inactive. Contact administrator.")
-            log_audit("LOGIN_FAILED", f"Inactive user attempted login: {username}")
-            return redirect(url_for('login'))
-
-        # Try LDAP (domain) authentication first
+        # --- Authentication Logic ---
+        user = None
         ad_ok = False
+
+        # 1. Try LDAP / AD login first (if configured)
         if AD_SERVER:
             ad_ok = authenticate_ldap(username, password)
 
-        # If AD failed, try local password (dev fallback)
-        auth_source = "Active Directory"
+        # 2. Fallback: local DB authentication
+        if ad_ok:
+            # pull user details from DB
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id, username, email, display_name, role FROM dbo.users WHERE username = ?",
+                (username,))
+            row = cursor.fetchone()
+            conn.close()
+            if row:
+                uid, uname, email, display_name, role = row
+                user = User(uid, uname, email, display_name, role)
+        else:
+            user = authenticate_local(username, password)
 
-        if not ad_ok:
-            if password_hash and bcrypt.verify(password, password_hash):
-                ad_ok = True
-                auth_source = "Local DB"
-                print("🔑 Local password fallback used.")
-            else:
-                flash("❌ Invalid credentials.")
-                log_audit("LOGIN_FAILED", f"Invalid credentials for {username}")
-                return redirect(url_for('login'))
+        # --- Handle failures ---
+        if not user:
+            flash("❌ Invalid username or password.")
+            log_audit("LOGIN_FAILED", f"Failed login for {username}")
+            return redirect(url_for('login'))
 
-        # Successful login
-        user = User(user_id, uname, email, display_name, role)
-        session['auth_source'] = auth_source
-        login_user(user)
-        flash(f"✅ Welcome {display_name or uname}!")
-        log_audit("LOGIN_SUCCESS", f"User {username} logged in via {auth_source}")
+        # --- Success ---
+        login_user(user, remember=remember)
+        log_audit("LOGIN_SUCCESS", f"User {user.username} logged in")
+        flash(f"✅ Welcome {user.display_name or user.username}!")
         return redirect(url_for('main_menu'))
 
-
-
-    # GET -> render form
+    # --- GET request → show login page ---
     return render_template('login.html')
+
 
 @app.route('/logout')
 @login_required
@@ -278,9 +264,80 @@ def logout():
     return redirect(url_for('login'))
 
 # User maintenance (admin-only)
-@app.route('/user_maintenance', methods=['GET', 'POST'])
+# --- Edit User ---
+@app.route('/edit_user/<int:user_id>', methods=['GET', 'POST'])
 @login_required
-def user_maintenance():
+def edit_user(user_id):
+    if not current_user.is_admin():
+        flash("Access denied: Admins only.", "warning")
+        return redirect(url_for('main_menu'))
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    if request.method == 'POST':
+        display_name = request.form['display_name'].strip()
+        email = request.form['email'].strip()
+        role = request.form['role']
+        status = request.form['status']
+
+        try:
+            cur.execute("""
+                UPDATE dbo.users
+                SET display_name = ?, email = ?, role = ?, status = ?, updated_at = GETDATE()
+                WHERE id = ?
+            """, (display_name, email, role, status, user_id))
+            conn.commit()
+            flash("✅ User updated successfully.", "success")
+            print(f"✅ Updated user ID {user_id}")
+            return redirect(url_for('user_maintenance'))
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            flash(f"⚠️ Error updating user: {e}", "danger")
+        finally:
+            cur.close()
+            conn.close()
+
+    # For GET requests: load the user details into the edit form
+    cur.execute("SELECT id, username, display_name, email, role, status FROM dbo.users WHERE id = ?", (user_id,))
+    user = cur.fetchone()
+    conn.close()
+
+    if not user:
+        flash("⚠️ User not found.", "warning")
+        return redirect(url_for('user_maintenance'))
+
+    return render_template('edit_user.html', user=user)
+
+
+
+# --- Delete User ---
+@app.route('/delete_user/<int:user_id>', methods=['POST', 'GET'])
+@login_required
+def delete_user(user_id):
+    if not current_user.is_admin():
+        flash("Access denied: Admins only.")
+        return redirect(url_for('main_menu'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM dbo.users WHERE id = ?", (user_id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    flash("🗑️ User deleted successfully.")
+    return redirect(url_for('user_maintenance'))
+
+
+@app.route('/add_user', methods=['POST'])
+@login_required
+def add_user():
+    if request.method == 'POST':
+        print("🧩 Received Add User POST")
+        print("Form data:", request.form)
+
     if not current_user.is_admin():
         flash("Access denied: Admins only.")
         return redirect(url_for('main_menu'))
@@ -289,7 +346,45 @@ def user_maintenance():
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # POST -> add user
+        username = request.form['username'].strip()
+        email = request.form.get('email')
+        display_name = request.form.get('display_name')
+        role = request.form.get('role', 'user')
+        status = request.form.get('status', 'active')
+
+        cursor.execute("SELECT COUNT(*) FROM dbo.users WHERE username = ?", (username,))
+        (exists,) = cursor.fetchone() or (0,)
+        if exists:
+            flash(f"⚠️ User {username} already exists.")
+        else:
+            cursor.execute("""
+                INSERT INTO dbo.users (username, email, display_name, role, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, GETDATE(), GETDATE())
+            """, (username, email, display_name, role, status))
+            conn.commit()
+            flash(f"✅ User {username} added successfully.")
+            log_audit("USER_ADDED", f"Added user {username} with role {role}")
+
+    except Exception as e:
+        flash(f"Error adding user: {e}", "danger")
+    finally:
+        cursor.close()
+        conn.close()
+
+    return redirect(url_for('user_maintenance'))
+
+@app.route('/user_maintenance', methods=['GET', 'POST'])
+@login_required
+def user_maintenance():
+    if not current_user.is_admin():
+        flash("Access denied: Admins only.", "warning")
+        return redirect(url_for('main_menu'))
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Handle POST (Add new user)
         if request.method == 'POST':
             username = request.form['username'].strip()
             email = request.form.get('email')
@@ -300,74 +395,85 @@ def user_maintenance():
             cursor.execute("SELECT COUNT(*) FROM dbo.users WHERE username = ?", (username,))
             (exists,) = cursor.fetchone() or (0,)
             if exists:
-                flash(f"⚠️ User {username} already exists.")
+                flash(f"⚠️ User {username} already exists.", "warning")
             else:
                 cursor.execute("""
                     INSERT INTO dbo.users (username, email, display_name, role, status, created_at, updated_at)
                     VALUES (?, ?, ?, ?, ?, GETDATE(), GETDATE())
                 """, (username, email, display_name, role, status))
                 conn.commit()
-                flash(f"✅ User {username} added successfully.")
+                flash(f"✅ User {username} added successfully.", "success")
                 log_audit("USER_ADDED", f"Added user {username} with role {role}")
 
-        # Load all users
+        # Fetch all users
         cursor.execute("""
-                       SELECT u.id,
-                              u.username,
-                              u.display_name,
-                              u.email,
-                              u.role,
-                              u.status,
-                              u.created_at,
-                              ISNULL((SELECT TOP 1
-                                  CASE
-                                  WHEN details LIKE '%Active Directory%' THEN 'Active Directory'
-                                  ELSE 'Local DB'
-                                  END
-                                  FROM dbo.audit_log a
-                                  WHERE a.username = u.username AND a.action = 'LOGIN_SUCCESS'
-                                  ORDER BY a.created_at DESC ), 'Never') AS last_login_source
-                       FROM dbo.users u
-                       ORDER BY u.created_at DESC
-                       """)
-        users = cursor.fetchall()
-
+            SELECT id, username, display_name, email, role, status, last_login, last_login_ip
+            FROM dbo.users
+            ORDER BY created_at DESC
+        """)
         users = cursor.fetchall()
         conn.close()
+
+        print(f"📋 Loaded {len(users)} users.")
         return render_template('user_maintenance.html', users=users)
+
+    # except Exception as e:
+    #     print("⚠️ user_maintenance error:", e)
+    #     flash("System error while loading users.", "danger")
+    #     # ✅ Add this redirect or fallback render:
+    #     return redirect(url_for('main_menu'))
+
     except Exception as e:
         print("⚠️ user_maintenance error:", e)
-        flash("System error while loading users.")
-        return redirect(url_for('main_menu'))
+        # Log and show descriptive error
+        flash(f"⚠️ A system error occurred while loading users.<br><small>{e}</small>", "danger")
+        # ✅ Render the page with an empty user list (so it won't break)
+        return render_template('user_maintenance.html', users=[])
 
-@app.route('/user_edit/<int:user_id>', methods=['POST'])
+
+
+@app.route('/user_edit/<int:user_id>', methods=['GET', 'POST'])
 @login_required
 def user_edit(user_id):
     if not current_user.is_admin():
         flash("Access denied: Admins only.")
         return redirect(url_for('main_menu'))
 
-    display_name = request.form.get('display_name')
-    email = request.form.get('email')
-    role = request.form.get('role')
-    status = request.form.get('status')
+    conn = get_db_connection()
+    cursor = conn.cursor()
 
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            UPDATE dbo.users
-            SET display_name = ?, email = ?, role = ?, status = ?, updated_at = GETDATE()
-            WHERE id = ?
-        """, (display_name, email, role, status, user_id))
-        conn.commit()
-        conn.close()
-        log_audit("USER_UPDATED", f"Updated user ID {user_id} ({display_name})")
-        flash("✅ User updated successfully.")
-    except Exception as e:
-        print("⚠️ user_edit error:", e)
-        flash("System error while updating user.")
-    return redirect(url_for('user_maintenance'))
+    if request.method == 'POST':
+        display_name = request.form.get('display_name')
+        email = request.form.get('email')
+        role = request.form.get('role')
+        status = request.form.get('status')
+
+        try:
+            cursor.execute("""
+                UPDATE dbo.users
+                SET display_name = ?, email = ?, role = ?, status = ?, updated_at = GETDATE()
+                WHERE id = ?
+            """, (display_name, email, role, status, user_id))
+            conn.commit()
+            flash("✅ User updated successfully.", "success")
+            log_audit("USER_UPDATED", f"Updated user ID {user_id} ({display_name})")
+            return redirect(url_for('user_maintenance'))
+        except Exception as e:
+            flash(f"⚠️ Error updating user: {e}", "danger")
+        finally:
+            conn.close()
+
+    # --- For GET: Load user info for the form ---
+    cursor.execute("SELECT id, username, display_name, email, role, status FROM dbo.users WHERE id = ?", (user_id,))
+    user = cursor.fetchone()
+    conn.close()
+
+    if not user:
+        flash("⚠️ User not found.", "warning")
+        return redirect(url_for('user_maintenance'))
+
+    return render_template("edit_user.html", user=user)
+
 
 @app.route('/user_delete/<int:user_id>', methods=['POST'])
 @login_required
@@ -403,78 +509,133 @@ def room_list():
         rooms = []
     return render_template('index.html', rooms=rooms)
 
-# Reservation page
 @app.route('/reserve/<int:room_id>', methods=['GET', 'POST'])
 @login_required
 def reserve(room_id):
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, name, capacity, location FROM dbo.rooms WHERE id = ?", (room_id,))
-        room = cursor.fetchone()
-    except Exception as e:
-        print("⚠️ reserve load error:", e)
-        flash("System error loading room.")
-        return redirect(url_for('main_menu'))
+    action = request.args.get('action')
 
+    # --- APPROVE / CANCEL ------------------------------------------
+    if action in ('approve', 'cancel'):
+        try:
+            conn = get_db_connection()
+            cur = conn.cursor()
+            new_status = 'Approved' if action == 'approve' else 'Cancelled'
+            cur.execute("UPDATE reservations SET status = ? WHERE room_id = ?", (new_status, room_id))
+            conn.commit()
+            flash(f"✅ Reservation {new_status.lower()} successfully.", "success")
+        except Exception as e:
+            conn.rollback()
+            flash(f"⚠️ Error updating reservation: {e}", "danger")
+        finally:
+            cur.close()
+            conn.close()
+        return redirect(url_for('admin_dashboard'))
+
+    # --- CREATE RESERVATION ----------------------------------------
     if request.method == 'POST':
         reserved_by = request.form['reserved_by']
         email = request.form['email']
-        start_time = request.form['start_time'].replace('T', ' ') + ':00'
-        end_time = request.form['end_time'].replace('T', ' ') + ':00'
+        start_time_str = request.form['start_time']
+        end_time_str = request.form['end_time']
         remarks = request.form.get('remarks', '')
 
         try:
-            start_dt = datetime.strptime(start_time, "%Y-%m-%d %H:%M:%S")
-            end_dt = datetime.strptime(end_time, "%Y-%m-%d %H:%M:%S")
+            # ✅ Convert string → datetime
+            start_dt = datetime.strptime(start_time_str, "%Y-%m-%dT%H:%M")
+            end_dt = datetime.strptime(end_time_str, "%Y-%m-%dT%H:%M")
             now = datetime.now()
 
-            if end_dt <= start_dt:
-                flash("⚠️ End time must be later than start time.")
-                return redirect(url_for('reserve', room_id=room_id))
+            print("🕒 Start:", start_dt, "| End:", end_dt, "| Server time:", now)
 
+            # 🧭 Validate future date and order
             if start_dt < now:
-                flash("⚠️ You cannot book a room in the past.")
+                flash("⚠️ You cannot reserve a room in the past.", "warning")
                 return redirect(url_for('reserve', room_id=room_id))
 
-            # check overlap
-            cursor.execute("""
-                SELECT COUNT(*) FROM dbo.reservations
-                WHERE room_id = ? AND status IN ('Pending', 'Approved') AND
-                      ((start_time <= ? AND end_time > ?) OR
-                       (start_time < ? AND end_time >= ?))
-            """, (room_id, start_time, start_time, end_time, end_time))
-            (conflict_count,) = cursor.fetchone() or (0,)
+            if end_dt <= start_dt:
+                flash("⚠️ End time must be later than the start time.", "warning")
+                return redirect(url_for('reserve', room_id=room_id))
+
+            # 🕒 Check overlap
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT COUNT(*) 
+                FROM reservations
+                WHERE room_id = ?
+                  AND status IN ('Pending', 'Approved')
+                  AND (
+                        (start_time < ? AND end_time > ?)
+                     OR (start_time BETWEEN ? AND ?)
+                     OR (end_time BETWEEN ? AND ?)
+                  )
+            """, (room_id, end_dt, start_dt, start_dt, end_dt, start_dt, end_dt))
+            (conflict_count,) = cur.fetchone()
+            print("🔎 Conflict count:", conflict_count)
+
             if conflict_count > 0:
-                flash("⚠️ This room is already booked during the selected time.")
+                flash("⚠️ The selected time slot overlaps with another booking. Please choose another.", "warning")
                 return redirect(url_for('reserve', room_id=room_id))
 
-            # insert reservation
-            cursor.execute("""
-                INSERT INTO dbo.reservations (room_id, reserved_by, email, start_time, end_time, remarks, status)
-                VALUES (?, ?, ?, ?, ?, ?, 'Pending')
-            """, (room_id, reserved_by, email, start_time, end_time, remarks))
-            cursor.connection.commit()
-            flash("✅ Reservation submitted successfully! Awaiting approval.")
-            log_audit("RESERVATION_CREATED", f"Room {room_id} reserved by {reserved_by}")
-            return redirect(url_for('confirm'))
+            # ✅ Insert reservation
+            cur.execute("""
+                INSERT INTO reservations (
+                    room_id, reserved_by, email, start_time, end_time, status, remarks, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, 'Pending', ?, GETDATE())
+            """, (room_id, reserved_by, email, start_dt, end_dt, remarks))
+            conn.commit()
+            print("✅ Reservation inserted successfully.")
+            flash("✅ Reservation submitted successfully! Awaiting approval.", "success")
+            return render_template("confirmation.html", redirect_url=url_for('room_list'))
+
+        except ValueError:
+            flash("⚠️ Invalid date or time format. Please select proper values.", "danger")
         except Exception as e:
-            print("⚠️ reserve POST error:", e)
-            flash("System error while creating reservation.")
-            return redirect(url_for('reserve', room_id=room_id))
+            import traceback
+            traceback.print_exc()
+            flash(f"⚠️ Error submitting reservation: {e}", "danger")
         finally:
             try:
-                cursor.close()
+                cur.close()
                 conn.close()
-            except Exception:
+            except:
                 pass
 
-    # GET
+        return redirect(url_for('room_list'))
+
+    # --- DISPLAY FORM ----------------------------------------------
     try:
-        conn.close()
-    except Exception:
-        pass
-    return render_template('reserve.html', room=room)
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT id, name AS room_name, capacity, location, description FROM rooms WHERE id = ?", (room_id,))
+        room = cur.fetchone()
+        cur.execute("""
+            SELECT start_time, end_time, status
+            FROM reservations
+            WHERE room_id = ? AND status IN ('Pending', 'Approved')
+            ORDER BY start_time
+        """, (room_id,))
+        booked_slots = cur.fetchall()
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        flash(f"⚠️ Error loading room: {e}", "danger")
+        return redirect(url_for('room_list'))
+    finally:
+        try:
+            cur.close()
+            conn.close()
+        except:
+            pass
+
+    return render_template(
+        'reserve.html',
+        room=room,
+        booked_slots=booked_slots,
+        datetime=datetime  # ✅ pass datetime to Jinja2
+    )
+
 
 @app.route('/confirm')
 @login_required
@@ -494,7 +655,7 @@ def admin_dashboard():
         cursor = conn.cursor()
         cursor.execute("""
             SELECT 
-                r.id,
+                r.room_id, 
                 rm.name AS room_name,
                 r.reserved_by,
                 r.email,
@@ -650,17 +811,30 @@ def main_menu():
 # --- Root redirect to login (or menu if already authenticated) ---
 @app.route('/')
 def root_redirect():
-    if current_user.is_authenticated:
-        return redirect(url_for('main_menu'))
+    """Root route — sends authenticated users to dashboard, others to login."""
+    try:
+        if current_user.is_authenticated:
+            return redirect(url_for('main_menu'))
+    except Exception:
+        pass
     return redirect(url_for('login'))
+
 
 # --- Auto open login page on local dev start ---
 def open_browser():
     webbrowser.open_new("http://127.0.0.1:5000/login")
 
+
 if __name__ == '__main__':
     print("🧩 Initializing WebAXIS System...")
     ensure_default_admin()
-    print("🚀 WebAXIS RoomSys running at http://127.0.0.1:5000/login")
-    threading.Timer(1.5, open_browser).start()
-    app.run(debug=True)
+
+    is_dev = os.getenv("FLASK_ENV", "development").lower() == "development"
+    print(f"💻 Running in {'Development' if is_dev else 'Production'} mode")
+    print("🚀 WebAXIS RoomSys available at http://127.0.0.1:5000/login")
+
+    # ✅ Auto-open only in dev mode (avoids Docker/server issues)
+    if is_dev and os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+        threading.Timer(1.5, open_browser).start()
+
+    app.run(debug=is_dev, use_reloader=False)

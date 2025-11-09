@@ -1,11 +1,23 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Reservation Confirmation</title>
-</head>
-<body>
-    <h2>Your reservation has been submitted.</h2>
-    <p>Status: <strong>Pending</strong></p>
-    <a href="{{ url_for('room_list') }}">Back to Rooms</a>
-</body>
-</html>
+{% extends "base_dashboard.html" %}
+{% block title %}Reservation Confirmed{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-center align-items-center" style="min-height:70vh;">
+  <div id="confirmation-container"></div>
+</div>
+
+<script>
+Swal.fire({
+  icon: "success",
+  title: "Reservation Successful!",
+  text: "Your booking has been saved and is awaiting admin approval.",
+  confirmButtonColor: "#0047AB",
+  showConfirmButton: false,
+  timer: 2500,
+  timerProgressBar: true,
+  didClose: () => {
+    window.location.href = "{{ redirect_url }}";
+  }
+});
+</script>
+{% endblock %}

@@ -1,50 +1,39 @@
-{% extends "base.html" %}
+{% extends "base_login.html" %}
 {% block title %}Login | WebAXIS{% endblock %}
+
 {% block content %}
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<div class="login-card text-center shadow-lg">
+  <img src="{{ url_for('static', filename='img/pcppi_logo.png') }}" alt="PCPPI Logo" class="login-logo mb-3">
 
-<div class="row justify-content-center mt-5">
-  <div class="col-md-6 col-lg-4">
-    <div class="card shadow-sm">
-      <div class="card-body">
-        <h3 class="card-title text-center mb-3">Sign in</h3>
+  <h2 class="fw-bold text-primary mb-1">WebAXIS RoomSys</h2>
+  <p class="text-muted mb-4 fw-semibold">PCPPI Room Reservation Portal</p>
 
-        {% with messages = get_flashed_messages() %}
-          {% if messages %}
-            <div class="alert alert-warning">
-              {% for msg in messages %} <div>{{ msg }}</div> {% endfor %}
-            </div>
-          {% endif %}
-        {% endwith %}
-
-        <form method="POST">
-          <div class="mb-3">
-            <label class="form-label">Username</label>
-            <input name="username" class="form-control" required>
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label">Password</label>
-            <input name="password" type="password" class="form-control" required>
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label">Login type</label>
-            <select class="form-select" name="login_type">
-              <option value="local">Local</option>
-              <option value="domain">Domain (AD / LDAP)</option>
-            </select>
-            <div class="form-text">Choose "Domain" to authenticate against your corporate AD.</div>
-          </div>
-
-          <button class="btn btn-primary w-100" type="submit">Sign in</button>
-        </form>
-
-        <div class="text-center mt-3">
-          <a href="{{ url_for('main_menu') }}">Continue as guest</a>
-        </div>
-      </div>
+  <form method="POST" action="{{ url_for('login') }}">
+    <div class="mb-3 text-start">
+      <label for="username" class="form-label fw-bold text-dark">Domain Username</label>
+      <input type="text" name="username" id="username"
+             class="form-control form-control-lg fw-semibold"
+             placeholder="e.g. mlvelasco" required>
     </div>
+
+    <div class="mb-3 text-start">
+      <label for="password" class="form-label fw-bold text-dark">Password</label>
+      <input type="password" name="password" id="password"
+             class="form-control form-control-lg fw-semibold" required>
+    </div>
+
+    <div class="form-check mb-4 text-start">
+      <input type="checkbox" class="form-check-input" id="remember" name="remember">
+      <label class="form-check-label text-dark" for="remember">Remember me on this device</label>
+    </div>
+
+    <button type="submit" class="btn btn-primary w-100 py-3 fw-bold">
+      <i class="bi bi-box-arrow-in-right me-2"></i> Sign In
+    </button>
+  </form>
+
+  <div class="text-light small mt-4 opacity-75">
+    <i class="bi bi-shield-lock"></i> Secured by <strong>Active Directory</strong>
   </div>
 </div>
 {% endblock %}

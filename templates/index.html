@@ -1,25 +1,48 @@
-{% extends "base.html" %}
-
-{% block title %}Available Rooms{% endblock %}
+{% extends "base_dashboard.html" %}
+{% block title %}Available Rooms | WebAXIS{% endblock %}
 
 {% block content %}
-<h1>Available Rooms</h1>
-<table border="1">
-    <tr>
-        <th>Room Name</th>
-        <th>Capacity</th>
-        <th>Location</th>
-        <th>Description</th>
-        <th>Action</th>
-    </tr>
-    {% for room in rooms %}
-    <tr>
-        <td>{{ room[1] }}</td>
-        <td>{{ room[2] }}</td>
-        <td>{{ room[3] }}</td>
-        <td>{{ room[4] }}</td>
-        <td><a href="{{ url_for('reserve', room_id=room[0]) }}">Reserve</a></td>
-    </tr>
-    {% endfor %}
-</table>
+<div class="card shadow-sm p-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="fw-bold page-title mb-0">
+      <i class="bi bi-door-open"></i> Available Rooms
+    </h2>
+    <a href="{{ url_for('main_menu') }}" class="btn btn-outline-secondary fw-semibold">
+      <i class="bi bi-arrow-left"></i> Back to Dashboard
+    </a>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-hover align-middle table-bordered">
+      <thead class="table-primary">
+        <tr class="text-center">
+          <th>Room Name</th>
+          <th>Capacity</th>
+          <th>Location</th>
+          <th>Description</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for room in rooms %}
+        <tr>
+          <td class="fw-semibold">{{ room[1] }}</td>
+          <td class="text-center">{{ room[2] }}</td>
+          <td>{{ room[3] }}</td>
+          <td>{{ room[4] }}</td>
+          <td class="text-center">
+            <a href="{{ url_for('reserve', room_id=room[0]) }}" class="btn btn-outline-primary btn-sm fw-bold">
+              <i class="bi bi-calendar-plus"></i> Reserve
+            </a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="5" class="text-center text-muted">No rooms available.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
 {% endblock %}
