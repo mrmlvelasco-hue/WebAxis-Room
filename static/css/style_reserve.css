@@ -1,0 +1,26 @@
+.accordion-button {
+  background-color: #f8f9fa;
+  font-size: 0.85rem;
+}
+
+.accordion-button:not(.collapsed) {
+  color: #0d6efd;
+  background-color: #e9f2ff;
+  font-weight: 600;
+}
+
+.accordion-item {
+  border: none;
+}
+
+.list-group-item a:hover {
+  background-color: #e9f2ff;
+  border-radius: 6px;
+}
+
+.list-group-item i {
+  font-size: 0.85rem;
+}
+.accordion-collapse {
+  transition: height 0.25s ease, opacity 0.2s ease;
+}

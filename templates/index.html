@@ -1,48 +1,159 @@
 {% extends "base_dashboard.html" %}
-{% block title %}Available Rooms | WebAXIS{% endblock %}
+{% block title %}Room Availability | WebAXIS{% endblock %}
 
 {% block content %}
-<div class="card shadow-sm p-4">
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h2 class="fw-bold page-title mb-0">
-      <i class="bi bi-door-open"></i> Available Rooms
-    </h2>
-    <a href="{{ url_for('main_menu') }}" class="btn btn-outline-secondary fw-semibold">
-      <i class="bi bi-arrow-left"></i> Back to Dashboard
-    </a>
-  </div>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="fw-bold text-primary mb-0">
+    <i class="bi bi-building-check"></i> Room Availability
+  </h2>
 
-  <div class="table-responsive">
-    <table class="table table-hover align-middle table-bordered">
-      <thead class="table-primary">
-        <tr class="text-center">
-          <th>Room Name</th>
-          <th>Capacity</th>
-          <th>Location</th>
-          <th>Description</th>
-          <th>Action</th>
+  <div class="d-flex align-items-center gap-3">
+    <div>
+      <span class="badge bg-success me-1">Available</span>
+      <span class="badge bg-warning text-dark me-1">Pending</span>
+      <span class="badge bg-danger">Approved</span>
+    </div>
+
+    <div class="input-group input-group-sm" style="width: 220px;">
+      <span class="input-group-text bg-light">
+        <i class="bi bi-calendar-event text-primary"></i>
+      </span>
+      <input type="date" id="selectedDate" class="form-control" value="{{ now().strftime('%Y-%m-%d') }}">
+      <button id="todayBtn" class="btn btn-outline-secondary" type="button" title="Jump to today">
+        <i class="bi bi-arrow-clockwise"></i>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body p-0">
+    <table class="table table-bordered table-sm align-middle mb-0">
+      <thead class="table-primary text-center align-middle">
+        <tr>
+          <th style="width: 220px;">Room</th>
+          <th style="width: 80px;">Capacity</th>
+          <th style="width: 120px;">Location</th>
+          {% for h in range(0, 24) %}
+          <th style="width: 30px;">{{ "%02d"|format(h) }}</th>
+          {% endfor %}
         </tr>
       </thead>
       <tbody>
         {% for room in rooms %}
-        <tr>
-          <td class="fw-semibold">{{ room[1] }}</td>
-          <td class="text-center">{{ room[2] }}</td>
-          <td>{{ room[3] }}</td>
-          <td>{{ room[4] }}</td>
-          <td class="text-center">
-            <a href="{{ url_for('reserve', room_id=room[0]) }}" class="btn btn-outline-primary btn-sm fw-bold">
-              <i class="bi bi-calendar-plus"></i> Reserve
-            </a>
-          </td>
+        <tr id="room-{{ room.id }}">
+          <td class="fw-semibold">{{ room.name }}</td>
+          <td class="text-center">{{ room.capacity }}</td>
+          <td class="text-center">{{ room.location }}</td>
+
+          {% for h in range(0, 24) %}
+          <td id="slot-{{ room.id }}-{{ h }}" class="slot-cell bg-success"></td>
+          {% endfor %}
         </tr>
         {% else %}
-        <tr>
-          <td colspan="5" class="text-center text-muted">No rooms available.</td>
-        </tr>
+        <tr><td colspan="27" class="text-center text-muted">No rooms found.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
+
+<style>
+.slot-cell {
+  width: 25px;
+  height: 25px;
+  border-radius: 4px;
+  transition: background-color 0.3s ease;
+  cursor: pointer;
+}
+
+.slot-cell.bg-success { background-color: #d1e7dd !important; }
+.slot-cell.bg-warning { background-color: #fff3cd !important; }
+.slot-cell.bg-danger  { background-color: #f8d7da !important; }
+
+.slot-cell:hover {
+  opacity: 0.8;
+  transform: scale(1.1);
+}
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const rooms = {{ rooms|tojson }};
+  const datePicker = document.getElementById("selectedDate");
+  const todayBtn = document.getElementById("todayBtn");
+
+  async function loadAvailability() {
+    const date = datePicker.value;
+
+    for (const room of rooms) {
+      try {
+        const res = await fetch(`/api/room_availability/${room.id}?date=${date}`);
+        const bookings = await res.json();
+
+        // Reset all 24 slots for each room
+        for (let h = 0; h < 24; h++) {
+          const cell = document.getElementById(`slot-${room.id}-${h}`);
+          if (cell) {
+            cell.className = "slot-cell bg-success"; // default available
+            cell.removeAttribute("data-bs-toggle");
+            cell.removeAttribute("data-bs-original-title");
+            cell.title = "";
+          }
+        }
+
+        // Apply booked slots with tooltip info
+        bookings.forEach(b => {
+          const [startHour] = b.start.split(":").map(Number);
+          const [endHour] = b.end.split(":").map(Number);
+          for (let h = startHour; h < endHour; h++) {
+            const cell = document.getElementById(`slot-${room.id}-${h}`);
+            if (!cell) continue;
+
+            let tooltipText = `${b.reserved_by || "Unknown"} (${b.status}) ${b.start}–${b.end}`;
+
+            // Apply color and tooltip only for booked ones
+            if (b.status === "Approved") {
+              cell.className = "slot-cell bg-danger";
+              cell.setAttribute("data-bs-toggle", "tooltip");
+              cell.setAttribute("title", tooltipText);
+            } else if (b.status === "Pending") {
+              cell.className = "slot-cell bg-warning text-dark";
+              cell.setAttribute("data-bs-toggle", "tooltip");
+              cell.setAttribute("title", tooltipText);
+            }
+          }
+        });
+
+        // Reinitialize tooltips (important after dynamic update)
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.forEach(el => new bootstrap.Tooltip(el));
+
+      } catch (err) {
+        console.error(`⚠️ Error fetching availability for room ${room.id}:`, err);
+      }
+    }
+  }
+
+  // Refresh on date change or “Today” click
+  datePicker.addEventListener("change", loadAvailability);
+  todayBtn.addEventListener("click", () => {
+    const today = new Date().toISOString().split("T")[0];
+    datePicker.value = today;
+    loadAvailability();
+  });
+
+  loadAvailability(); // initial
+});
+</script>
+
+<script>
+const tooltipTriggerList = document.querySelectorAll('[title]');
+tooltipTriggerList.forEach(el => {
+  new bootstrap.Tooltip(el, { placement: 'top', trigger: 'hover' });
+});
+</script>
+
 {% endblock %}

@@ -2,35 +2,95 @@
 {% block title %}Admin Dashboard | WebAXIS{% endblock %}
 
 {% block content %}
-{% with messages = get_flashed_messages(with_categories=true) %}
-  {% if messages %}
-    {% for category, message in messages %}
-      <div class="alert alert-{{ 'success' if category=='success' else 'info' }} text-center fw-semibold">
-        {{ message }}
-      </div>
-    {% endfor %}
-  {% endif %}
-{% endwith %}
-
-<div class="card shadow-sm p-4">
-  <!-- Page header section -->
+<div class="card shadow-sm p-4 mb-4">
+  <!-- 🧭 Page Header and Location Filter -->
   <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
     <h2 class="fw-bold page-title mb-2 mb-md-0">
       <i class="bi bi-check2-square"></i> Admin Dashboard
     </h2>
 
-    <a href="{{ url_for('room_list') }}" class="btn btn-outline-secondary fw-semibold back-btn">
-      <i class="bi bi-calendar2-week"></i> Back to Rooms
-    </a>
+    <!-- Location Filter Dropdown -->
+    <form method="GET" action="{{ url_for('admin_dashboard') }}" class="d-flex gap-2">
+      <select name="parent_group" class="form-select form-select-sm" onchange="this.form.submit()">
+        <option value="">🏢 All Locations</option>
+        {% for g in parent_groups %}
+        <option value="{{ g }}" {% if request.args.get('parent_group') == g %}selected{% endif %}>{{ g }}</option>
+        {% endfor %}
+      </select>
+    </form>
   </div>
 
-  <!-- Table content -->
+  <!-- 🔹 Step 2: Analytics Card Section -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="card text-center border-primary shadow-sm">
+        <div class="card-body">
+          <h6 class="text-primary">Total Reservations</h6>
+          <h3 class="fw-bold">{{ total_reservations }}</h3>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card text-center border-success shadow-sm">
+        <div class="card-body">
+          <h6 class="text-success">Approved</h6>
+          <h3 class="fw-bold">{{ total_approved }}</h3>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card text-center border-warning shadow-sm">
+        <div class="card-body">
+          <h6 class="text-warning">Pending</h6>
+          <h3 class="fw-bold">{{ total_pending }}</h3>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card text-center border-danger shadow-sm">
+        <div class="card-body">
+          <h6 class="text-danger">Cancelled</h6>
+          <h3 class="fw-bold">{{ total_cancelled }}</h3>
+        </div>
+      </div>
+    </div>
+  </div>
+<!-- 📈 Analytics Charts Section -->
+<div class="row g-3 mb-4">
+  <div class="col-md-6">
+    <div class="card shadow-sm">
+      <div class="card-header bg-primary text-white fw-semibold">
+        <i class="bi bi-pie-chart"></i> Reservation Status Overview
+      </div>
+      <div class="card-body">
+        <canvas id="statusChart" height="180"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card shadow-sm">
+      <div class="card-header bg-info text-white fw-semibold">
+        <i class="bi bi-bar-chart-steps"></i> Reservations by Location
+      </div>
+      <div class="card-body">
+        <canvas id="locationChart" height="180"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <!-- 📋 Reservation Table Section -->
   <div class="table-responsive">
     <table class="table table-hover align-middle table-bordered">
-      <thead class="table-primary">
-        <tr class="text-center">
+      <thead class="table-primary text-center">
+        <tr>
           <th>ID</th>
           <th>Room</th>
+          <th>Location</th>
           <th>Reserved By</th>
           <th>Email</th>
           <th>Start</th>
@@ -45,81 +105,113 @@
         <tr>
           <td class="text-center">{{ r.id }}</td>
           <td>{{ r.room_name }}</td>
+          <td>{{ r.parent_group }}</td>
           <td>{{ r.reserved_by }}</td>
           <td>{{ r.email }}</td>
           <td>{{ r.start_time }}</td>
           <td>{{ r.end_time }}</td>
           <td class="text-center">
             {% if r.status == 'Pending' %}
-            <span class="badge bg-warning text-dark">Pending</span>
+              <span class="badge bg-warning text-dark">Pending</span>
             {% elif r.status == 'Approved' %}
-            <span class="badge bg-success">Approved</span>
+              <span class="badge bg-success">Approved</span>
             {% else %}
-            <span class="badge bg-danger">Cancelled</span>
+              <span class="badge bg-danger">Cancelled</span>
             {% endif %}
           </td>
           <td>{{ r.remarks }}</td>
-         <td class="text-center">
-          {% if r.status == 'Pending' %}
-            <a href="{{ url_for('reserve', room_id=r.room_id) }}?action=approve"
-               class="btn btn-success btn-sm">
-              <i class="bi bi-check-lg"></i> Approve
-            </a>
-            <a href="{{ url_for('reserve', room_id=r.room_id) }}?action=cancel"
-               class="btn btn-danger btn-sm">
-              <i class="bi bi-x-circle"></i> Cancel
-            </a>
-          {% else %}
-            <span class="text-muted small fst-italic">No actions available</span>
-          {% endif %}
-        </td>
+          <td class="text-center">
+  {% if r.status == 'Pending' %}
+    <a href="{{ url_for('update_reservation_status', reservation_id=r.id, action='approve') }}"
+       class="btn btn-success btn-sm">
+       <i class="bi bi-check-lg"></i> Approve
+    </a>
+    <a href="{{ url_for('update_reservation_status', reservation_id=r.id, action='cancel') }}"
+       class="btn btn-danger btn-sm">
+       <i class="bi bi-x-circle"></i> Cancel
+    </a>
+  {% else %}
+    <span class="text-muted small fst-italic">No actions available</span>
+  {% endif %}
+</td>
 
         </tr>
         {% else %}
-        <tr><td colspan="9" class="text-center text-muted">No reservations found.</td></tr>
+        <tr><td colspan="10" class="text-center text-muted">No reservations found.</td></tr>
         {% endfor %}
       </tbody>
     </table>
-      <script>
-document.addEventListener("DOMContentLoaded", function () {
-  // 🔹 Approve Reservation
-  document.querySelectorAll("a[href*='?action=approve']").forEach(link => {
-    link.addEventListener("click", function (e) {
-      e.preventDefault();
-      Swal.fire({
-        title: "Approve Reservation?",
-        text: "This will confirm and approve the selected reservation.",
-        icon: "question",
-        showCancelButton: true,
-        confirmButtonColor: "#198754",
-        cancelButtonColor: "#6c757d",
-        confirmButtonText: "Yes, Approve",
-      }).then((result) => {
-        if (result.isConfirmed) window.location.href = link.href;
-      });
-    });
-  });
-
-  // 🔹 Cancel Reservation
-  document.querySelectorAll("a[href*='?action=cancel']").forEach(link => {
-    link.addEventListener("click", function (e) {
-      e.preventDefault();
-      Swal.fire({
-        title: "Cancel Reservation?",
-        text: "The reservation will be marked as cancelled.",
-        icon: "warning",
-        showCancelButton: true,
-        confirmButtonColor: "#d33",
-        cancelButtonColor: "#6c757d",
-        confirmButtonText: "Yes, Cancel It",
-      }).then((result) => {
-        if (result.isConfirmed) window.location.href = link.href;
-      });
-    });
-  });
-});
-</script>
-
   </div>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+
+  // 🎯 Chart 1: Reservation Status
+  const ctx1 = document.getElementById('statusChart');
+  new Chart(ctx1, {
+    type: 'doughnut',
+    data: {
+      labels: {{ status_labels | tojson }},
+      datasets: [{
+        data: {{ status_counts | tojson }},
+        backgroundColor: ['#0d6efd', '#ffc107', '#dc3545'],
+        borderWidth: 1
+      }]
+    },
+    options: {
+      plugins: {
+        legend: { position: 'bottom' },
+        title: { display: true, text: 'Reservation Status Distribution' }
+      }
+    }
+  });
+
+  // 🏢 Chart 2: Room Utilization by Location
+  const ctx2 = document.getElementById('locationChart');
+  new Chart(ctx2, {
+    type: 'bar',
+    data: {
+      labels: {{ loc_labels | tojson }},
+      datasets: [{
+        label: 'Reservations',
+        data: {{ loc_counts | tojson }},
+        backgroundColor: '#0dcaf0'
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        title: { display: true, text: 'Room Utilization by Location' }
+      },
+      scales: {
+        y: { beginAtZero: true, ticks: { stepSize: 1 } }
+      }
+    }
+  });
+});
+
+</script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+  document.querySelectorAll('a.btn-success, a.btn-danger').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.preventDefault();
+      const url = e.target.closest('a').href;
+      const action = e.target.closest('a').classList.contains('btn-success') ? 'approve' : 'cancel';
+
+      Swal.fire({
+        title: `Confirm ${action}?`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Yes',
+        cancelButtonText: 'No'
+      }).then(result => {
+        if (result.isConfirmed) window.location.href = url;
+      });
+    });
+  });
+</script>
+
 {% endblock %}

@@ -1,0 +1,292 @@
+{% extends "base_dashboard.html" %}
+{% block title %}Room Schedule | WebAXIS{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex align-items-center gap-3">
+      <h3 class="fw-bold mb-0"><i class="bi bi-journal-bookmark"></i> Shared Resources</h3>
+
+      <form id="dateForm" method="get" class="d-inline-block">
+        <input type="date" name="date" id="selectedDate" class="form-control form-control-sm"
+               value="{{ selected_date.strftime('%Y-%m-%d') if selected_date else '' }}">
+      </form>
+
+      <button id="goToday" class="btn btn-sm btn-outline-secondary">Today</button>
+
+      <div class="btn-group btn-group-sm ms-2" role="group" aria-label="View mode">
+        <button id="dailyBtn" class="btn btn-primary">Daily</button>
+        <button id="weeklyBtn" class="btn btn-outline-primary">Weekly</button>
+      </div>
+    </div>
+
+    <div>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('menu') }}"><i class="bi bi-house"></i> Home</a>
+      <a class="btn btn-outline-info btn-sm" href="{{ url_for('room_list') }}"><i class="bi bi-list"></i> All Rooms</a>
+    </div>
+  </div>
+
+  <div class="row gx-3">
+    <!-- Left: room tree / list -->
+    <div class="col-md-3">
+      <div class="card shadow-sm mb-3" style="max-height:75vh; overflow:auto;">
+        <div class="card-body p-3">
+          <h6 class="fw-semibold">Rooms</h6>
+          <div class="list-group list-group-flush">
+            {% for room in rooms %}
+              <a href="#room-{{ room.id }}" class="list-group-item list-group-item-action small">
+                {{ room.building ~ ' › ' ~ room.name }}
+              </a>
+            {% else %}
+              <div class="text-muted small">No rooms defined.</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <div class="card shadow-sm">
+        <div class="card-body p-3">
+          <h6 class="fw-semibold">Legend</h6>
+          <div class="small">
+            <div class="d-flex align-items-center mb-1"><span style="width:18px;height:18px;display:inline-block;background:#2ca02c;border-radius:3px;margin-right:8px;"></span> Approved</div>
+            <div class="d-flex align-items-center mb-1"><span style="width:18px;height:18px;display:inline-block;background:#ffcc00;border-radius:3px;margin-right:8px;"></span> Pending</div>
+            <div class="d-flex align-items-center"><span style="width:18px;height:18px;display:inline-block;background:#d9534f;border-radius:3px;margin-right:8px;"></span> Cancelled</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: timeline -->
+    <div class="col-md-9">
+      <div class="card shadow-sm">
+        <div class="card-body p-3">
+          <div class="table-responsive">
+            <table class="table table-borderless align-middle">
+              <thead>
+                <tr>
+                  <th class="w-25">Resource</th>
+                  {% for h in range(0,24) %}
+                    <th class="text-center p-1 small" style="min-width:36px;">{{ '%02d' % h }}</th>
+                  {% endfor %}
+                </tr>
+              </thead>
+              <tbody>
+                {% for room in rooms %}
+                <tr id="room-{{ room.id }}">
+                  <td class="align-middle">
+                    <div class="fw-semibold">{{ room.building }} › {{ room.name }}</div>
+                    <div class="small text-muted">{{ room.capacity or '-' }} pax — {{ room.location or '-' }}</div>
+                    <div class="mt-2">
+                      <a href="{{ url_for('reserve', room_id=room.id) }}" class="btn btn-sm btn-primary me-1">
+                        <i class="bi bi-plus-square"></i> Reserve
+                      </a>
+                      <button type="button" class="btn btn-sm btn-outline-info" onclick="showRoomInfo({{ room.id }})">
+                        <i class="bi bi-info-circle"></i> Info
+                      </button>
+                    </div>
+                  </td>
+
+                  {% for hour in range(0,24) %}
+                  <td class="timeline-cell p-0" data-room="{{ room.id }}" data-hour="{{ hour }}">
+                    <div class="cell-inner w-100 h-100" style="height:38px;"></div>
+                  </td>
+                  {% endfor %}
+                </tr>
+                {% else %}
+                <tr><td colspan="25" class="text-center text-muted">No rooms available.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- My reservations for the day (quick list) -->
+      <div class="card shadow-sm mt-3">
+        <div class="card-body p-3">
+          <h6 class="fw-semibold">My Reservations ({{ selected_date.strftime('%Y-%m-%d') if selected_date else '' }})</h6>
+          <div class="table-responsive">
+            <table class="table table-sm table-striped">
+              <thead class="table-light">
+                <tr>
+                  <th>Room</th>
+                  <th>Time</th>
+                  <th>Remarks / Purpose</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="myReservationsBody">
+                <!-- Filled by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div> <!-- col-md-9 -->
+  </div> <!-- row -->
+</div>
+
+<!-- Room info modal (simple) -->
+<div class="modal fade" id="roomInfoModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 id="roomInfoTitle" class="modal-title"></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="roomInfoBody"></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+        <a id="reserveFromInfo" class="btn btn-primary btn-sm" href="#">Reserve</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .timeline-cell { border-left: 1px solid rgba(0,0,0,0.03); vertical-align: middle; }
+  .cell-inner { transition: background-color .2s ease; border-radius: 6px; margin:3px; padding:2px; }
+  .cell-approved { background:#2ca02c33; box-shadow: 0 2px 8px rgba(0,0,0,0.08) inset; }
+  .cell-pending  { background:#ffcc0033; }
+  .cell-cancelled{ background:#d9534f33; }
+  .small-legend { font-size:0.85rem; }
+  @media (max-width: 992px) {
+    .timeline-cell .cell-inner { height:28px; }
+  }
+</style>
+
+<script>
+  // pass server-side objects to JS
+  const reservations = {{ reservations|tojson | safe }};
+  const rooms = {{ rooms|tojson | safe }};
+  const currentUser = "{{ current_user.username if current_user else '' }}";
+
+  // Map for status -> CSS class + badge
+  const statusClass = {
+    "Approved": "cell-approved",
+    "Pending": "cell-pending",
+    "Cancelled": "cell-cancelled"
+  };
+
+  // Utility: parse ISO timestamps (server should send ISO strings)
+  function parseISO(s) {
+    // If incoming is already Date object, return it
+    if (!s) return null;
+    return new Date(s);
+  }
+
+  // Fill timeline cells based on reservations
+  function paintTimeline() {
+    // clear all cells
+    document.querySelectorAll('.timeline-cell .cell-inner').forEach(el => {
+      el.className = 'cell-inner w-100 h-100';
+      el.title = '';
+      el.innerHTML = '';
+    });
+
+    // Build map of my reservations for "My Reservations" area
+    const myRows = [];
+
+    for (const r of reservations) {
+      // ensure iso strings
+      const start = parseISO(r.start_time);
+      const end = parseISO(r.end_time);
+      if (!start || !end) continue;
+
+      // calculate hour range (inclusive start hour, exclusive end)
+      const roomId = String(r.room_id || r.roomId || r.room_id);
+
+      // push to my reservations if reserved_by == currentUser
+      if (r.reserved_by === currentUser) {
+        myRows.push(r);
+      }
+
+      // mark hourly cells for that reservation
+      for (let h = 0; h < 24; h++) {
+        // cell hour start and end
+        const cellStart = new Date(start);
+        cellStart.setHours(h, 0, 0, 0);
+        const cellEnd = new Date(start);
+        cellEnd.setHours(h + 1, 0, 0, 0);
+
+        // if reservation overlaps with this cell hour
+        if (cellEnd > start && cellStart < end) {
+          const td = document.querySelector(`.timeline-cell[data-room="${roomId}"][data-hour="${h}"] .cell-inner`);
+          if (td) {
+            const cls = statusClass[r.status] || 'cell-pending';
+            td.classList.add(cls);
+            // tooltip text
+            td.title = `${r.reserved_by} — ${new Date(r.start_time).toLocaleString()} → ${new Date(r.end_time).toLocaleTimeString()} (${r.status})`;
+            // show small label when cell is first hour of reservation
+            const hourStart = (new Date(r.start_time)).getHours();
+            if (h === hourStart) {
+              td.innerHTML = `<div class="small text-truncate"><b>${r.reserved_by}</b></div>`;
+            }
+          }
+        }
+      }
+    }
+
+    // populate My Reservations table
+    const tbody = document.getElementById('myReservationsBody');
+    tbody.innerHTML = '';
+    if (myRows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No reservations for this date.</td></tr>';
+    } else {
+      myRows.sort((a,b) => new Date(a.start_time) - new Date(b.start_time));
+      for (const r of myRows) {
+        const roomObj = rooms.find(x => String(x.id) === String(r.room_id));
+        const roomName = roomObj ? `${roomObj.building} › ${roomObj.name}` : `#${r.room_id}`;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${roomName}</td>
+          <td>${new Date(r.start_time).toLocaleString()} - ${new Date(r.end_time).toLocaleTimeString()}</td>
+          <td>${r.remarks || r.purpose || '-'}</td>
+          <td><span class="badge ${r.status === 'Approved' ? 'bg-success' : r.status === 'Pending' ? 'bg-warning text-dark' : 'bg-danger'}">${r.status}</span></td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+  }
+
+  function showRoomInfo(roomId) {
+    const r = rooms.find(x => String(x.id) === String(roomId));
+    if (!r) return;
+    document.getElementById('roomInfoTitle').innerText = `${r.building} › ${r.name}`;
+    document.getElementById('roomInfoBody').innerHTML = `
+      <p><strong>Capacity:</strong> ${r.capacity || '-'} pax</p>
+      <p><strong>Location:</strong> ${r.location || '-'}</p>
+      <p><strong>Description:</strong><br>${(r.description || '-')}</p>
+    `;
+    const reserveUrl = "{{ url_for('reserve', room_id='__ROOMID__') }}".replace('__ROOMID__', r.id);
+    document.getElementById('reserveFromInfo').href = reserveUrl;
+    const modal = new bootstrap.Modal(document.getElementById('roomInfoModal'));
+    modal.show();
+  }
+
+  // initialize
+  document.addEventListener('DOMContentLoaded', function() {
+    paintTimeline();
+
+    // if user changes date -> submit
+    document.getElementById('selectedDate').addEventListener('change', function(){ document.getElementById('dateForm').submit(); });
+    document.getElementById('goToday').addEventListener('click', function(){ window.location = "{{ url_for('room_schedule') }}"; });
+
+    // daily/weekly quick styling (week not implemented here; placeholder)
+    document.getElementById('dailyBtn').addEventListener('click', function(){
+      this.classList.add('btn-primary'); document.getElementById('weeklyBtn').classList.remove('btn-primary');
+      // if you implement weekly view, load it here
+    });
+    document.getElementById('weeklyBtn').addEventListener('click', function(){
+      this.classList.add('btn-primary'); document.getElementById('dailyBtn').classList.remove('btn-primary');
+      Swal.fire({icon:'info', title:'Weekly view', text:'Weekly view is planned (Phase 2).'});
+    });
+
+    // simple tooltips enable
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[title]'))
+    tooltipTriggerList.map(function (el) {
+      new bootstrap.Tooltip(el)
+    })
+  });
+</script>
+{% endblock %}

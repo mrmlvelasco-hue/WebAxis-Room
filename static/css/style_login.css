@@ -1,0 +1,103 @@
+/* =======================================
+   PCPPI LOGIN PAGE (WebAXIS)
+   ======================================= */
+
+body.login-body {
+  background: linear-gradient(135deg, #0047AB 0%, #0b63ce 50%, #1E90FF 100%);
+  color: #fff;
+  font-family: "Segoe UI", sans-serif;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Center container vertically */
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  width: 100%;
+}
+
+/* White login card */
+.login-card {
+  background: #ffffff;
+  padding: 3rem 2.5rem;
+  border-radius: 18px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.25);
+  border-top: 8px solid #0047AB;
+  text-align: center;
+}
+
+/* PCPPI Logo */
+.login-logo {
+  width: 90px;
+  height: auto;
+  margin-bottom: 1rem;
+}
+
+/* Headings */
+.login-card h2 {
+  font-weight: 800;
+  color: #0047AB;
+  margin-bottom: 0.3rem;
+}
+
+.login-card p {
+  color: #555;
+  font-weight: 500;
+  margin-bottom: 1.5rem;
+}
+
+/* Input Fields */
+.login-card input.form-control {
+  border-radius: 10px;
+  border: 1.5px solid #bfc9d4;
+  padding: 10px 14px;
+  font-weight: 600;
+}
+
+.login-card input.form-control:focus {
+  border-color: #0047AB;
+  box-shadow: 0 0 0 0.2rem rgba(0, 71, 171, 0.25);
+}
+
+/* Buttons */
+.login-card button {
+  font-weight: 700;
+  font-size: 1.05rem;
+  border-radius: 10px;
+  background-color: #0047AB;
+  border: none;
+  box-shadow: 0 4px 12px rgba(0, 71, 171, 0.4);
+  transition: background-color 0.2s ease-in-out;
+}
+
+.login-card button:hover {
+  background-color: #00398a;
+}
+
+/* Flash messages at top */
+.alert {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1050;
+  border-radius: 0;
+  margin: 0;
+  font-weight: 500;
+}
+
+/* Responsive */
+@media (max-width: 576px) {
+  .login-card {
+    padding: 2rem 1.5rem;
+  }
+}
