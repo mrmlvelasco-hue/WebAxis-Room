@@ -888,3 +888,8 @@ body.dark-mode .btn-primary:hover {
   border-radius: 4px;
   transition: background-color 0.3s ease;
 }
+.btn-outline-primary.active {
+  background-color: #0047AB;
+  color: #fff;
+  border-color: #0047AB;
+}

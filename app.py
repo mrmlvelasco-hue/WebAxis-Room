@@ -509,34 +509,343 @@ from datetime import datetime
 def room_list():
     try:
         conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT id, name, capacity, location, description
-            FROM rooms
+        cursor = conn.cursor()
+
+        # --- 1️⃣ Determine which date to show (default: today) ---
+        selected_date_str = request.args.get('date')
+        if selected_date_str:
+            selected_date = datetime.strptime(selected_date_str, "%Y-%m-%d")
+        else:
+            selected_date = datetime.now()
+
+        start_of_day = selected_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_day = start_of_day + timedelta(days=1)
+
+        # --- 2️⃣ Fetch active rooms ---
+        cursor.execute("""
+            SELECT id, name, capacity, location, description, status
+            FROM dbo.rooms
+            WHERE status = 'Active'
             ORDER BY location, name
         """)
-        rows = cur.fetchall()
+        rooms = cursor.fetchall()
 
-        # Convert Row objects into dictionaries for JSON-safe use
+        # --- 3️⃣ Fetch reservations for the selected date ---
+        cursor.execute("""
+            SELECT room_id, start_time, end_time, status, reserved_by, remarks
+            FROM dbo.reservations
+            WHERE status IN ('Pending', 'Approved')
+              AND start_time < ? AND end_time > ?
+        """, (end_of_day, start_of_day))
+        reservations = cursor.fetchall()
+        conn.close()
+
+        # --- 4️⃣ Build 30-minute availability grid for all rooms ---
+        availability = {}
+        for room in rooms:
+            rid = room.id
+            availability[rid] = {}
+            for h in range(6, 20):
+                for m in [0, 30]:
+                    slot = f"{h:02d}:{m:02d}"
+                    availability[rid][slot] = "available"
+
+        # --- 5️⃣ Mark booked slots based on reservations ---
+        for res in reservations:
+            rid, start, end, status, reserved_by, remarks = res
+            start_h = start.hour + (0.5 if start.minute >= 30 else 0)
+            end_h = end.hour + (0.5 if end.minute >= 30 else 0)
+            curr = start_h
+            while curr < end_h:
+                hour = int(curr)
+                minute = 30 if (curr - hour) >= 0.5 else 0
+                slot = f"{hour:02d}:{minute:02d}"
+                if rid in availability:
+                    availability[rid][slot] = "booked"
+                curr += 0.5
+
+        # --- 6️⃣ Pass everything to template ---
+        return render_template(
+            "index.html",
+            rooms=rooms,
+            availability=availability,
+            selected_date=selected_date.strftime("%Y-%m-%d")
+        )
+
+    except Exception as e:
+        print("⚠️ room_list error:", e)
+        return render_template("index.html", rooms=[], availability={}, selected_date=datetime.now().strftime("%Y-%m-%d"))
+
+
+@app.route('/api/reservations')
+@login_required
+def reservations_api():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT r.id, rm.name AS room_name, rm.location, r.reserved_by,
+                   r.start_time, r.end_time, r.status
+            FROM dbo.reservations r
+            INNER JOIN dbo.rooms rm ON rm.id = r.room_id
+            WHERE r.status IN ('Pending','Approved')
+        """)
+        data = cursor.fetchall()
+        conn.close()
+
+        events = []
+        for row in data:
+            rid, room, location, reserved_by, start, end, status = row
+            color = "#dc3545" if status == "Approved" else "#ffc107"
+            events.append({
+                "id": rid,
+                "title": f"{room} - {reserved_by}",
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+                "color": color,
+                "room": room,
+                "location": location
+            })
+        return jsonify(events)
+    except Exception as e:
+        print("⚠️ reservations_api error:", e)
+        return jsonify([])
+
+@app.route('/calendar')
+@login_required
+def calendar_view():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, name, capacity, location, description, status
+            FROM dbo.rooms
+            WHERE status='Active'
+            ORDER BY location, name
+        """)
+        rows = cursor.fetchall()
+        conn.close()
+
+        # Convert pyodbc.Row -> dict (for Jinja access)
         rooms = []
         for r in rows:
             rooms.append({
-                "id": r.id,
-                "name": r.name,
-                "capacity": r.capacity,
-                "location": r.location,
-                "description": r.description
+                "id": r.id if hasattr(r, "id") else r[0],
+                "name": r.name if hasattr(r, "name") else r[1],
+                "capacity": r.capacity if hasattr(r, "capacity") else r[2],
+                "location": r.location if hasattr(r, "location") else r[3],
+                "description": r.description if hasattr(r, "description") else r[4],
+                "status": r.status if hasattr(r, "status") else r[5],
             })
 
-        conn.close()
-
-        # ✅ Pass rooms + now() function for the date picker
-        return render_template("index.html", rooms=rooms, now=datetime.utcnow)
-
+        return render_template("calendar_view.html", rooms=rooms)
     except Exception as e:
-        print(f"⚠️ Error loading room list: {e}")
-        flash("Error loading rooms.", "danger")
-        return redirect(url_for("main_menu"))
+        print("⚠️ calendar_view error:", e)
+        return render_template("calendar_view.html", rooms=[])
+
+
+from io import BytesIO
+import pandas as pd
+from flask import send_file, request
+
+@app.route('/export_excel')
+@login_required
+def export_excel():
+    start = request.args.get('start')
+    end = request.args.get('end')
+    room = request.args.get('room', 'all')
+    group = request.args.get('group', 'all')
+
+    # --- Parse date range safely ---
+    try:
+        start_date = datetime.strptime(start, "%Y-%m-%d")
+        end_date = datetime.strptime(end, "%Y-%m-%d") + timedelta(days=1)
+    except Exception as e:
+        print("⚠️ Invalid date params:", e)
+        return "Invalid date format. Expected YYYY-MM-DD", 400
+
+    # --- Connect DB ---
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # --- Build SQL ---
+    query = """
+        SELECT rm.name AS Room, rm.location AS Location,
+               r.reserved_by AS ReservedBy,
+               CONVERT(VARCHAR(19), r.start_time, 120) AS StartTime,
+               CONVERT(VARCHAR(19), r.end_time, 120) AS EndTime,
+               ISNULL(r.remarks,'') AS Remarks,
+               r.status AS Status
+        FROM dbo.reservations r
+        INNER JOIN dbo.rooms rm ON rm.id = r.room_id
+        WHERE r.start_time >= ? AND r.end_time < ?
+    """
+    params = [start_date, end_date]
+
+    if group and group != "all":
+        query += " AND rm.location = ?"
+        params.append(group)
+    if room and room != "all":
+        query += " AND rm.name = ?"
+        params.append(room)
+
+    query += " ORDER BY rm.name, r.start_time"
+
+    print(f"\n🧾 Export Query:\n{query}\nParams: {params}")
+
+    cursor.execute(query, params)
+    rows = cursor.fetchall()
+    conn.close()
+
+    # --- Build grouped data ---
+    reservations_by_room = {}
+    for row in rows:
+        room_name = row[0]
+        reservations_by_room.setdefault(room_name, []).append(row)
+
+    # --- Create Excel output ---
+    output = BytesIO()
+    workbook = pd.ExcelWriter(output, engine="xlsxwriter")
+    wb = workbook.book
+
+    # --- Styles ---
+    title_fmt = wb.add_format({
+        "bold": True, "font_size": 14, "align": "center",
+        "valign": "vcenter", "bg_color": "#0047AB", "font_color": "white"
+    })
+    time_fmt = wb.add_format({"align": "center", "valign": "vcenter", "border": 1, "bold": True})
+    available_fmt = wb.add_format({"align": "center", "valign": "vcenter", "border": 1, "bg_color": "#E8F5E9"})
+    booked_fmt = wb.add_format({
+        "align": "center", "valign": "vcenter", "border": 1, "bg_color": "#BBDEFB", "text_wrap": True
+    })
+    pending_fmt = wb.add_format({
+        "align": "center", "valign": "vcenter", "border": 1, "bg_color": "#FFE0B2", "text_wrap": True
+    })
+
+    # --- Case: No data ---
+    if not reservations_by_room:
+        ws = wb.add_worksheet("No Data")
+        ws.merge_range("A1:C1", f"No reservations found between {start} and {end}", title_fmt)
+        ws.set_column("A:C", 40)
+        workbook.close()
+        output.seek(0)
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name=f"Room_Schedule_{start}_to_{end}.xlsx",
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+    # --- Create one sheet per room ---
+    for room_name, bookings in reservations_by_room.items():
+        ws = wb.add_worksheet(room_name[:31])
+        ws.merge_range("A1:D1",
+            f"{room_name} — Schedule ({start} to {end})",
+            title_fmt
+        )
+        ws.write("A3", "Time", time_fmt)
+        ws.write("B3", "Reservation Details", time_fmt)
+        ws.set_column("A:A", 12)
+        ws.set_column("B:B", 60)
+
+        # Generate half-hour grid (6:00–20:00)
+        row_idx = 3
+        base = datetime.strptime(start, "%Y-%m-%d")
+        for h in range(6, 20):
+            for m in [0, 30]:
+                slot_label = f"{h:02d}:{m:02d}"
+                ws.write(row_idx, 0, slot_label, time_fmt)
+
+                slot_start = base.replace(hour=h, minute=m)
+                slot_end = slot_start + timedelta(minutes=30)
+                matched = None
+
+                for b in bookings:
+                    b_start = datetime.strptime(b[3], "%Y-%m-%d %H:%M:%S")
+                    b_end = datetime.strptime(b[4], "%Y-%m-%d %H:%M:%S")
+                    if b_start < slot_end and b_end > slot_start:
+                        matched = b
+                        break
+
+                if matched:
+                    details = f"{matched[2]} ({matched[6]})\n{matched[5]}"
+                    fmt = booked_fmt if matched[6] == "Approved" else pending_fmt
+                    ws.write(row_idx, 1, details, fmt)
+                else:
+                    ws.write(row_idx, 1, "", available_fmt)
+
+                row_idx += 1
+
+        # --- Print settings for posting ---
+        ws.fit_to_pages(1, 1)
+        ws.set_landscape()
+        ws.set_paper(9)  # A4
+        ws.center_horizontally()
+        ws.set_margins(left=0.3, right=0.3, top=0.5, bottom=0.5)
+
+    # --- Finalize workbook ---
+    workbook.close()
+    output.seek(0)
+    filename = f"Room_Schedule_{start}_to_{end}.xlsx"
+
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+@app.route("/api/reservations")
+@login_required
+def api_reservations():
+    room = request.args.get('room', 'all')
+    group = request.args.get('group', 'all')
+    print("🔍 Received filter -> Group:", group, "| Room:", room)
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Base query
+    query = """
+        SELECT rm.name, rm.location, r.reserved_by, r.start_time, r.end_time,
+               ISNULL(r.remarks, '') AS remarks, r.status
+        FROM dbo.reservations r
+        INNER JOIN dbo.rooms rm ON rm.id = r.room_id
+        WHERE r.status IN ('Approved', 'Pending')
+    """
+    params = []
+
+    # Apply filters safely
+    if group and group.lower() != "all":
+        query += " AND rm.location = ?"
+        params.append(group)
+
+    if room and room.lower() != "all":
+        query += " AND rm.name = ?"
+        params.append(room)
+
+    query += " ORDER BY r.start_time"
+
+    # Debug info (for testing)
+    print("📡 SQL Query:", query)
+    print("📦 Parameters:", params)
+
+    # Execute correctly with params
+    cursor.execute(query, tuple(params))
+    rows = cursor.fetchall()
+    conn.close()
+
+    events = []
+    for name, location, reserved_by, start, end, remarks, status in rows:
+        events.append({
+            "title": f"{name} - {reserved_by}",
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "description": remarks,
+            "status": status,
+            "room": name,
+            "location": location
+        })
+    return jsonify(events)
 
 
 # # app.py (add / replace reserve route)
@@ -545,168 +854,65 @@ def room_list():
 
 # app.py (add / replace reserve route)
 
-@app.route('/reserve/<int:room_id>', methods=['GET', 'POST'])
+@app.route('/reserve/<int:room_id>', methods=['POST'])
 @login_required
 def reserve(room_id):
-    """
-    Supports:
-     - GET -> render form
-     - POST (form) -> regular HTML flow (returns rendered template)
-     - POST (AJAX JSON) -> returns JSON { success: True/False, message: ..., reservation: {...} }
-    Admins auto-approve. Times saved in UTC.
-    """
-
-    conn = None
-    cur = None
     try:
+        reserved_by = request.form['reserved_by']
+        email = request.form.get('email')
+        start_time = request.form['start_time']
+        end_time = request.form['end_time']
+        remarks = request.form.get('remarks', '')
+
         conn = get_db_connection()
-        cur = conn.cursor()
+        cursor = conn.cursor()
 
-        # --- load room ---
-        cur.execute("SELECT id, name, capacity, location, description FROM rooms WHERE id = ?", (room_id,))
-        row = cur.fetchone()
-        if not row:
-            if request.is_json:
-                return jsonify({"success": False, "message": "Room not found."}), 404
-            flash("Room not found.", "danger")
+        # Convert to datetime
+        start_dt = datetime.fromisoformat(start_time)
+        end_dt = datetime.fromisoformat(end_time)
+
+        # --- Check availability ---
+        cursor.execute("""
+            SELECT COUNT(*) FROM dbo.reservations
+            WHERE room_id = ? AND (
+                (? < end_time AND ? > start_time)
+            )
+        """, (room_id, start_dt, end_dt))
+        overlap = cursor.fetchone()[0]
+
+        if overlap > 0:
+            flash("⚠️ The selected time range is not available.", "danger")
+            conn.close()
             return redirect(url_for('room_list'))
-        room = {
-            "id": row.id,
-            "name": getattr(row, "name", getattr(row, "room_name", "Room")),
-            "capacity": getattr(row, "capacity", None),
-            "location": getattr(row, "location", None),
-            "description": getattr(row, "description", None)
-        }
 
-        # Helper: parse incoming param values (support form and JSON)
-        def get_field(name):
-            if request.is_json:
-                return (request.json.get(name) or "").strip()
-            return (request.form.get(name) or "").strip()
+        # --- Insert reservation ---
+        cursor.execute("""
+            INSERT INTO dbo.reservations (room_id, reserved_by, email, start_time, end_time, remarks, status)
+            VALUES (?, ?, ?, ?, ?, ?, 'Pending')
+        """, (room_id, reserved_by, email, start_dt, end_dt, remarks))
+        conn.commit()
 
-        if request.method == 'POST':
-            reserved_by = get_field('reserved_by') or current_user.display_name or current_user.username
-            email = get_field('email') or current_user.email or ''
-            start_raw = get_field('start_time')
-            end_raw = get_field('end_time')
-            remarks = get_field('remarks')
+        # Fetch the inserted reservation
+        cursor.execute("""
+            SELECT TOP 1 id, room_id, reserved_by, email, start_time, end_time, remarks, status
+            FROM dbo.reservations
+            WHERE room_id = ? AND reserved_by = ?
+            ORDER BY id DESC
+        """, (room_id, reserved_by))
+        reservation = cursor.fetchone()
+        conn.close()
 
-            # validate
-            if not reserved_by or not start_raw or not end_raw:
-                msg = "Please fill required fields (name, start and end time)."
-                if request.is_json:
-                    return jsonify({"success": False, "message": msg}), 400
-                flash(msg, "warning")
-                return render_template('reserve.html', room=room)
-
-            # parse datetimes (expecting "YYYY-MM-DDTHH:MM" from datetime-local)
-            try:
-                # naive local datetime from browser (no offset)
-                start_local = datetime.fromisoformat(start_raw)
-                end_local = datetime.fromisoformat(end_raw)
-            except Exception:
-                msg = "Invalid date/time format. Use the date/time picker."
-                if request.is_json:
-                    return jsonify({"success": False, "message": msg}), 400
-                flash(msg, "danger")
-                return render_template('reserve.html', room=room)
-
-            if end_local <= start_local:
-                msg = "End time must be after start time."
-                if request.is_json:
-                    return jsonify({"success": False, "message": msg}), 400
-                flash(msg, "warning")
-                return render_template('reserve.html', room=room)
-
-            # Convert local naive datetimes to UTC before saving.
-            # NOTE: This assumes the client and server agree on local timezone or that client uses local browser time.
-            # We'll treat the input as local time and convert to UTC using server local offset.
-            # Safer option is to collect timezone from client; for now convert as local -> UTC.
-            # Use .astimezone() with timezone.utc after making them timezone-aware.
-            # Make naive datetimes timezone-aware using system local timezone:
-            try:
-                # Make them timezone-aware by interpreting as local time
-                start_aware = start_local.replace(tzinfo=datetime.now().astimezone().tzinfo)
-                end_aware = end_local.replace(tzinfo=datetime.now().astimezone().tzinfo)
-                start_utc = start_aware.astimezone(timezone.utc).replace(tzinfo=None)  # pyodbc/SQL server DATETIME prefer naive UTC or adapt if you store tz
-                end_utc = end_aware.astimezone(timezone.utc).replace(tzinfo=None)
-            except Exception:
-                # fallback: treat as already UTC
-                start_utc = start_local
-                end_utc = end_local
-
-            # Overlap check (room_id, status pending/approved)
-            overlap_sql = """
-                SELECT COUNT(*) FROM reservations
-                WHERE room_id = ?
-                  AND status IN ('Pending','Approved')
-                  AND NOT (end_time <= ? OR start_time >= ?)
-            """
-            cur.execute(overlap_sql, (room_id, start_utc, end_utc))
-            cnt_row = cur.fetchone()
-            conflicts = int(getattr(cnt_row, "cnt", None) or cnt_row[0])
-
-            if conflicts > 0:
-                msg = "Time slot not available — overlapping reservation exists."
-                if request.is_json:
-                    return jsonify({"success": False, "message": msg}), 409
-                flash(msg, "danger")
-                return render_template('reserve.html', room=room, start_time=start_raw, end_time=end_raw, remarks=remarks)
-
-            # Determine status: auto-approve for admins
-            status = "Approved" if (hasattr(current_user, "is_admin") and current_user.is_admin()) else "Pending"
-
-            insert_sql = """
-                INSERT INTO reservations (room_id, reserved_by, email, start_time, end_time, status, remarks, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, GETDATE())
-            """
-            try:
-                cur.execute(insert_sql, (room_id, reserved_by, email, start_utc, end_utc, status, remarks))
-                conn.commit()
-            except Exception as e:
-                conn.rollback()
-                print("⚠️ Error saving reservation:", e)
-                if request.is_json:
-                    return jsonify({"success": False, "message": "DB error saving reservation."}), 500
-                flash("System error when saving reservation.", "danger")
-                return render_template('reserve.html', room=room)
-
-            # Build response
-            reservation_summary = {
-                "room": room,
-                "reserved_by": reserved_by,
-                "email": email,
-                "start": start_utc.strftime("%Y-%m-%d %H:%M"),
-                "end": end_utc.strftime("%Y-%m-%d %H:%M"),
-                "status": status,
-                "remarks": remarks
-            }
-
-            # If AJAX: return JSON (client will show modal)
-            if request.is_json:
-                return jsonify({"success": True, "message": "Reservation saved", "reservation": reservation_summary}), 200
-
-            # Normal POST: render same page with confirmation (no redirect)
-            flash(f"Reservation submitted. Status: {status}", "success")
-            return render_template('reserve.html', room=room, reservation=reservation_summary, show_confirmation=True)
-
-        # GET -> render form
-        return render_template('reserve.html', room=room)
+        # --- Redirect behavior ---
+        if current_user.role == 'Admin':
+            return redirect(url_for('confirmation', reservation_id=reservation.id))
+        else:
+            flash("✅ Reservation submitted successfully!", "success")
+            return redirect(url_for('room_list'))
 
     except Exception as e:
-        print("⚠️ reserve route error:", e)
-        if request.is_json:
-            return jsonify({"success": False, "message": "Server error"}), 500
-        flash("System error in reservation.", "danger")
+        print("⚠️ reserve error:", e)
+        flash("Error submitting reservation.", "danger")
         return redirect(url_for('room_list'))
-    finally:
-        try:
-            if cur: cur.close()
-        except: pass
-        try:
-            if conn: conn.close()
-        except: pass
-
 
 
 

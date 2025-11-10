@@ -1,221 +1,322 @@
 {% extends "base_dashboard.html" %}
-{% block title %}Room Reservation | WebAXIS{% endblock %}
+{% block title %}Meeting Room | WebAXIS{% endblock %}
+
 {% block content %}
-<div class="card shadow-sm p-4 mb-4">
-<div class="d-flex justify-content-between align-items-center mb-3">
-<h3 class="fw-bold mb-0">
-<i class="bi bi-door-open"></i> Room Reservation
-</h3>
-<div>
-<input type="date" id="viewDate" class="form-control form-control-sm" />
+<div class="container-fluid mt-3">
+  <div class="row">
+    <!-- Sidebar -->
+    <div class="col-md-3 col-lg-2 border-end bg-light px-3 py-3">
+      <h5 class="fw-bold text-primary mb-3">Meeting Room</h5>
+
+      <!-- View Switch -->
+      <div class="d-grid gap-2 mb-3">
+        <a href="{{ url_for('room_list') }}" class="btn btn-primary fw-semibold">
+          <i class="bi bi-grid-3x3-gap me-2"></i> Timeline View
+        </a>
+        <a href="{{ url_for('calendar_view') }}"
+           class="btn btn-outline-primary fw-semibold {% if request.endpoint == 'calendar_view' %}active{% endif %}">
+           <i class="bi bi-calendar3 me-2"></i> Calendar View
+        </a>
+      </div>
+
+      <!-- Filter -->
+      <div class="mb-3">
+        <label class="fw-bold small text-muted mb-1">Filter by Group</label>
+        <select id="locationFilter" class="form-select form-select-sm">
+          <option value="all">All Locations</option>
+          {% for r in rooms|groupby('location') %}
+            <option value="{{ r.grouper }}">{{ r.grouper }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <hr>
+      <h6 class="fw-bold small text-muted">Reservation Status</h6>
+      <div class="small">
+        <div><span class="badge bg-success me-1">&nbsp;</span> Available</div>
+        <div><span class="badge bg-danger me-1">&nbsp;</span> Booked</div>
+        <div><span class="badge bg-secondary me-1">&nbsp;</span> Past</div>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="col-md-9 col-lg-10">
+      <div class="card shadow-sm p-4 mb-4">
+        <!-- Toolbar -->
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap">
+          <div class="d-flex align-items-center">
+            <h3 class="fw-bold mb-0 text-primary me-3">
+              <i class="bi bi-door-open me-2"></i> Shared Resources
+            </h3>
+            <div class="d-flex align-items-center gap-2 small">
+              <span><span class="badge bg-success me-1">&nbsp;</span> Available</span>
+              <span><span class="badge bg-danger me-1">&nbsp;</span> Booked</span>
+              <span><span class="badge bg-secondary me-1">&nbsp;</span> Past</span>
+            </div>
+          </div>
+          <div class="d-flex align-items-center gap-2 mt-2 mt-md-0">
+            <button class="btn btn-outline-secondary btn-sm" id="refreshBtn">
+              <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+            </button>
+            <div class="btn-group">
+              <button class="btn btn-outline-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="bi bi-file-earmark-excel me-1"></i> Export
+              </button>
+              <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item export-option" data-range="today" href="#">📅 Today</a></li>
+                <li><a class="dropdown-item export-option" data-range="week" href="#">🗓 This Week</a></li>
+                <li><a class="dropdown-item export-option" data-range="month" href="#">📆 This Month</a></li>
+              </ul>
+            </div>
+
+            <input type="date" id="viewDate" class="form-control form-control-sm" value="{{ selected_date }}">
+          </div>
+        </div>
+
+        <!-- Room Slot Container -->
+        <div class="slot-container mt-3">
+          {% for room in rooms %}
+          <div class="room-row mb-4" data-location="{{ room.location or 'General' }}">
+            <!-- Header -->
+            <div class="room-header d-flex justify-content-between align-items-center p-2 border rounded bg-light">
+              <div>
+                <strong>{{ room.name }}</strong>
+                <small class="text-muted ms-2">(Capacity: {{ room.capacity }})</small>
+                {% if room.location %}
+                  <span class="badge bg-secondary ms-2">{{ room.location }}</span>
+                {% endif %}
+                {% if room.description %}
+                  <div class="text-muted small">{{ room.description }}</div>
+                {% endif %}
+              </div>
+              <button class="btn btn-sm btn-outline-primary reserve-btn"
+                      data-room-id="{{ room.id }}" data-room-name="{{ room.name }}">
+                <i class="bi bi-calendar-plus"></i> Reserve
+              </button>
+            </div>
+
+            <!-- Timeline -->
+            <div class="timeline d-flex flex-nowrap overflow-auto border rounded bg-white p-2 user-select-none"
+                 data-room-id="{{ room.id }}">
+              {% for hour in range(6, 20) %}
+                {% for minute in [0, 30] %}
+                  {% set time_label = "%02d:%02d"|format(hour, minute) %}
+                  {% set status = availability.get(room.id, {}).get(time_label, "available") %}
+                  <div class="slot-cell
+                      {% if status == 'booked' %} bg-danger
+                      {% elif status == 'available' %} bg-success
+                      {% else %} bg-secondary {% endif %}
+                      text-white m-1 p-2 rounded text-center flex-shrink-0"
+                       data-room-id="{{ room.id }}"
+                       data-room-name="{{ room.name }}"
+                       data-time="{{ time_label }}"
+                       data-status="{{ status }}"
+                       style="cursor: pointer; min-width: 55px;"
+                       title="{% if status == 'booked' %}Booked{% elif status == 'available' %}Available{% else %}Past{% endif %}">
+                    {{ time_label }}
+                  </div>
+                {% endfor %}
+              {% endfor %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
-</div>
-<!-- Room Slot Container -->
-<div class="slot-container mt-3">
-   {% for room in rooms %}
-<div class="room-row mb-4">
-<!-- Room Header -->
-<div class="room-header d-flex justify-content-between align-items-center p-2 border rounded bg-light">
-<div>
-<strong>{{ room.name }}</strong>
-<small class="text-muted ms-2">(Capacity: {{ room.capacity }})</small>
-</div>
-<button class="btn btn-sm btn-outline-primary"
-               onclick="openQuickReserve({{ room.id }}, '{{ room.name }}')">
-<i class="bi bi-calendar-plus"></i> Reserve
-</button>
-</div>
-<!-- Time Slots -->
-<div class="time-slots d-flex flex-wrap border rounded p-2 bg-white" data-room-id="{{ room.id }}">
-       {% for hour in range(8, 20) %}
-<div class="slot-cell bg-success text-white m-1 p-2 rounded text-center flex-fill"
-            data-room-id="{{ room.id }}"
-            data-room-name="{{ room.name }}"
-            data-hour="{{ hour }}"
-            style="cursor: pointer; min-width: 80px;"
-            title="Click to reserve this time slot">
-         {{ "%02d:00"|format(hour) }}
-</div>
-       {% endfor %}
-</div>
-</div>
-   {% else %}
-<p class="text-center text-muted">No rooms found.</p>
-   {% endfor %}
-</div>
-</div>
+
 <!-- Reservation Modal -->
 <div class="modal fade" id="newReservationModal" tabindex="-1" aria-labelledby="newReservationModalLabel" aria-hidden="true">
-<div class="modal-dialog modal-dialog-centered">
-<form id="reservationForm" method="POST">
-<div class="modal-content">
-<div class="modal-header">
-<h5 class="modal-title" id="newReservationModalLabel">New Reservation</h5>
-<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-</div>
-<div class="modal-body">
-<input type="hidden" id="modalRoomId" name="room_id">
-<div class="mb-2">
-<label class="form-label">Room</label>
-<div id="modalRoomName" class="fw-semibold"></div>
-</div>
-<div class="row g-2">
-<div class="col-12">
-<label for="modalStartTime" class="form-label">Start</label>
-<input id="modalStartTime" name="start_time" type="datetime-local" class="form-control" required>
-</div>
-<div class="col-12">
-<label for="modalEndTime" class="form-label">End</label>
-<input id="modalEndTime" name="end_time" type="datetime-local" class="form-control" required>
-</div>
-</div>
-<div class="mt-2">
-<label for="modalReservedBy" class="form-label">Reserved By</label>
-<input id="modalReservedBy" name="reserved_by" type="text" class="form-control"
-                  value="{{ current_user.display_name or current_user.username }}" required>
-</div>
-<div class="mt-2">
-<label for="modalEmail" class="form-label">Email</label>
-<input id="modalEmail" name="email" type="email" class="form-control"
-                  value="{{ current_user.email or '' }}">
-</div>
-<div class="mt-2">
-<label for="modalRemarks" class="form-label">Remarks</label>
-<textarea id="modalRemarks" name="remarks" class="form-control" rows="2" placeholder="Optional"></textarea>
-</div>
-</div>
-<div class="modal-footer">
-<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-<button type="submit" class="btn btn-primary" id="modalSubmitBtn">Submit Reservation</button>
-</div>
-</div>
-</form>
-</div>
+  <div class="modal-dialog modal-dialog-centered">
+    <form id="reservationForm" method="POST">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="newReservationModalLabel">New Reservation</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="modalRoomId" name="room_id">
+          <div class="mb-2">
+            <label class="form-label">Room</label>
+            <div id="modalRoomName" class="fw-semibold"></div>
+          </div>
+          <div class="row g-2">
+            <div class="col-12">
+              <label for="modalStartTime" class="form-label">Start</label>
+              <input id="modalStartTime" name="start_time" type="datetime-local" class="form-control" required>
+            </div>
+            <div class="col-12">
+              <label for="modalEndTime" class="form-label">End</label>
+              <input id="modalEndTime" name="end_time" type="datetime-local" class="form-control" required>
+            </div>
+          </div>
+          <div class="mt-2">
+            <label for="modalReservedBy" class="form-label">Reserved By</label>
+            <input id="modalReservedBy" name="reserved_by" type="text" class="form-control"
+                   value="{{ current_user.display_name or current_user.username }}" required>
+          </div>
+          <div class="mt-2">
+            <label for="modalEmail" class="form-label">Email</label>
+            <input id="modalEmail" name="email" type="email" class="form-control"
+                   value="{{ current_user.email or '' }}">
+          </div>
+          <div class="mt-2">
+            <label for="modalRemarks" class="form-label">Remarks</label>
+            <textarea id="modalRemarks" name="remarks" class="form-control" rows="2" placeholder="Optional"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="modalSubmitBtn">Submit Reservation</button>
+        </div>
+      </div>
+    </form>
+  </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function () {
- const modalEl = document.getElementById('newReservationModal');
- const reservationForm = document.getElementById('reservationForm');
- const modalRoomName = document.getElementById('modalRoomName');
- const modalRoomId = document.getElementById('modalRoomId');
- const modalStartTime = document.getElementById('modalStartTime');
- const modalEndTime = document.getElementById('modalEndTime');
- const bsModal = new bootstrap.Modal(modalEl);
- const slotCells = document.querySelectorAll('.slot-cell');
- // Helper
- function pad2(n){ return String(n).padStart(2,'0'); }
- // Populate date input
- const viewDate = document.getElementById('viewDate');
- const today = new Date().toISOString().slice(0,10);
- if (viewDate) viewDate.value = today;
- // Disable past slots automatically
- const now = new Date();
- slotCells.forEach(cell => {
-   const todayDate = new Date();
-   const hour = parseInt(cell.dataset.hour);
-   todayDate.setHours(hour, 0, 0, 0);
-   if (todayDate < now) {
-     cell.classList.remove('bg-success');
-     cell.classList.add('bg-secondary');
-     cell.style.pointerEvents = 'none';
-     cell.title = 'Past time (unavailable)';
-   }
- });
- // Handle slot click
- slotCells.forEach(cell => {
-   cell.addEventListener('click', function () {
-     const roomId = this.dataset.roomId;
-     const roomName = this.dataset.roomName;
-     const hour = Number(this.dataset.hour);
-     const dateValue = viewDate.value || today;
-     const start = `${dateValue}T${pad2(hour)}:00`;
-     const end = `${dateValue}T${pad2(hour+1)}:00`;
-     modalRoomName.textContent = roomName;
-     modalRoomId.value = roomId;
-     modalStartTime.value = start;
-     modalEndTime.value = end;
-     reservationForm.action = `/reserve/${roomId}`;
-     bsModal.show();
-   });
- });
- // Submit form with confirmation
- reservationForm.addEventListener('submit', function (e) {
-   e.preventDefault();
-   const start = new Date(modalStartTime.value);
-   const end = new Date(modalEndTime.value);
-   const now = new Date();
-   if (start < now) {
-     Swal.fire({ icon: 'warning', title: 'Invalid Start Time', text: 'Start time cannot be in the past.' });
-     return;
-   }
-   if (end <= start) {
-     Swal.fire({ icon: 'warning', title: 'Invalid End Time', text: 'End time must be after start time.' });
-     return;
-   }
-   Swal.fire({
-     title: 'Confirm Reservation',
-     html: `<b>${modalRoomName.textContent}</b><br>${start.toLocaleString()} - ${end.toLocaleString()}`,
-     icon: 'question',
-     showCancelButton: true,
-     confirmButtonText: 'Confirm',
-     cancelButtonText: 'Cancel',
-     confirmButtonColor: '#0047AB'
-   }).then(result => {
-     if (result.isConfirmed) {
-       Swal.fire({
-         icon: 'success',
-         title: 'Reservation Submitted!',
-         text: 'Your reservation has been sent for approval.',
-         showConfirmButton: false,
-         timer: 1500
-       });
-       setTimeout(() => reservationForm.submit(), 1400);
-     }
-   });
- });
+  const modal = new bootstrap.Modal(document.getElementById('newReservationModal'));
+  const form = document.getElementById('reservationForm');
+  const viewDate = document.getElementById('viewDate');
+  const locationFilter = document.getElementById('locationFilter');
+  const today = new Date().toISOString().slice(0,10);
+
+  // --- Helper: Local datetime format ---
+  function formatLocalDate(dateObj) {
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    const hour = String(dateObj.getHours()).padStart(2, '0');
+    const minute = String(dateObj.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hour}:${minute}`;
+  }
+
+  // --- Filter logic (persistent) ---
+  const savedFilter = localStorage.getItem('roomFilter') || 'all';
+  locationFilter.value = savedFilter;
+
+  function applyFilter() {
+    const selected = locationFilter.value;
+    localStorage.setItem('roomFilter', selected);
+    document.querySelectorAll('.room-row').forEach(r => {
+      r.style.display = (selected === 'all' || r.dataset.location === selected) ? '' : 'none';
+    });
+  }
+  locationFilter.addEventListener('change', applyFilter);
+  applyFilter();
+
+  // --- Reservation Logic ---
+  function openReserve(roomId, roomName, startTime, endTime) {
+    document.getElementById('modalRoomId').value = roomId;
+    document.getElementById('modalRoomName').textContent = roomName;
+    document.getElementById('modalStartTime').value = startTime;
+    document.getElementById('modalEndTime').value = endTime;
+    form.action = `/reserve/${roomId}`;
+    modal.show();
+  }
+
+  document.querySelectorAll('.slot-cell').forEach(cell => {
+    const now = new Date();
+    const dateValue = viewDate.value || today;
+    const time = cell.dataset.time;
+    const slotTime = new Date(`${dateValue}T${time}:00`);
+    const isToday = dateValue === today;
+
+    // --- Past slot disable only if today ---
+    if (isToday && slotTime < now) {
+      cell.classList.remove('bg-success', 'bg-danger');
+      cell.classList.add('bg-secondary');
+      cell.style.pointerEvents = 'none';
+    }
+
+    cell.addEventListener('click', () => {
+      if (cell.dataset.status === 'booked') {
+        Swal.fire('⚠️ Slot Not Available', 'This time is already booked.', 'warning');
+        return;
+      }
+
+      const start = cell.dataset.time;
+      const [h, m] = start.split(':');
+      const startDate = new Date(`${dateValue}T${h}:${m}:00`);
+      const endDate = new Date(startDate);
+      endDate.setMinutes(endDate.getMinutes() + 30);
+
+      const startTime = formatLocalDate(startDate);
+      const endTime = formatLocalDate(endDate);
+
+      openReserve(cell.dataset.roomId, cell.dataset.roomName, startTime, endTime);
+    });
+  });
+
+  // --- Refresh Button ---
+  document.getElementById('refreshBtn').addEventListener('click', () => {
+    const params = new URLSearchParams(window.location.search);
+    params.set('date', viewDate.value);
+    window.location.href = `${window.location.pathname}?${params.toString()}`;
+  });
+
+  // --- Date Picker: change day and reload ---
+  viewDate.addEventListener('change', () => {
+    const selectedDate = viewDate.value;
+    if (selectedDate) {
+      window.location.href = `/rooms?date=${selectedDate}`;
+    }
+  });
 });
+
+// --- Export Options ---
+document.querySelectorAll('.export-option').forEach(option => {
+  option.addEventListener('click', (e) => {
+    e.preventDefault();
+    const range = option.dataset.range;
+    const today = new Date();
+    let start, end;
+
+    // Compute ranges dynamically
+    if (range === 'today') {
+      start = today.toISOString().slice(0,10);
+      end = start;
+    }
+    else if (range === 'week') {
+      const dayOfWeek = today.getDay(); // 0=Sunday
+      const monday = new Date(today);
+      monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      start = monday.toISOString().slice(0,10);
+      end = sunday.toISOString().slice(0,10);
+    }
+    else if (range === 'month') {
+      const first = new Date(today.getFullYear(), today.getMonth(), 1);
+      const last = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      start = first.toISOString().slice(0,10);
+      end = last.toISOString().slice(0,10);
+    }
+
+    const group = document.getElementById('locationFilter').value || 'all';
+    const params = new URLSearchParams({
+      start: start,
+      end: end,
+      group: group,
+      room: 'all'
+    });
+    window.location.href = `/export_excel?${params.toString()}`;
+  });
+});
+
 </script>
-<!-- Optional CSS for slot layout (can also go to style_dashboard.css) -->
+
 <style>
-.slot-container {
- display: flex;
- flex-direction: column;
- gap: 1rem;
-}
-.room-header {
- background-color: #f8f9fa;
- border: 1px solid #dee2e6;
- border-radius: 0.4rem;
-}
-.time-slots {
- display: flex;
- flex-wrap: wrap;
- align-items: center;
-}
-.slot-cell {
- flex: 1 1 6rem;
- text-align: center;
- font-size: 0.85rem;
- border-radius: 0.25rem;
- transition: all 0.2s ease;
- border: 1px solid transparent;
-}
-.slot-cell.bg-success {
- background-color: #198754 !important; /* Available */
-}
-.slot-cell.bg-danger {
- background-color: #dc3545 !important; /* Booked */
-}
-.slot-cell.bg-secondary {
- background-color: #6c757d !important; /* Past */
-}
-.slot-cell:hover {
- transform: scale(1.05);
- border: 1px solid #0047AB;
- box-shadow: 0 0 5px rgba(0, 71, 171, 0.3);
-}
+.border-end { border-right: 1px solid #dee2e6 !important; }
+.timeline::-webkit-scrollbar { height: 8px; }
+.timeline::-webkit-scrollbar-thumb { background-color: #0047AB; border-radius: 4px; }
+.slot-cell { font-size: 0.8rem; font-weight: 500; transition: all 0.2s ease; min-width: 55px; }
+.slot-cell:hover { transform: scale(1.05); border: 1px solid #0047AB; box-shadow: 0 0 5px rgba(0,71,171,0.3); }
+.room-header { background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 0.4rem; }
+.timeline { scroll-behavior: smooth; user-select: none; }
 </style>
 {% endblock %}
