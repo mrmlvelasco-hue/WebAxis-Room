@@ -3,9 +3,11 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 from dotenv import load_dotenv
 import os
 import pyodbc
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import webbrowser
 import threading
+
+
 
 
 # Flask-Login + utilities
@@ -537,119 +539,176 @@ def room_list():
         return redirect(url_for("main_menu"))
 
 
+# # app.py (add / replace reserve route)
+# from datetime import datetime, timezone
+# from flask import request, render_template, flash, redirect, url_for, jsonify
+
+# app.py (add / replace reserve route)
+
 @app.route('/reserve/<int:room_id>', methods=['GET', 'POST'])
 @login_required
 def reserve(room_id):
-    conn = get_db_connection()
-    cur = conn.cursor()
+    """
+    Supports:
+     - GET -> render form
+     - POST (form) -> regular HTML flow (returns rendered template)
+     - POST (AJAX JSON) -> returns JSON { success: True/False, message: ..., reservation: {...} }
+    Admins auto-approve. Times saved in UTC.
+    """
 
+    conn = None
+    cur = None
     try:
-        # 🧩 Fetch all rooms with parent and subgroup info
-        cur.execute("""
-            SELECT id, name, capacity, location, description, group_name, parent_group
-            FROM rooms
-            ORDER BY parent_group, group_name, name
-        """)
-        all_rooms = [
-            {
-                "id": r[0],
-                "name": r[1],
-                "capacity": r[2],
-                "location": r[3],
-                "description": r[4],
-                "group_name": r[5] or "General",
-                "parent_group": r[6] or "Unassigned"
-            }
-            for r in cur.fetchall()
-        ]
+        conn = get_db_connection()
+        cur = conn.cursor()
 
-        # 🧱 Nest by parent_group → group_name
-        room_hierarchy = {}
-        for r in all_rooms:
-            parent = r["parent_group"]
-            group = r["group_name"]
-            room_hierarchy.setdefault(parent, {}).setdefault(group, []).append(r)
-
-        # 🎯 Get current room info
-        cur.execute("""
-            SELECT id, name, capacity, location, description, group_name, parent_group
-            FROM rooms
-            WHERE id = ?
-        """, (room_id,))
+        # --- load room ---
+        cur.execute("SELECT id, name, capacity, location, description FROM rooms WHERE id = ?", (room_id,))
         row = cur.fetchone()
         if not row:
-            flash("Room not found.", "warning")
+            if request.is_json:
+                return jsonify({"success": False, "message": "Room not found."}), 404
+            flash("Room not found.", "danger")
             return redirect(url_for('room_list'))
-
         room = {
-            "id": row[0],
-            "name": row[1],
-            "capacity": row[2],
-            "location": row[3],
-            "description": row[4],
-            "group_name": row[5],
-            "parent_group": row[6]
+            "id": row.id,
+            "name": getattr(row, "name", getattr(row, "room_name", "Room")),
+            "capacity": getattr(row, "capacity", None),
+            "location": getattr(row, "location", None),
+            "description": getattr(row, "description", None)
         }
 
-        # 🧾 Handle reservation submission
+        # Helper: parse incoming param values (support form and JSON)
+        def get_field(name):
+            if request.is_json:
+                return (request.json.get(name) or "").strip()
+            return (request.form.get(name) or "").strip()
+
         if request.method == 'POST':
-            reserved_by = request.form['reserved_by']
-            email = request.form['email']
-            start_time = request.form['start_time']
-            end_time = request.form['end_time']
-            remarks = request.form.get('remarks', '')
+            reserved_by = get_field('reserved_by') or current_user.display_name or current_user.username
+            email = get_field('email') or current_user.email or ''
+            start_raw = get_field('start_time')
+            end_raw = get_field('end_time')
+            remarks = get_field('remarks')
 
-            from datetime import datetime
-            start_dt = datetime.strptime(start_time, "%Y-%m-%dT%H:%M")
-            end_dt = datetime.strptime(end_time, "%Y-%m-%dT%H:%M")
+            # validate
+            if not reserved_by or not start_raw or not end_raw:
+                msg = "Please fill required fields (name, start and end time)."
+                if request.is_json:
+                    return jsonify({"success": False, "message": msg}), 400
+                flash(msg, "warning")
+                return render_template('reserve.html', room=room)
 
-            # Check overlap
-            cur.execute("""
+            # parse datetimes (expecting "YYYY-MM-DDTHH:MM" from datetime-local)
+            try:
+                # naive local datetime from browser (no offset)
+                start_local = datetime.fromisoformat(start_raw)
+                end_local = datetime.fromisoformat(end_raw)
+            except Exception:
+                msg = "Invalid date/time format. Use the date/time picker."
+                if request.is_json:
+                    return jsonify({"success": False, "message": msg}), 400
+                flash(msg, "danger")
+                return render_template('reserve.html', room=room)
+
+            if end_local <= start_local:
+                msg = "End time must be after start time."
+                if request.is_json:
+                    return jsonify({"success": False, "message": msg}), 400
+                flash(msg, "warning")
+                return render_template('reserve.html', room=room)
+
+            # Convert local naive datetimes to UTC before saving.
+            # NOTE: This assumes the client and server agree on local timezone or that client uses local browser time.
+            # We'll treat the input as local time and convert to UTC using server local offset.
+            # Safer option is to collect timezone from client; for now convert as local -> UTC.
+            # Use .astimezone() with timezone.utc after making them timezone-aware.
+            # Make naive datetimes timezone-aware using system local timezone:
+            try:
+                # Make them timezone-aware by interpreting as local time
+                start_aware = start_local.replace(tzinfo=datetime.now().astimezone().tzinfo)
+                end_aware = end_local.replace(tzinfo=datetime.now().astimezone().tzinfo)
+                start_utc = start_aware.astimezone(timezone.utc).replace(tzinfo=None)  # pyodbc/SQL server DATETIME prefer naive UTC or adapt if you store tz
+                end_utc = end_aware.astimezone(timezone.utc).replace(tzinfo=None)
+            except Exception:
+                # fallback: treat as already UTC
+                start_utc = start_local
+                end_utc = end_local
+
+            # Overlap check (room_id, status pending/approved)
+            overlap_sql = """
                 SELECT COUNT(*) FROM reservations
-                WHERE room_id = ? AND status != 'Cancelled'
-                AND ((start_time < ? AND end_time > ?)
-                     OR (start_time >= ? AND start_time < ?)
-                     OR (end_time > ? AND end_time <= ?))
-            """, (room_id, end_dt, start_dt, start_dt, end_dt, start_dt, end_dt))
-            (conflict,) = cur.fetchone()
-            if conflict > 0:
-                flash("⚠️ Schedule conflict: This slot is already booked.", "warning")
-                return redirect(url_for('reserve', room_id=room_id))
+                WHERE room_id = ?
+                  AND status IN ('Pending','Approved')
+                  AND NOT (end_time <= ? OR start_time >= ?)
+            """
+            cur.execute(overlap_sql, (room_id, start_utc, end_utc))
+            cnt_row = cur.fetchone()
+            conflicts = int(getattr(cnt_row, "cnt", None) or cnt_row[0])
 
-            # Insert new reservation
-            cur.execute("""
+            if conflicts > 0:
+                msg = "Time slot not available — overlapping reservation exists."
+                if request.is_json:
+                    return jsonify({"success": False, "message": msg}), 409
+                flash(msg, "danger")
+                return render_template('reserve.html', room=room, start_time=start_raw, end_time=end_raw, remarks=remarks)
+
+            # Determine status: auto-approve for admins
+            status = "Approved" if (hasattr(current_user, "is_admin") and current_user.is_admin()) else "Pending"
+
+            insert_sql = """
                 INSERT INTO reservations (room_id, reserved_by, email, start_time, end_time, status, remarks, created_at)
-                VALUES (?, ?, ?, ?, ?, 'Pending', ?, GETDATE())
-            """, (room_id, reserved_by, email, start_dt, end_dt, remarks))
-            conn.commit()
-            flash("✅ Reservation successfully submitted and pending approval.", "success")
-            return redirect(url_for('room_list'))
+                VALUES (?, ?, ?, ?, ?, ?, ?, GETDATE())
+            """
+            try:
+                cur.execute(insert_sql, (room_id, reserved_by, email, start_utc, end_utc, status, remarks))
+                conn.commit()
+            except Exception as e:
+                conn.rollback()
+                print("⚠️ Error saving reservation:", e)
+                if request.is_json:
+                    return jsonify({"success": False, "message": "DB error saving reservation."}), 500
+                flash("System error when saving reservation.", "danger")
+                return render_template('reserve.html', room=room)
 
-        # Fetch today's booked slots
-        cur.execute("""
-            SELECT reserved_by,
-                   CONVERT(VARCHAR(5), start_time, 108) AS start_time,
-                   CONVERT(VARCHAR(5), end_time, 108) AS end_time,
-                   status
-            FROM reservations
-            WHERE room_id = ? AND CONVERT(date, start_time) = CONVERT(date, GETDATE())
-              AND status != 'Cancelled'
-            ORDER BY start_time
-        """, (room_id,))
-        booked_slots = cur.fetchall()
+            # Build response
+            reservation_summary = {
+                "room": room,
+                "reserved_by": reserved_by,
+                "email": email,
+                "start": start_utc.strftime("%Y-%m-%d %H:%M"),
+                "end": end_utc.strftime("%Y-%m-%d %H:%M"),
+                "status": status,
+                "remarks": remarks
+            }
 
-        conn.close()
-        return render_template(
-            'reserve.html',
-            room=room,
-            room_hierarchy=room_hierarchy,
-            booked_slots=booked_slots
-        )
+            # If AJAX: return JSON (client will show modal)
+            if request.is_json:
+                return jsonify({"success": True, "message": "Reservation saved", "reservation": reservation_summary}), 200
+
+            # Normal POST: render same page with confirmation (no redirect)
+            flash(f"Reservation submitted. Status: {status}", "success")
+            return render_template('reserve.html', room=room, reservation=reservation_summary, show_confirmation=True)
+
+        # GET -> render form
+        return render_template('reserve.html', room=room)
 
     except Exception as e:
-        print(f"⚠️ reserve error: {e}")
-        flash("System error while loading reservation page.", "danger")
+        print("⚠️ reserve route error:", e)
+        if request.is_json:
+            return jsonify({"success": False, "message": "Server error"}), 500
+        flash("System error in reservation.", "danger")
         return redirect(url_for('room_list'))
+    finally:
+        try:
+            if cur: cur.close()
+        except: pass
+        try:
+            if conn: conn.close()
+        except: pass
+
+
+
 
 @app.route('/reservation/<int:reservation_id>/<string:action>', methods=['GET'])
 @login_required

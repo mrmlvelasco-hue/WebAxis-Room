@@ -2,229 +2,203 @@
 {% block title %}Reserve Room | WebAXIS{% endblock %}
 
 {% block content %}
-<div class="d-flex flex-wrap">
-  <!-- 🔹 Left Sidebar (Resources & Status) -->
-<div class="card shadow-sm mb-3">
-  <div class="card-header bg-primary text-white fw-semibold">
-    <i class="bi bi-building"></i> Shared Rooms by Location
+<div class="card shadow-sm p-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0"><i class="bi bi-calendar-plus"></i> Reserve — {{ room.name }}</h3>
+    <a href="{{ url_for('room_list') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left"></i> Back to Rooms
+    </a>
   </div>
 
-  <div class="accordion accordion-flush" id="accordionBuildings">
-    {% for parent, groups in room_hierarchy.items() %}
-      <div class="accordion-item">
-        <h2 class="accordion-header" id="heading{{ loop.index }}">
-          <button class="accordion-button collapsed fw-semibold" type="button"
-                  data-bs-toggle="collapse" data-bs-target="#collapse{{ loop.index }}"
-                  aria-expanded="false" aria-controls="collapse{{ loop.index }}">
-            {{ parent }}
-          </button>
-        </h2>
-
-        <div id="collapse{{ loop.index }}" class="accordion-collapse collapse"
-             aria-labelledby="heading{{ loop.index }}" data-bs-parent="#accordionBuildings">
-          <div class="accordion-body p-0">
-            {% for group_name, group_rooms in groups.items() %}
-              <div class="ps-3 py-2 fw-semibold text-primary small">{{ group_name }}</div>
-              <ul class="list-group list-group-flush">
-                {% for r in group_rooms %}
-                <li class="list-group-item py-1 px-3">
-                  <a href="{{ url_for('reserve', room_id=r.id) }}"
-                     class="d-flex justify-content-between text-decoration-none small">
-                    <span>{{ r.name }}</span>
-                    {% if r.id == room.id %}
-                      <i class="bi bi-check-circle-fill text-success"></i>
-                    {% endif %}
-                  </a>
-                </li>
-                {% endfor %}
-              </ul>
-            {% endfor %}
-          </div>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, msg in messages %}
+        <div class="alert alert-{{ 'success' if category=='success' else 'warning' if category=='warning' else 'danger' }} fw-semibold">
+          {{ msg }}
         </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <!-- Confirmation block (non-AJAX fallback) -->
+  {% if show_confirmation and reservation %}
+  <div class="card mb-4 border-success">
+    <div class="card-body">
+      <h5 class="card-title">Reservation submitted</h5>
+      <p class="card-text">
+        <strong>Room:</strong> {{ reservation.room.name }}<br>
+        <strong>Reserved by:</strong> {{ reservation.reserved_by }} ({{ reservation.email }})<br>
+        <strong>Start (UTC):</strong> {{ reservation.start }}<br>
+        <strong>End (UTC):</strong> {{ reservation.end }}<br>
+        <strong>Status:</strong> {{ reservation.status }}<br>
+        <strong>Remarks:</strong> {{ reservation.remarks or '-' }}
+      </p>
+      <div>
+        <a href="{{ url_for('room_list') }}" class="btn btn-primary">Back to Rooms</a>
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary">Admin Dashboard</a>
       </div>
-    {% endfor %}
+    </div>
   </div>
+  {% endif %}
+
+  <!-- Reservation form (works with AJAX and normal POST fallback) -->
+  <form id="reserveForm" method="POST" action="{{ url_for('reserve', room_id=room.id) }}">
+    <div class="row g-3">
+      <div class="col-md-4">
+        <label class="form-label">Your name</label>
+        <input required name="reserved_by" id="reserved_by" class="form-control" value="{{ current_user.display_name or current_user.username }}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Email</label>
+        <input required name="email" id="email" type="email" class="form-control" value="{{ current_user.email or '' }}">
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">Remarks</label>
+        <input name="remarks" id="remarks" class="form-control" value="{{ request.form.remarks or '' }}">
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Start</label>
+        <input required name="start_time" id="start_time" type="datetime-local" class="form-control" value="{{ request.form.start_time or '' }}">
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">End</label>
+        <input required name="end_time" id="end_time" type="datetime-local" class="form-control" value="{{ request.form.end_time or '' }}">
+      </div>
+
+      <div class="col-12 text-end mt-3">
+        <!-- normal submit fallback for non-JS -->
+        <button type="submit" class="btn btn-primary px-4" id="submitBtn">
+          <i class="bi bi-check2-circle"></i> Submit Reservation
+        </button>
+        <button type="button" class="btn btn-outline-secondary px-4" id="ajaxSubmitBtn">
+          <i class="bi bi-lightning-charge"></i> Submit (AJAX)
+        </button>
+      </div>
+    </div>
+  </form>
 </div>
 
-
-
-
-  <!-- 🔹 Main Reservation Content -->
-  <div class="col-12 col-md-9">
-    <div class="card shadow-sm p-4 mb-4">
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 class="fw-bold page-title mb-0">
-          <i class="bi bi-calendar2-week"></i> Reserve a Room
-        </h2>
-        <a href="{{ url_for('room_list') }}" class="btn btn-outline-secondary fw-semibold">
-          <i class="bi bi-arrow-left"></i> Back to Rooms
-        </a>
+<!-- Modal to show AJAX confirmation -->
+<div class="modal fade" id="reservationModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Reservation Confirmation</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
-
-      <!-- Room Details -->
-      <div class="card border-0 bg-light p-3 mb-4">
-        <h5 class="fw-semibold mb-2"><i class="bi bi-info-circle"></i> Room Details</h5>
-        {% if room %}
-          <p><strong>Room:</strong> {{ room.name or room[1] }}</p>
-          <p><strong>Capacity:</strong> {{ room.capacity or room[2] }} pax</p>
-          <p><strong>Location:</strong> {{ room.location or room[3] }}</p>
-          <p><strong>Description:</strong> {{ room.description or room[4] or '-' }}</p>
-        {% else %}
-          <div class="text-muted">Room details not available.</div>
-        {% endif %}
-      </div>
-
-      <!-- Reservation Form -->
-      <form method="POST" action="{{ url_for('reserve', room_id=room.id if room else room[0]) }}" id="reserveForm">
-        <div class="row g-3">
-          <div class="col-md-6">
-            <label class="form-label fw-semibold">Reserved By</label>
-            <input type="text" name="reserved_by" class="form-control" value="{{ current_user.username }}" required>
-          </div>
-          <div class="col-md-6">
-            <label class="form-label fw-semibold">Email</label>
-            <input type="email" name="email" class="form-control" value="{{ current_user.email or '' }}" required>
-          </div>
-          <div class="col-md-6">
-            <label class="form-label fw-semibold">Start Time</label>
-            <input type="datetime-local" name="start_time" class="form-control" id="start_time" required>
-          </div>
-          <div class="col-md-6">
-            <label class="form-label fw-semibold">End Time</label>
-            <input type="datetime-local" name="end_time" class="form-control" id="end_time" required>
-          </div>
-          <div class="col-md-12">
-            <label class="form-label fw-semibold">Remarks / Purpose</label>
-            <textarea name="remarks" class="form-control" rows="3" placeholder="Enter purpose..."></textarea>
-          </div>
-        </div>
-        <div id="slot-msg" class="small mt-3"></div>
-        <div class="mt-4 text-end">
-          <button type="submit" class="btn btn-primary px-4 fw-semibold">
-            <i class="bi bi-check2-square"></i> Submit Reservation
-          </button>
-        </div>
-      </form>
-    </div>
-
-    <!-- Room Schedule Timeline -->
-    <div class="card shadow-sm p-4">
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <h5 class="fw-semibold mb-0"><i class="bi bi-clock-history"></i> Room Schedule for Selected Date</h5>
-        <div>
-          <button id="prev-day" class="btn btn-sm btn-outline-primary me-2"><i class="bi bi-arrow-left"></i> Previous</button>
-          <input type="date" id="timeline-date" class="form-control d-inline-block" style="width:160px;">
-          <button id="next-day" class="btn btn-sm btn-outline-primary ms-2">Next <i class="bi bi-arrow-right"></i></button>
+      <div class="modal-body">
+        <div id="modalBodyContent">
+          <!-- filled by JS -->
         </div>
       </div>
-      <div id="timeline-grid" class="bg-light border rounded p-3" style="overflow-x:auto; white-space:nowrap; min-height:60px;">
-        <div class="text-muted small">Loading schedule...</div>
+      <div class="modal-footer">
+        <a href="{{ url_for('room_list') }}" class="btn btn-primary">Back to Rooms</a>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
       </div>
     </div>
   </div>
 </div>
+
+<!-- Include bootstrap bundle in base, but re-ensure it's here if not -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
-document.addEventListener('DOMContentLoaded', function () {
-  const datePicker = document.getElementById('timeline-date');
-  const gridEl = document.getElementById('timeline-grid');
-  const prevBtn = document.getElementById('prev-day');
-  const nextBtn = document.getElementById('next-day');
-  const roomId = {{ room.id if room else room[0] }};
-  const today = new Date().toISOString().split('T')[0];
-  datePicker.value = today;
+document.addEventListener("DOMContentLoaded", () => {
+  const ajaxBtn = document.getElementById("ajaxSubmitBtn");
+  const form = document.getElementById("reserveForm");
+  const modalEl = document.getElementById("reservationModal");
+  const modal = new bootstrap.Modal(modalEl);
+  const modalBody = document.getElementById("modalBodyContent");
 
-  function formatDate(date) {
-    return date.toISOString().split('T')[0];
-  }
+  ajaxBtn.addEventListener("click", async (ev) => {
+    ev.preventDefault();
 
-  function shiftDate(days) {
-    const d = new Date(datePicker.value);
-    d.setDate(d.getDate() + days);
-    datePicker.value = formatDate(d);
-    loadTimeline();
-  }
+    const payload = {
+      reserved_by: document.getElementById("reserved_by").value,
+      email: document.getElementById("email").value,
+      start_time: document.getElementById("start_time").value,
+      end_time: document.getElementById("end_time").value,
+      remarks: document.getElementById("remarks").value
+    };
 
-  prevBtn.addEventListener('click', () => shiftDate(-1));
-  nextBtn.addEventListener('click', () => shiftDate(1));
-  datePicker.addEventListener('change', loadTimeline);
+    // Basic client validation
+    if (!payload.reserved_by || !payload.start_time || !payload.end_time) {
+      alert("Please fill required fields (name, start and end time).");
+      return;
+    }
 
-  async function loadTimeline() {
-    const date = datePicker.value;
-    gridEl.innerHTML = '<div class="text-muted small">Loading schedule...</div>';
+    // Disable buttons while saving
+    ajaxBtn.disabled = true;
+    document.getElementById("submitBtn").disabled = true;
+
     try {
-      const res = await fetch(`/api/booked_slots?room_id=${roomId}&date=${date}`);
-      const data = await res.json();
-      gridEl.innerHTML = renderTimeline(data.slots || []);
-    } catch {
-      gridEl.innerHTML = '<div class="text-danger small">Error loading schedule.</div>';
+      const resp = await fetch(form.action, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await resp.json();
+
+      if (!resp.ok) {
+        // show error in modal
+        modalBody.innerHTML = `<div class="alert alert-danger">${data.message || 'Error saving reservation.'}</div>`;
+        modal.show();
+      } else {
+        // success — show reservation details
+        const r = data.reservation;
+        modalBody.innerHTML = `
+          <p><strong>Room:</strong> ${r.room.name}</p>
+          <p><strong>Reserved by:</strong> ${r.reserved_by} (${r.email || '-'})</p>
+          <p><strong>Start (UTC):</strong> ${r.start}</p>
+          <p><strong>End (UTC):</strong> ${r.end}</p>
+          <p><strong>Status:</strong> ${r.status}</p>
+          <p><strong>Remarks:</strong> ${r.remarks || '-'}</p>
+        `;
+        modal.show();
+      }
+    } catch (err) {
+      console.error(err);
+      modalBody.innerHTML = `<div class="alert alert-danger">Network error while saving reservation.</div>`;
+      modal.show();
+    } finally {
+      ajaxBtn.disabled = false;
+      document.getElementById("submitBtn").disabled = false;
     }
-  }
-
-  function renderTimeline(slots) {
-    const hours = Array.from({length:13}, (_,i)=>i+8);
-    let html = '<div style="display:flex;align-items:center;">';
-    html += '<div style="width:70px;"></div>';
-    hours.forEach(h=>html += `<div style="width:70px;text-align:center;">${h}:00</div>`);
-    html += '</div>';
-    html += '<div style="position:relative;height:40px;background:#f8f9fa;border-radius:8px;margin-top:8px;">';
-
-    if (slots.length === 0)
-      return '<div class="text-muted small">No bookings on this date.</div>';
-
-    slots.forEach(slot=>{
-      const [sh, sm] = slot.start_time.split(':').map(Number);
-      const [eh, em] = slot.end_time.split(':').map(Number);
-      const left = ((sh-8)*60 + sm)/60*70;
-      const width = ((eh*60 + em)-(sh*60 + sm))/60*70;
-      const color = slot.status === 'Approved' ? '#198754' : '#ffc107';
-      html += `<div style="position:absolute;left:${left}px;width:${width}px;height:36px;top:2px;
-               background:${color};border-radius:6px;color:#fff;font-size:0.75rem;text-align:center;
-               line-height:36px;overflow:hidden;">${slot.reserved_by} (${slot.start_time}-${slot.end_time})</div>`;
-    });
-    html += '</div>';
-    return html;
-  }
-
-  loadTimeline();
+  });
 });
 </script>
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-  const STORAGE_KEY = "lastBuildingOpen";
-  const currentParent = "{{ room.parent_group }}".trim();
+document.getElementById("quickReserveForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
 
-  const lastOpen = localStorage.getItem(STORAGE_KEY);
-  const accordion = document.getElementById("accordionBuildings");
+  const payload = {
+    reserved_by: document.getElementById("modalReservedBy").value,
+    email: document.getElementById("modalEmail").value,
+    start_time: document.getElementById("modalStartTime").value,
+    end_time: document.getElementById("modalEndTime").value,
+    remarks: document.getElementById("modalRemarks").value
+  };
 
-  // Auto-open saved group, else open current room’s parent
-  let toOpen = lastOpen || null;
-  if (!toOpen && currentParent) {
-    const header = Array.from(document.querySelectorAll('.accordion-button'))
-      .find(btn => btn.textContent.trim() === currentParent);
-    if (header) {
-      const collapseId = header.getAttribute('data-bs-target');
-      toOpen = collapseId.substring(1);
-    }
-  }
-
-  if (toOpen) {
-    const el = document.getElementById(toOpen);
-    if (el) new bootstrap.Collapse(el, { toggle: true });
-  }
-
-  // Save opened state
-  accordion.addEventListener('shown.bs.collapse', e => {
-    localStorage.setItem(STORAGE_KEY, e.target.id);
+  const roomId = document.getElementById("modalRoomId").value;
+  const resp = await fetch(`/reserve/${roomId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
   });
 
-  // Clear saved if collapsed manually
-  accordion.addEventListener('hidden.bs.collapse', e => {
-    const last = localStorage.getItem(STORAGE_KEY);
-    if (last === e.target.id) localStorage.removeItem(STORAGE_KEY);
-  });
+  const data = await resp.json();
+
+  if (data.success) {
+    alert(`✅ Reservation created for ${data.reservation.room.name}\nStatus: ${data.reservation.status}`);
+    location.reload(); // refresh grid
+  } else {
+    alert(`⚠️ ${data.message}`);
+  }
 });
 </script>
-
 
 {% endblock %}
