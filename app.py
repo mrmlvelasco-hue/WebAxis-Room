@@ -83,6 +83,32 @@ class User(UserMixin):
 def rows_to_dicts(cursor):
     columns = [col[0] for col in cursor.description]
     return [dict(zip(columns, row)) for row in cursor.fetchall()]
+def get_group_approver(group_code):
+    """Return primary approver username for group_code or None."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT TOP 1 approver_username FROM dbo.group_approvers
+        WHERE group_code = ? AND is_primary = 1
+        ORDER BY id DESC
+    """, (group_code,))
+    row = cursor.fetchone()
+    conn.close()
+    return row[0] if row else None
+
+
+def is_user_group_admin(username, group_code):
+    """Return True if user is registered as an approver for group_code."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT COUNT(*) FROM dbo.group_approvers
+        WHERE group_code = ? AND approver_username = ?
+    """, (group_code, username))
+    cnt = cursor.fetchone()[0]
+    conn.close()
+    return cnt > 0
+
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -594,6 +620,7 @@ def deactivate_room(room_id):
     conn.close()
     flash("⚠️ Room has been deactivated.", "warning")
     return redirect(url_for('room_maintenance'))
+
 
 
 @app.route('/rooms')
