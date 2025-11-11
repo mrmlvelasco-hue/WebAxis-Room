@@ -1,5 +1,5 @@
 # app.py (cleaned & fixed)
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, current_app
 from dotenv import load_dotenv
 import os
 import pyodbc
@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 import webbrowser
 import threading
 
+from dateutil import parser as dateparser  # pip install python-dateutil
 
 
 
@@ -504,6 +505,97 @@ def user_delete(user_id):
 # Public (or post-login) rooms list route (rename of previous index)
 from datetime import datetime
 
+
+# ---------------- ROOM MAINTENANCE ----------------
+@app.route('/rooms/maintenance')
+@login_required
+def room_maintenance():
+    if not current_user.is_admin():
+        flash("Access denied.", "danger")
+        return redirect(url_for('room_list'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id, name, capacity, location, description, status, group_code, is_combined
+        FROM dbo.rooms
+        ORDER BY location, name
+    """)
+    rooms = cursor.fetchall()
+    conn.close()
+
+    return render_template('room_maintenance.html', rooms=rooms)
+
+
+@app.route('/rooms/add', methods=['POST'])
+@login_required
+def add_room():
+    if not current_user.is_admin():
+        flash("Access denied.", "danger")
+        return redirect(url_for('room_maintenance'))
+
+    name = request.form['name']
+    capacity = request.form.get('capacity', 0)
+    location = request.form.get('location')
+    description = request.form.get('description', '')
+    group_code = request.form.get('group_code', None)
+    is_combined = 1 if request.form.get('is_combined') else 0
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO dbo.rooms (name, capacity, location, description, status, group_code, is_combined, created_by)
+        VALUES (?, ?, ?, ?, 'Active', ?, ?, ?)
+    """, (name, capacity, location, description, group_code, is_combined, current_user.username))
+    conn.commit()
+    conn.close()
+    flash("✅ Room added successfully!", "success")
+    return redirect(url_for('room_maintenance'))
+
+
+@app.route('/rooms/edit/<int:room_id>', methods=['POST'])
+@login_required
+def edit_room(room_id):
+    if not current_user.is_admin():
+        flash("Access denied.", "danger")
+        return redirect(url_for('room_maintenance'))
+
+    name = request.form['name']
+    capacity = request.form.get('capacity', 0)
+    location = request.form.get('location')
+    description = request.form.get('description', '')
+    status = request.form.get('status', 'Active')
+    group_code = request.form.get('group_code', None)
+    is_combined = 1 if request.form.get('is_combined') else 0
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE dbo.rooms 
+        SET name=?, capacity=?, location=?, description=?, status=?, group_code=?, is_combined=?, updated_at=GETDATE(), updated_by=?
+        WHERE id=?
+    """, (name, capacity, location, description, status, group_code, is_combined, current_user.username, room_id))
+    conn.commit()
+    conn.close()
+    flash("✅ Room updated successfully!", "success")
+    return redirect(url_for('room_maintenance'))
+
+
+@app.route('/rooms/deactivate/<int:room_id>', methods=['POST'])
+@login_required
+def deactivate_room(room_id):
+    if not current_user.is_admin():
+        flash("Access denied.", "danger")
+        return redirect(url_for('room_maintenance'))
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE dbo.rooms SET status='Inactive' WHERE id=?", (room_id,))
+    conn.commit()
+    conn.close()
+    flash("⚠️ Room has been deactivated.", "warning")
+    return redirect(url_for('room_maintenance'))
+
+
 @app.route('/rooms')
 @login_required
 def room_list():
@@ -523,7 +615,7 @@ def room_list():
 
         # --- 2️⃣ Fetch active rooms ---
         cursor.execute("""
-            SELECT id, name, capacity, location, description, status
+            SELECT id, name, capacity, location, description, status,group_code
             FROM dbo.rooms
             WHERE status = 'Active'
             ORDER BY location, name
@@ -577,39 +669,41 @@ def room_list():
         return render_template("index.html", rooms=[], availability={}, selected_date=datetime.now().strftime("%Y-%m-%d"))
 
 
-@app.route('/api/reservations')
-@login_required
-def reservations_api():
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT r.id, rm.name AS room_name, rm.location, r.reserved_by,
-                   r.start_time, r.end_time, r.status
-            FROM dbo.reservations r
-            INNER JOIN dbo.rooms rm ON rm.id = r.room_id
-            WHERE r.status IN ('Pending','Approved')
-        """)
-        data = cursor.fetchall()
-        conn.close()
+# @app.route('/api/reservations')
+# @login_required
+# def reservations_api():
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor()
+#         cursor.execute("""
+#             SELECT r.id, rm.name AS room_name, rm.location, r.reserved_by,
+#                    r.start_time, r.end_time, r.status
+#             FROM dbo.reservations r
+#             INNER JOIN dbo.rooms rm ON rm.id = r.room_id
+#             WHERE r.status IN ('Pending','Approved')
+#
+#         """)
+#         data = cursor.fetchall()
+#         conn.close()
+#
+#         events = []
+#         for row in data:
+#             rid, room, location, reserved_by, start, end, status = row
+#             color = "#dc3545" if status == "Approved" else "#ffc107"
+#             events.append({
+#                 "id": rid,
+#                 "title": f"{room} - {reserved_by}",
+#                 "start": start.isoformat(),
+#                 "end": end.isoformat(),
+#                 "color": color,
+#                 "room": room,
+#                 "location": location
+#             })
+#         return jsonify(events)
+#     except Exception as e:
+#         print("⚠️ reservations_api error:", e)
+#         return jsonify([])
 
-        events = []
-        for row in data:
-            rid, room, location, reserved_by, start, end, status = row
-            color = "#dc3545" if status == "Approved" else "#ffc107"
-            events.append({
-                "id": rid,
-                "title": f"{room} - {reserved_by}",
-                "start": start.isoformat(),
-                "end": end.isoformat(),
-                "color": color,
-                "room": room,
-                "location": location
-            })
-        return jsonify(events)
-    except Exception as e:
-        print("⚠️ reservations_api error:", e)
-        return jsonify([])
 
 @app.route('/calendar')
 @login_required
@@ -795,57 +889,88 @@ def export_excel():
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
+
 @app.route("/api/reservations")
 @login_required
 def api_reservations():
-    room = request.args.get('room', 'all')
-    group = request.args.get('group', 'all')
-    print("🔍 Received filter -> Group:", group, "| Room:", room)
-    conn = get_db_connection()
+   room = request.args.get('room', 'all')
+   group = request.args.get('group', 'all')
+   start = request.args.get('start')
+   end = request.args.get('end')
+   from datetime import datetime, timedelta, timezone
+   from dateutil import parser as dateparser
+   # --- Parse FullCalendar range
+   try:
+       start_dt = dateparser.isoparse(start)
+       end_dt = dateparser.isoparse(end)
+   except Exception as e:
+       print("⚠️ Invalid date range:", e)
+       return jsonify([])
+   # --- Connect
+   conn = get_db_connection()
+   cursor = conn.cursor()
+   # --- Base query
+   query = """
+       SELECT rm.id, rm.name, rm.location, r.reserved_by,
+              r.start_time, r.end_time, ISNULL(r.remarks, '') AS remarks,
+              r.status
+       FROM dbo.reservations r
+       INNER JOIN dbo.rooms rm ON rm.id = r.room_id
+       WHERE r.status IN ('Approved', 'Pending')
+         AND r.start_time >= ? AND r.start_time < ?
+   """
+   params = [start_dt, end_dt]
+   # --- Apply filters dynamically
+   if group and group.lower() != "all":
+       query += " AND LOWER(LTRIM(RTRIM(rm.location))) = LOWER(?)"
+       params.append(group.strip())
+   if room and room.lower() != "all":
+       query += " AND LOWER(LTRIM(RTRIM(rm.name))) = LOWER(?)"
+       params.append(room.strip())
+   query += " ORDER BY r.start_time"
+   print("🧠 SQL RUN:", query)
+   print("🧩 Params:", params)
+   cursor.execute(query, params)
+   rows = cursor.fetchall()
+   conn.close()
+   # --- Force timezone +08:00 for display
+   tz = timezone(timedelta(hours=8))
+   events = []
+   for rid, name, location, reserved_by, start_time, end_time, remarks, status in rows:
+       start_local = start_time.replace(tzinfo=tz)
+       end_local = end_time.replace(tzinfo=tz)
+       color = "#0047AB" if status == "Approved" else "#FFA726"
+       events.append({
+           "id": rid,
+           "title": f"{name} - {reserved_by}",
+           "start": start_local.isoformat(),
+           "end": end_local.isoformat(),
+           "room": name,
+           "location": location,
+           "description": remarks,
+           "status": status,
+           "color": color
+       })
+   print(f"✅ Returned {len(events)} events for Group={group}, Room={room}")
+   return jsonify(events)
+
+
+def get_room_by_id(conn, room_id):
     cursor = conn.cursor()
+    cursor.execute("SELECT id, name, group_code, is_combined FROM dbo.rooms WHERE id = ?", (room_id,))
+    row = cursor.fetchone()
+    if row:
+        return {"id": row[0], "name": row[1], "group_code": row[2], "is_combined": bool(row[3])}
+    return None
 
-    # Base query
-    query = """
-        SELECT rm.name, rm.location, r.reserved_by, r.start_time, r.end_time,
-               ISNULL(r.remarks, '') AS remarks, r.status
-        FROM dbo.reservations r
-        INNER JOIN dbo.rooms rm ON rm.id = r.room_id
-        WHERE r.status IN ('Approved', 'Pending')
-    """
-    params = []
 
-    # Apply filters safely
-    if group and group.lower() != "all":
-        query += " AND rm.location = ?"
-        params.append(group)
-
-    if room and room.lower() != "all":
-        query += " AND rm.name = ?"
-        params.append(room)
-
-    query += " ORDER BY r.start_time"
-
-    # Debug info (for testing)
-    print("📡 SQL Query:", query)
-    print("📦 Parameters:", params)
-
-    # Execute correctly with params
-    cursor.execute(query, tuple(params))
-    rows = cursor.fetchall()
-    conn.close()
-
-    events = []
-    for name, location, reserved_by, start, end, remarks, status in rows:
-        events.append({
-            "title": f"{name} - {reserved_by}",
-            "start": start.isoformat(),
-            "end": end.isoformat(),
-            "description": remarks,
-            "status": status,
-            "room": name,
-            "location": location
-        })
-    return jsonify(events)
+def get_linked_rooms(conn, group_code, exclude_id=None):
+    cursor = conn.cursor()
+    if exclude_id:
+        cursor.execute("SELECT id FROM dbo.rooms WHERE group_code = ? AND id <> ?", (group_code, exclude_id))
+    else:
+        cursor.execute("SELECT id FROM dbo.rooms WHERE group_code = ?", (group_code,))
+    return [r[0] for r in cursor.fetchall()]
 
 
 # # app.py (add / replace reserve route)
@@ -853,6 +978,7 @@ def api_reservations():
 # from flask import request, render_template, flash, redirect, url_for, jsonify
 
 # app.py (add / replace reserve route)
+
 
 @app.route('/reserve/<int:room_id>', methods=['POST'])
 @login_required
@@ -871,42 +997,79 @@ def reserve(room_id):
         start_dt = datetime.fromisoformat(start_time)
         end_dt = datetime.fromisoformat(end_time)
 
-        # --- Check availability ---
+        # --- Fetch room info (check if it's combinable) ---
         cursor.execute("""
-            SELECT COUNT(*) FROM dbo.reservations
-            WHERE room_id = ? AND (
-                (? < end_time AND ? > start_time)
-            )
-        """, (room_id, start_dt, end_dt))
-        overlap = cursor.fetchone()[0]
+            SELECT id, name, group_code, is_combined 
+            FROM dbo.rooms WHERE id = ?
+        """, (room_id,))
+        room = cursor.fetchone()
 
-        if overlap > 0:
-            flash("⚠️ The selected time range is not available.", "danger")
+        if not room:
+            flash("⚠️ Room not found.", "danger")
             conn.close()
             return redirect(url_for('room_list'))
 
-        # --- Insert reservation ---
+        room_name, group_code, is_combined = room[1], room[2], bool(room[3])
+
+        # --- Collect linked rooms in same group ---
+        linked_room_ids = []
+        if group_code:
+            cursor.execute("""
+                SELECT id FROM dbo.rooms
+                WHERE group_code = ? AND id <> ?
+            """, (group_code, room_id))
+            linked_room_ids = [r[0] for r in cursor.fetchall()]
+
+        # --- Check for conflicts ---
+        all_check_ids = [room_id] + linked_room_ids
+
+        conflict = False
+        for rid in all_check_ids:
+            cursor.execute("""
+                SELECT COUNT(*) FROM dbo.reservations
+                WHERE room_id = ? 
+                  AND status IN ('Pending', 'Approved')
+                  AND (? < end_time AND ? > start_time)
+            """, (rid, start_dt, end_dt))
+            if cursor.fetchone()[0] > 0:
+                conflict = True
+                break
+
+        if conflict:
+            flash("⚠️ One or more rooms in this group are already booked during that time.", "danger")
+            conn.close()
+            return redirect(url_for('room_list'))
+
+        # --- Main reservation insert ---
         cursor.execute("""
             INSERT INTO dbo.reservations (room_id, reserved_by, email, start_time, end_time, remarks, status)
             VALUES (?, ?, ?, ?, ?, ?, 'Pending')
         """, (room_id, reserved_by, email, start_dt, end_dt, remarks))
+
+        # --- If combined room, auto-block linked rooms ---
+        if is_combined and group_code:
+            for linked_id in linked_room_ids:
+                cursor.execute("""
+                    INSERT INTO dbo.reservations (room_id, reserved_by, email, start_time, end_time, remarks, status)
+                    VALUES (?, ?, ?, ?, ?, ?, 'Blocked')
+                """, (linked_id, f"[AUTO BLOCK] {reserved_by}", email, start_dt, end_dt, f"Blocked by combined booking of {room_name}"))
+
         conn.commit()
 
-        # Fetch the inserted reservation
+        # --- Fetch inserted reservation (for admin redirect) ---
         cursor.execute("""
-            SELECT TOP 1 id, room_id, reserved_by, email, start_time, end_time, remarks, status
-            FROM dbo.reservations
+            SELECT TOP 1 id FROM dbo.reservations
             WHERE room_id = ? AND reserved_by = ?
             ORDER BY id DESC
         """, (room_id, reserved_by))
         reservation = cursor.fetchone()
         conn.close()
 
-        # --- Redirect behavior ---
+        # --- Redirect / Feedback ---
         if current_user.role == 'Admin':
-            return redirect(url_for('confirmation', reservation_id=reservation.id))
+            return redirect(url_for('confirmation', reservation_id=reservation[0]))
         else:
-            flash("✅ Reservation submitted successfully!", "success")
+            flash(f"✅ Reservation submitted for {room_name} successfully!", "success")
             return redirect(url_for('room_list'))
 
     except Exception as e:
@@ -915,6 +1078,67 @@ def reserve(room_id):
         return redirect(url_for('room_list'))
 
 
+@app.route('/reserve/<int:room_id>', methods=['POST'])
+@login_required
+def reserve_room(room_id):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # --- Room Info ---
+        room = get_room_by_id(conn, room_id)
+        if not room:
+            flash("Room not found.", "danger")
+            return redirect(url_for('room_list'))
+
+        start_time = request.form['start_time']
+        end_time = request.form['end_time']
+        reserved_by = request.form['reserved_by']
+        remarks = request.form.get('remarks', '')
+        email = request.form.get('email', '')
+        status = "Pending"
+
+        # --- Check overlapping reservation ---
+        cursor.execute("""
+            SELECT COUNT(*) FROM dbo.reservations 
+            WHERE room_id = ? 
+              AND status IN ('Pending','Approved')
+              AND ((start_time <= ? AND end_time > ?) OR (start_time < ? AND end_time >= ?))
+        """, (room_id, start_time, start_time, end_time, end_time))
+        overlap = cursor.fetchone()[0]
+        if overlap > 0:
+            flash("Time slot already booked.", "warning")
+            return redirect(url_for('room_list'))
+
+        # --- Handle combined room reservation ---
+        linked_room_ids = []
+        if room["is_combined"] and room["group_code"]:
+            linked_room_ids = get_linked_rooms(conn, room["group_code"], room_id)
+            print(f"🧩 Booking combined room {room['name']} — also blocking linked IDs {linked_room_ids}")
+
+        # --- Insert main reservation ---
+        cursor.execute("""
+            INSERT INTO dbo.reservations (room_id, reserved_by, start_time, end_time, status, remarks, email)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (room_id, reserved_by, start_time, end_time, status, remarks, email))
+
+        # --- Insert linked reservations (auto-block) ---
+        for linked_id in linked_room_ids:
+            cursor.execute("""
+                INSERT INTO dbo.reservations (room_id, reserved_by, start_time, end_time, status, remarks, email)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (linked_id, f"[AUTO BLOCK] {reserved_by}", start_time, end_time, "Blocked", remarks, email))
+
+        conn.commit()
+        flash(f"Reservation created for {room['name']}.", "success")
+        return redirect(url_for('confirmation'))
+
+    except Exception as e:
+        print("⚠️ reserve_room error:", e)
+        flash("An error occurred while processing the reservation.", "danger")
+        return redirect(url_for('room_list'))
+    finally:
+        conn.close()
 
 @app.route('/reservation/<int:reservation_id>/<string:action>', methods=['GET'])
 @login_required

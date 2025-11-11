@@ -58,17 +58,6 @@
             <button class="btn btn-outline-secondary btn-sm" id="refreshBtn">
               <i class="bi bi-arrow-clockwise me-1"></i> Refresh
             </button>
-            <div class="btn-group">
-              <button class="btn btn-outline-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                <i class="bi bi-file-earmark-excel me-1"></i> Export
-              </button>
-              <ul class="dropdown-menu dropdown-menu-end">
-                <li><a class="dropdown-item export-option" data-range="today" href="#">📅 Today</a></li>
-                <li><a class="dropdown-item export-option" data-range="week" href="#">🗓 This Week</a></li>
-                <li><a class="dropdown-item export-option" data-range="month" href="#">📆 This Month</a></li>
-              </ul>
-            </div>
-
             <input type="date" id="viewDate" class="form-control form-control-sm" value="{{ selected_date }}">
           </div>
         </div>
@@ -112,7 +101,7 @@
                        data-time="{{ time_label }}"
                        data-status="{{ status }}"
                        style="cursor: pointer; min-width: 55px;"
-                       title="{% if status == 'booked' %}Booked{% elif status == 'available' %}Available{% else %}Past{% endif %}">
+                       title="{{ status|capitalize }}">
                     {{ time_label }}
                   </div>
                 {% endfor %}
@@ -168,7 +157,7 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-primary" id="modalSubmitBtn">Submit Reservation</button>
+          <button type="submit" class="btn btn-primary">Submit Reservation</button>
         </div>
       </div>
     </form>
@@ -179,37 +168,15 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-  const modal = new bootstrap.Modal(document.getElementById('newReservationModal'));
+  const modalEl = document.getElementById('newReservationModal');
+  const modal = new bootstrap.Modal(modalEl);
   const form = document.getElementById('reservationForm');
-  const viewDate = document.getElementById('viewDate');
   const locationFilter = document.getElementById('locationFilter');
+  const viewDate = document.getElementById('viewDate');
   const today = new Date().toISOString().slice(0,10);
+  viewDate.value = today;
 
-  // --- Helper: Local datetime format ---
-  function formatLocalDate(dateObj) {
-    const year = dateObj.getFullYear();
-    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-    const day = String(dateObj.getDate()).padStart(2, '0');
-    const hour = String(dateObj.getHours()).padStart(2, '0');
-    const minute = String(dateObj.getMinutes()).padStart(2, '0');
-    return `${year}-${month}-${day}T${hour}:${minute}`;
-  }
-
-  // --- Filter logic (persistent) ---
-  const savedFilter = localStorage.getItem('roomFilter') || 'all';
-  locationFilter.value = savedFilter;
-
-  function applyFilter() {
-    const selected = locationFilter.value;
-    localStorage.setItem('roomFilter', selected);
-    document.querySelectorAll('.room-row').forEach(r => {
-      r.style.display = (selected === 'all' || r.dataset.location === selected) ? '' : 'none';
-    });
-  }
-  locationFilter.addEventListener('change', applyFilter);
-  applyFilter();
-
-  // --- Reservation Logic ---
+  // --- Helper to open reservation modal ---
   function openReserve(roomId, roomName, startTime, endTime) {
     document.getElementById('modalRoomId').value = roomId;
     document.getElementById('modalRoomName').textContent = roomName;
@@ -219,104 +186,140 @@ document.addEventListener('DOMContentLoaded', function () {
     modal.show();
   }
 
-  document.querySelectorAll('.slot-cell').forEach(cell => {
-    const now = new Date();
-    const dateValue = viewDate.value || today;
-    const time = cell.dataset.time;
-    const slotTime = new Date(`${dateValue}T${time}:00`);
-    const isToday = dateValue === today;
+  // --- Helper to format date for input[type=datetime-local] ---
+  function formatLocalDate(dateObj) {
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    const hour = String(dateObj.getHours()).padStart(2, '0');
+    const minute = String(dateObj.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hour}:${minute}`;
+  }
 
-    // --- Past slot disable only if today ---
-    if (isToday && slotTime < now) {
+  // --- Filter logic with persistence ---
+  const savedFilter = localStorage.getItem('roomFilter') || 'all';
+  locationFilter.value = savedFilter;
+  applyFilter();
+
+  function applyFilter() {
+    const selected = locationFilter.value;
+    localStorage.setItem('roomFilter', selected);
+    document.querySelectorAll('.room-row').forEach(r => {
+      r.style.display = (selected === 'all' || r.dataset.location === selected) ? '' : 'none';
+    });
+  }
+
+  locationFilter.addEventListener('change', applyFilter);
+
+  // --- Disable past slots for current day ---
+  const now = new Date();
+  document.querySelectorAll('.slot-cell').forEach(cell => {
+    const dateValue = viewDate.value || today;
+    const slotTime = new Date(`${dateValue}T${cell.dataset.time}:00`);
+    if (slotTime < now && dateValue === today) {
       cell.classList.remove('bg-success', 'bg-danger');
       cell.classList.add('bg-secondary');
       cell.style.pointerEvents = 'none';
     }
+  });
 
-    cell.addEventListener('click', () => {
-      if (cell.dataset.status === 'booked') {
-        Swal.fire('⚠️ Slot Not Available', 'This time is already booked.', 'warning');
-        return;
-      }
+  // --- Refresh button ---
+  document.getElementById('refreshBtn').addEventListener('click', () => location.reload());
 
-      const start = cell.dataset.time;
-      const [h, m] = start.split(':');
-      const startDate = new Date(`${dateValue}T${h}:${m}:00`);
-      const endDate = new Date(startDate);
-      endDate.setMinutes(endDate.getMinutes() + 30);
+  // --- Drag & click logic (fixed) ---
+  let isDragging = false, dragStart = null, dragEnd = null, dragTimer = null;
 
-      const startTime = formatLocalDate(startDate);
-      const endTime = formatLocalDate(endDate);
+  document.querySelectorAll('.timeline').forEach(timeline => {
+    const cells = Array.from(timeline.querySelectorAll('.slot-cell'));
 
-      openReserve(cell.dataset.roomId, cell.dataset.roomName, startTime, endTime);
+    function clearSelection() {
+      cells.forEach(c => c.classList.remove('selected'));
+    }
+
+    cells.forEach(cell => {
+      // --- Drag start
+      cell.addEventListener('mousedown', e => {
+        if (cell.dataset.status === 'booked') {
+          Swal.fire('⚠️ Slot Not Available', 'This slot is already booked.', 'warning');
+          return;
+        }
+        isDragging = true;
+        dragStart = cell;
+        dragEnd = cell;
+        clearSelection();
+        cell.classList.add('selected');
+        e.preventDefault();
+      });
+
+      // --- Drag move
+      cell.addEventListener('mouseenter', () => {
+        if (!isDragging || !dragStart) return;
+        dragEnd = cell;
+        const startIndex = cells.indexOf(dragStart);
+        const endIndex = cells.indexOf(dragEnd);
+        const [min, max] = [Math.min(startIndex, endIndex), Math.max(startIndex, endIndex)];
+        cells.forEach((c, i) => c.classList.toggle('selected', i >= min && i <= max));
+      });
+
+      // --- Drag end
+      cell.addEventListener('mouseup', () => {
+        if (!isDragging || !dragStart) return;
+        const startIndex = cells.indexOf(dragStart);
+        const endIndex = cells.indexOf(dragEnd);
+        const [min, max] = [Math.min(startIndex, endIndex), Math.max(startIndex, endIndex)];
+        const selected = cells.slice(min, max + 1);
+        const invalid = selected.some(c => c.dataset.status === 'booked');
+        if (invalid) {
+          Swal.fire('⚠️ Slot Not Available', 'This range includes booked slots.', 'warning');
+          isDragging = false; dragStart = null; dragEnd = null;
+          clearSelection();
+          return;
+        }
+
+        const dateValue = viewDate.value || today;
+        const start = selected[0].dataset.time;
+        const end = selected[selected.length - 1].dataset.time;
+        const startDate = new Date(`${dateValue}T${start}:00`);
+        const endDate = new Date(`${dateValue}T${end}:00`);
+        endDate.setMinutes(endDate.getMinutes() + 30);
+
+        openReserve(selected[0].dataset.roomId, selected[0].dataset.roomName,
+          formatLocalDate(startDate), formatLocalDate(endDate));
+
+        isDragging = false;
+        dragStart = null; dragEnd = null;
+        clearSelection();
+        dragTimer = setTimeout(() => dragTimer = null, 50);
+      });
+
+      // --- Single click
+      cell.addEventListener('click', e => {
+        if (dragTimer) return;
+        if (cell.dataset.status === 'booked') {
+          Swal.fire('⚠️ Slot Not Available', 'This slot is already booked.', 'warning');
+          return;
+        }
+        const dateValue = viewDate.value || today;
+        const [h, m] = cell.dataset.time.split(':');
+        const startDate = new Date(`${dateValue}T${h}:${m}:00`);
+        const endDate = new Date(startDate);
+        endDate.setMinutes(endDate.getMinutes() + 30);
+        openReserve(cell.dataset.roomId, cell.dataset.roomName,
+          formatLocalDate(startDate), formatLocalDate(endDate));
+      });
+
+      // --- Safety: clear drag if mouse released outside
+      document.addEventListener('mouseup', () => {
+        if (isDragging) {
+          isDragging = false; dragStart = null; dragEnd = null;
+          clearSelection();
+        }
+      });
     });
   });
-
-  // --- Refresh Button ---
-  document.getElementById('refreshBtn').addEventListener('click', () => {
-    const params = new URLSearchParams(window.location.search);
-    params.set('date', viewDate.value);
-    window.location.href = `${window.location.pathname}?${params.toString()}`;
-  });
-
-  // --- Date Picker: change day and reload ---
-  viewDate.addEventListener('change', () => {
-    const selectedDate = viewDate.value;
-    if (selectedDate) {
-      window.location.href = `/rooms?date=${selectedDate}`;
-    }
-  });
 });
-
-// --- Export Options ---
-document.querySelectorAll('.export-option').forEach(option => {
-  option.addEventListener('click', (e) => {
-    e.preventDefault();
-    const range = option.dataset.range;
-    const today = new Date();
-    let start, end;
-
-    // Compute ranges dynamically
-    if (range === 'today') {
-      start = today.toISOString().slice(0,10);
-      end = start;
-    }
-    else if (range === 'week') {
-      const dayOfWeek = today.getDay(); // 0=Sunday
-      const monday = new Date(today);
-      monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
-      const sunday = new Date(monday);
-      sunday.setDate(monday.getDate() + 6);
-      start = monday.toISOString().slice(0,10);
-      end = sunday.toISOString().slice(0,10);
-    }
-    else if (range === 'month') {
-      const first = new Date(today.getFullYear(), today.getMonth(), 1);
-      const last = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-      start = first.toISOString().slice(0,10);
-      end = last.toISOString().slice(0,10);
-    }
-
-    const group = document.getElementById('locationFilter').value || 'all';
-    const params = new URLSearchParams({
-      start: start,
-      end: end,
-      group: group,
-      room: 'all'
-    });
-    window.location.href = `/export_excel?${params.toString()}`;
-  });
-});
-
 </script>
 
 <style>
-.border-end { border-right: 1px solid #dee2e6 !important; }
-.timeline::-webkit-scrollbar { height: 8px; }
-.timeline::-webkit-scrollbar-thumb { background-color: #0047AB; border-radius: 4px; }
-.slot-cell { font-size: 0.8rem; font-weight: 500; transition: all 0.2s ease; min-width: 55px; }
-.slot-cell:hover { transform: scale(1.05); border: 1px solid #0047AB; box-shadow: 0 0 5px rgba(0,71,171,0.3); }
-.room-header { background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 0.4rem; }
-.timeline { scroll-behavior: smooth; user-select: none; }
-</style>
+.border-end { border-right: 1px solid #dee2e6 !important; } .timeline::-webkit-scrollbar { height: 8px; } .timeline::-webkit-scrollbar-thumb { background-color: #0047AB; border-radius: 4px; } .slot-cell { font-size: 0.8rem; font-weight: 500; transition: all 0.2s ease; min-width: 55px; } .slot-cell:hover { transform: scale(1.05); border: 1px solid #0047AB; box-shadow: 0 0 5px rgba(0,71,171,0.3); } .slot-cell.selected { border: 2px solid #0047AB; background-color: #0b63ce !important; } .room-header { background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 0.4rem; } .timeline { scroll-behavior: smooth; user-select: none; } </style>
 {% endblock %}
