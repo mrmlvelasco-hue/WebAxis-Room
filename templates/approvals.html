@@ -1,0 +1,33 @@
+{% extends "base_dashboard.html" %}
+{% block title %}Approvals | WebAXIS{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <h3 class="mb-3">Pending Approvals</h3>
+  {% if reservations %}
+  <div class="list-group">
+    {% for r in reservations %}
+    <div class="list-group-item d-flex justify-content-between align-items-start">
+      <div>
+        <div class="fw-bold">{{ r.room_name }} — {{ r.reserved_by }}</div>
+        <div class="small text-muted">
+          {{ r.start_time }} — {{ r.end_time }} · {{ r.location }}
+        </div>
+        <div class="mt-1">{{ r.remarks or '—' }}</div>
+      </div>
+      <div class="text-end">
+        <form action="{{ url_for('approve_reservation', res_id=r.id) }}" method="post" class="d-inline">
+          <button class="btn btn-sm btn-success">Approve</button>
+        </form>
+        <form action="{{ url_for('deny_reservation', res_id=r.id) }}" method="post" class="d-inline ms-1">
+          <button class="btn btn-sm btn-danger">Deny</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+    <div class="alert alert-info">No pending approvals assigned to you.</div>
+  {% endif %}
+</div>
+{% endblock %}

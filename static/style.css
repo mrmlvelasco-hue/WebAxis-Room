@@ -29,3 +29,29 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(0,0,0,0.3);
 }
+.slot-cell.bg-danger {
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+.cancel-btn {
+  border: none;
+  background: rgba(255,255,255,0.8);
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+.cancel-btn:hover {
+  background: #fff;
+  transform: scale(1.1);
+}
+.slot-cell.bg-secondary {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.slot-cell.bg-secondary {
+  opacity: 0.6;
+}
+.slot-cell.bg-danger {
+  opacity: 0.9;
+}
+

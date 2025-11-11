@@ -33,7 +33,7 @@
 <i class="bi bi-door-open me-2"></i> <span class="link-text">Rooms</span>
 </a>
 </li>
-     {% if current_user.is_admin() %}
+{% if current_user.is_admin() %}
 <li>
 <a href="{{ url_for('admin_dashboard') }}" class="nav-link {% if request.endpoint == 'admin_dashboard' %}active{% endif %}">
 <i class="bi bi-calendar-check me-2"></i> <span class="link-text">Reservations</span>
@@ -45,6 +45,22 @@
 </a>
 </li>
      {% endif %}
+   {% if current_user and (current_user.role|lower == 'admin' or (current_user.is_admin() if current_user.is_admin is defined else False)) %}
+<li class="nav-item">
+  <a class="nav-link" href="{{ url_for('room_maintenance') }}">
+    <i class="bi bi-gear"></i> Room Maintenance
+  </a>
+</li>
+{% endif %}
+
+{# Add an Approvals link for approvers #}
+{% if current_user %}
+<li class="nav-item">
+  <a class="nav-link" href="{{ url_for('approvals') }}"><i class="bi bi-check2-square"></i> Approvals</a>
+</li>
+{% endif %}
+
+
 <li class="mt-auto">
 <a href="{{ url_for('logout') }}" class="nav-link">
 <i class="bi bi-box-arrow-right me-2"></i> <span class="link-text">Logout</span>
@@ -88,16 +104,16 @@
              const redirectTarget = null;
            {% endif %}
            Swal.fire({
-             toast: true,
-             icon: icon,
-             title: msg || "Notification",
-             timer: 2200,
-             position: "top-end",
-             showConfirmButton: false,
-             willClose: () => {
-               if (redirectTarget) window.location.href = redirectTarget;
-             }
-           });
+              icon: icon,
+              title: msg || "Notification",
+              confirmButtonText: "OK",
+              confirmButtonColor: "#0047AB",
+              timer: (icon === "success") ? 2500 : null,
+              timerProgressBar: (icon === "success"),
+              allowOutsideClick: true,
+              allowEscapeKey: true,
+              width: "450px"
+            });
          {% endfor %}
        });
 </script>
