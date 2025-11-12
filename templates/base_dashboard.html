@@ -17,11 +17,16 @@
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body>
+
 <!-- Sidebar -->
 <div class="sidebar">
 <div class="sidebar-header">
 <i class="bi bi-building"></i> WebAXIS
 </div>
+    <button class="btn btn-outline-light d-md-none position-absolute top-0 start-0 m-2" id="menu-toggle">
+  <i class="bi bi-list"></i>
+</button>
+
 <ul class="nav flex-column mt-3">
 <li>
 <a href="{{ url_for('main_menu') }}" class="nav-link {% if request.endpoint == 'main_menu' %}active{% endif %}">
@@ -215,6 +220,7 @@
    });
 </script>
 <!-- === PLACEHOLDER: page-specific scripts will be injected here === -->
+
  {% block scripts %}{% endblock %}
 </body>
 </html>
