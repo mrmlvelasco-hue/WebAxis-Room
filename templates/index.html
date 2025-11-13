@@ -190,6 +190,15 @@
               <input id="modalEndTime" name="end_time" type="datetime-local" class="form-control" required>
             </div>
           </div>
+            <div class="form-check mt-2">
+          <input class="form-check-input" type="checkbox" id="repeatDaily" name="repeat_daily">
+          <label class="form-check-label" for="repeatDaily">Repeat daily</label>
+        </div>
+        <div id="repeatUntilContainer" class="mt-2" style="display:none;">
+          <label for="repeatUntil" class="form-label">Repeat until</label>
+          <input id="repeatUntil" name="repeat_until" type="date" class="form-control">
+        </div>
+
           <div class="mt-2">
             <label for="modalReservedBy" class="form-label">Reserved By</label>
             <input id="modalReservedBy" name="reserved_by" type="text" class="form-control"
@@ -322,6 +331,15 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     });
   }
+
+const repeatDaily = document.getElementById('repeatDaily');
+const repeatUntilContainer = document.getElementById('repeatUntilContainer');
+const repeatUntil = document.getElementById('repeatUntil');
+
+repeatDaily?.addEventListener('change', (e) => {
+  repeatUntilContainer.style.display = e.target.checked ? '' : 'none';
+  if (!e.target.checked) repeatUntil.value = '';
+});
 
   // === Auto-scroll to nearest available slot for today ===
   function autoScrollToCurrentSlot() {

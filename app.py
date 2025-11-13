@@ -535,13 +535,13 @@ def confirm():
 @app.route('/reserve_post/<int:room_id>', methods=['POST'])
 @login_required
 def reserve_post(room_id):
+    from datetime import datetime, timedelta, timezone
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
 
         room = get_room_by_id(conn, room_id)
         if not room:
-            conn.close()
             return jsonify({"success": False, "message": "Room not found."}), 404
 
         reserved_by = request.form.get('reserved_by')
@@ -549,85 +549,117 @@ def reserve_post(room_id):
         remarks = request.form.get('remarks', '')
         start_str = request.form.get('start_time')
         end_str = request.form.get('end_time')
+        repeat_until_str = request.form.get('repeat_until')  # optional YYYY-MM-DD
 
+        # parse times (from datetime-local e.g. 2025-11-12T09:30)
         try:
-            start_time = datetime.fromisoformat(start_str)
-            end_time = datetime.fromisoformat(end_str)
+            start_dt = datetime.fromisoformat(start_str)
+            end_dt = datetime.fromisoformat(end_str)
         except Exception:
-            conn.close()
             return jsonify({"success": False, "message": "Invalid date/time format."}), 400
 
-        tz = timezone(timedelta(hours=8))
-        if start_time.tzinfo is None:
-            start_time = start_time.replace(tzinfo=tz)
-        if end_time.tzinfo is None:
-            end_time = end_time.replace(tzinfo=tz)
+        if end_dt <= start_dt:
+            return jsonify({"success": False, "message": "End must be after start."}), 400
 
-        # --- Overlap check for room and linked rooms ---
+        # timezone normalization (GMT+8)
+        tz = timezone(timedelta(hours=8))
+        if start_dt.tzinfo is None:
+            start_dt = start_dt.replace(tzinfo=tz)
+        if end_dt.tzinfo is None:
+            end_dt = end_dt.replace(tzinfo=tz)
+
+        # compute repeat range
+        repeat_dates = [start_dt.date()]
+        if repeat_until_str:
+            try:
+                repeat_until_date = datetime.strptime(repeat_until_str, "%Y-%m-%d").date()
+            except Exception:
+                return jsonify({"success": False, "message": "Invalid repeat_until date."}), 400
+            if repeat_until_date < start_dt.date():
+                return jsonify({"success": False, "message": "repeat_until must be >= start date."}), 400
+            d = start_dt.date()
+            while d <= repeat_until_date:
+                if d != start_dt.date():
+                    repeat_dates.append(d)
+                d = d + timedelta(days=1)
+
+        # prepare linked rooms if combined
         linked_room_ids = []
         if room.get("is_combined") and room.get("group_code"):
             linked_room_ids = get_linked_rooms(conn, room["group_code"], room_id)
+        all_room_ids_template = [room_id] + linked_room_ids
 
-        all_ids = [room_id] + linked_room_ids
-        for rid in all_ids:
+        # Begin transaction (pyodbc default autocommit False)
+        # For each date, build start/end datetimes with same time-of-day, check overlaps and insert
+        inserted_ids = []
+        for day in repeat_dates:
+            # create day-specific start/end preserving time-of-day
+            day_start = datetime.combine(day, start_dt.timetz()) if hasattr(start_dt, 'timetz') else datetime(day.year, day.month, day.day, start_dt.hour, start_dt.minute)
+            day_end = datetime.combine(day, end_dt.timetz()) if hasattr(end_dt, 'timetz') else datetime(day.year, day.month, day.day, end_dt.hour, end_dt.minute)
+            # ensure tz
+            if day_start.tzinfo is None: day_start = day_start.replace(tzinfo=tz)
+            if day_end.tzinfo is None: day_end = day_end.replace(tzinfo=tz)
+
+            # overlap checks across all relevant room ids (Pending/Approved/Blocked)
+            for rid in all_room_ids_template:
+                cursor.execute("""
+                    SELECT COUNT(*) FROM dbo.reservations
+                    WHERE room_id = ? AND status IN ('Pending','Approved','Blocked')
+                      AND NOT (end_time <= ? OR start_time >= ?)
+                """, (rid, day_start, day_end))
+                conflict_count = cursor.fetchone()[0]
+                if conflict_count > 0:
+                    conn.rollback()
+                    return jsonify({
+                        "success": False,
+                        "message": f"Conflict found on {day.isoformat()} for room id {rid}."
+                    }), 409
+
+            # if no conflict: insert main reservation (Pending)
             cursor.execute("""
-                SELECT COUNT(*) FROM dbo.reservations
-                WHERE room_id = ? AND status IN ('Pending','Approved')
-                  AND NOT (end_time <= ? OR start_time >= ?)
-            """, (rid, start_time, end_time))
-            if cursor.fetchone()[0] > 0:
-                conn.close()
-                return jsonify({
-                    "success": False,
-                    "message": "⚠️ One or more rooms are already booked during that time."
-                }), 409
+                INSERT INTO dbo.reservations (room_id, reserved_by, email, start_time, end_time, remarks, status, approver_username)
+                VALUES (?, ?, ?, ?, ?, ?, 'Pending', ?)
+            """, (room_id, reserved_by, email, day_start, day_end, remarks, get_group_approver(room.get("group_code")) if room.get("group_code") else None))
 
-        # --- Get approver if applicable ---
-        approver = None
-        if room.get("group_code"):
-            approver = get_group_approver(room["group_code"])
+            # get inserted id (SQL Server SCOPE_IDENTITY)
+            cursor.execute("SELECT CAST(SCOPE_IDENTITY() AS INT)")
+            inserted_id_row = cursor.fetchone()
+            inserted_id = inserted_id_row[0] if inserted_id_row else None
+            if inserted_id:
+                inserted_ids.append(inserted_id)
 
-        # --- Insert main reservation ---
-        cursor.execute("""
-            INSERT INTO dbo.reservations
-            (room_id, reserved_by, email, start_time, end_time, remarks, status, approver_username)
-            VALUES (?, ?, ?, ?, ?, ?, 'Pending', ?)
-        """, (room_id, reserved_by, email, start_time, end_time, remarks, approver))
+            # insert blocked entries for linked rooms
+            for lid in linked_room_ids:
+                cursor.execute("""
+                    INSERT INTO dbo.reservations (room_id, reserved_by, email, start_time, end_time, remarks, status, approver_username)
+                    VALUES (?, ?, ?, ?, ?, ?, 'Blocked', ?)
+                """, (lid, f"[AUTO BLOCK] {reserved_by}", email, day_start, day_end, f"Blocked by combined booking of {room['name']}", get_group_approver(room.get("group_code")) if room.get("group_code") else None))
 
-        # --- Insert linked room blocks (if any) ---
-        for lid in linked_room_ids:
-            cursor.execute("""
-                INSERT INTO dbo.reservations
-                (room_id, reserved_by, email, start_time, end_time, remarks, status, approver_username)
-                VALUES (?, ?, ?, ?, ?, ?, 'Blocked', ?)
-            """, (lid, f"[AUTO BLOCK] {reserved_by}", email, start_time, end_time,
-                  f"Blocked by combined booking of {room['name']}", approver))
-
+        # commit all inserts
         conn.commit()
-        cursor.execute("SELECT CAST(SCOPE_IDENTITY() AS INT)")
-        inserted = cursor.fetchone()
-        reservation_id = inserted[0] if inserted else None
-        conn.close()
 
-        # --- Return success JSON for AJAX ---
+        # build response
         return jsonify({
             "success": True,
-            "reservation_id": reservation_id,
+            "message": f"Reservation submitted for {room['name']} and pending approval.",
             "room_id": room_id,
-            "start": start_time.strftime("%H:%M"),
-            "end": end_time.strftime("%H:%M"),
-            "start_iso": start_time.strftime("%Y-%m-%dT%H:%M:%S"),
-            "end_iso": end_time.strftime("%Y-%m-%dT%H:%M:%S"),
-            "status": "Pending",
-            "message": f"Reservation submitted for {room['name']} and pending approval."
+            "reservation_ids": inserted_ids,
+            "start": start_dt.strftime("%H:%M"),
+            "end": end_dt.strftime("%H:%M")
         })
 
     except Exception as e:
-        print("⚠️ reserve_post error:", e)
-        return jsonify({
-            "success": False,
-            "message": f"⚠️ System error while creating reservation: {str(e)}"
-        }), 500
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        app.logger.exception("reserve_post error")
+        return jsonify({"success": False, "message": f"System error: {e}"}), 500
+    finally:
+        try:
+            conn.close()
+        except:
+            pass
 
 
 @app.route('/api/cancel_reservation/<int:res_id>', methods=['POST'])
