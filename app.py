@@ -37,22 +37,60 @@ app.permanent_session_lifetime = timedelta(days=7)
 
 def get_db_connection():
     """
-    SQL Server 2008 compatible connection.
-    Force TLS off and trust certificate.
+    Cross-platform SQL Server connection.
+    FreeTDS for Linux (Docker), ODBC17/18/NativeClient for Windows.
+    Compatible with SQL Server 2008.
     """
-    driver = '{ODBC Driver 17 for SQL Server}'
+    import platform
 
-    conn_str = (
-        f"DRIVER={driver};"
-        f"SERVER={DB_HOST};"
-        f"DATABASE={DB_DATABASE};"
-        f"UID={DB_USERNAME};"
-        f"PWD={DB_PASSWORD};"
-        "Encrypt=no;"
-        "TrustServerCertificate=yes;"
-    )
+    # --- Windows (PyCharm local dev) ---
+    if platform.system() == "Windows":
+        # Try Driver 17/18
+        possible_drivers = [
+            "{ODBC Driver 18 for SQL Server}",
+            "{ODBC Driver 17 for SQL Server}",
+            "{SQL Server Native Client 11.0}",
+            "{SQL Server}"
+        ]
+        driver = None
 
-    return pyodbc.connect(conn_str, autocommit=False)
+        for d in possible_drivers:
+            try:
+                pyodbc.connect(
+                    f"DRIVER={d};SERVER={DB_HOST};UID={DB_USERNAME};PWD={DB_PASSWORD};",
+                    timeout=1
+                )
+                driver = d
+                break
+            except:
+                pass
+
+        if not driver:
+            raise Exception("No usable SQL Server ODBC driver found in Windows.")
+
+        conn_str = (
+            f"DRIVER={driver};"
+            f"SERVER={DB_HOST};"
+            f"DATABASE={DB_DATABASE};"
+            f"UID={DB_USERNAME};"
+            f"PWD={DB_PASSWORD};"
+            "Encrypt=no;"
+            "TrustServerCertificate=yes;"
+        )
+        return pyodbc.connect(conn_str, autocommit=False)
+
+    # --- Linux (Docker) → Use FreeTDS ---
+    else:
+        conn_str = (
+            "DRIVER={FreeTDS};"
+            f"SERVER={DB_HOST};"
+            f"DATABASE={DB_DATABASE};"
+            f"UID={DB_USERNAME};"
+            f"PWD={DB_PASSWORD};"
+            "Port=1433;"
+            "TDS_Version=7.3;"
+        )
+        return pyodbc.connect(conn_str, autocommit=False)
 
 
 
@@ -1592,12 +1630,50 @@ def main_menu():
         user_info=user_info
     )
 
+# if __name__ == '__main__':
+#     print("🧩 Initializing WebAXIS System...")
+#     ensure_default_admin()
+#     is_dev = os.getenv("FLASK_ENV", "development").lower() == "development"
+#     print(f"💻 Running in {'Development' if is_dev else 'Production'} mode")
+#     print("🚀 WebAXIS RoomSys available at http://127.0.0.1:5000/login")
+#     if is_dev and os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+#         threading.Timer(1.5, lambda: webbrowser.open_new("http://127.0.0.1:5000/login")).start()
+#     app.run(debug=is_dev, use_reloader=False)
+
 if __name__ == '__main__':
-    print("🧩 Initializing WebAXIS System...")
+    print("Initializing WebAXIS System...")
     ensure_default_admin()
+
+    # True if running local dev, false if running inside docker
     is_dev = os.getenv("FLASK_ENV", "development").lower() == "development"
-    print(f"💻 Running in {'Development' if is_dev else 'Production'} mode")
-    print("🚀 WebAXIS RoomSys available at http://127.0.0.1:5000/login")
-    if is_dev and os.environ.get("WERKZEUG_RUN_MAIN") == "true":
-        threading.Timer(1.5, lambda: webbrowser.open_new("http://127.0.0.1:5000/login")).start()
-    app.run(debug=is_dev, use_reloader=False)
+    print(f"Running in {'Development' if is_dev else 'Production'} mode")
+
+    if is_dev:
+        # Development mode → Local PC → 127.0.0.1 binding
+        print("WebAXIS RoomSys available at http://127.0.0.1:5000/login")
+
+        # Auto-open browser only during development
+        if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+            threading.Timer(
+                1.5,
+                lambda: webbrowser.open_new("http://127.0.0.1:5000/login")
+            ).start()
+
+        app.run(
+            host="127.0.0.1",
+            port=5000,
+            debug=True,
+            use_reloader=True
+        )
+
+    else:
+        # Production mode → Docker → must bind to 0.0.0.0
+        print("WebAXIS RoomSys available at http://0.0.0.0:5000/login")
+
+        app.run(
+            host="0.0.0.0",
+            port=5000,
+            debug=False,
+            use_reloader=False
+        )
+
