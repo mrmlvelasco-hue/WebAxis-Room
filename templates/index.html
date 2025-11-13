@@ -323,13 +323,18 @@ document.addEventListener('DOMContentLoaded', function () {
     const selected = viewDate.value;
     window.location.href = `/rooms?date=${selected}`;
   });
+
   document.getElementById('calendarSyncBtn').addEventListener('click', () => {
     const selected = viewDate.value;
-    window.location.href = `/calendar_view?date=${selected}`;
-  });
+    const location = document.getElementById('locationFilter').value;
+    window.location.href = `/calendar_view?date=${selected}&location=${location}`;
+});
+
   viewDate.addEventListener('change', () => {
     window.location.href = `/rooms?date=${viewDate.value}`;
   });
+
+
 
   // --- Selection (drag) handling with robust highlighting ---
   function attachSlotSelectionHandlers() {

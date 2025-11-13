@@ -17,9 +17,12 @@
     <div class="d-flex align-items-center gap-2 mt-2 mt-md-0 flex-wrap">
       <!-- Group (Location) Filter -->
       <select id="groupFilter" class="form-select form-select-sm">
-        <option value="all">All Locations</option>
-        {% for r in rooms|groupby('location') %}
-          <option value="{{ r.grouper }}">{{ r.grouper }}</option>
+        <option value="all" {% if location_filter=='all' %}selected{% endif %}>All Locations</option>
+        {% for r in rooms | groupby('location') %}
+          <option value="{{ r.grouper }}"
+            {% if location_filter == r.grouper %} selected {% endif %}>
+            {{ r.grouper }}
+          </option>
         {% endfor %}
       </select>
 

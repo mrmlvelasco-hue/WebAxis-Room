@@ -363,10 +363,136 @@ def deactivate_room(id):
     flash("Room deactivated.", "warning")
     return redirect(url_for('room_maintenance'))
 
+# --- ROOM LIST (FULL REPLACEMENT) --------------------------------------------
 @app.route('/rooms', methods=['GET'])
 @login_required
 def room_list():
-    # ensure selected_date is a date object
+    from datetime import datetime, date, time, timedelta
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # --- Normalize selected date from query or session
+    date_str = request.args.get("date")
+    if date_str:
+        try:
+            selected_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        except Exception:
+            selected_date = datetime.now().date()
+    else:
+        sd = session.get("selected_date")
+        if isinstance(sd, str):
+            try:
+                selected_date = datetime.strptime(sd, "%Y-%m-%d").date()
+            except Exception:
+                selected_date = datetime.now().date()
+        elif isinstance(sd, date):
+            selected_date = sd
+        else:
+            selected_date = datetime.now().date()
+
+    session["selected_date"] = selected_date.strftime("%Y-%m-%d")
+
+    # optional focus room highlight
+    focus_room = request.args.get("focus")
+
+    # --- Compute day window ---
+    start_of_day = datetime.combine(selected_date, datetime.min.time())
+    end_of_day = start_of_day + timedelta(days=1)
+
+    # --- Fetch rooms ---
+    cursor.execute("""
+        SELECT id, name, capacity, location, description, group_code, is_combined
+        FROM dbo.rooms
+        WHERE status = 'Active'
+        ORDER BY location, name
+    """)
+    raw_rooms = cursor.fetchall()
+
+    rooms = []
+    for r in raw_rooms:
+        rooms.append({
+            "id": getattr(r, "id", r[0]),
+            "name": getattr(r, "name", r[1]),
+            "capacity": getattr(r, "capacity", r[2]),
+            "location": getattr(r, "location", r[3]) or "General",
+            "description": getattr(r, "description", r[4]),
+            "group_code": getattr(r, "group_code", r[5]),
+            "is_combined": bool(getattr(r, "is_combined", r[6])),
+        })
+
+    # --- Fetch reservations for this day ---
+    cursor.execute("""
+        SELECT id, room_id, reserved_by, email, start_time, end_time, status, ISNULL(remarks,'') AS remarks
+        FROM dbo.reservations
+        WHERE status IN ('Pending','Approved','Blocked')
+          AND start_time < ? AND end_time > ?
+    """, (end_of_day, start_of_day))
+    raw_res = cursor.fetchall()
+
+    # --- Build availability dictionary ---
+    availability = {}
+    for room in rooms:
+        rid = room["id"]
+        availability[rid] = {}
+        for hour in range(6, 20):
+            for minute in (0, 30):
+                label = f"{hour:02d}:{minute:02d}"
+                availability[rid][label] = {
+                    "status": "available",
+                    "by": "",
+                    "remarks": "",
+                    "reserved_by": ""
+                }
+
+    # --- Mark slots based on reservations ---
+    for rr in raw_res:
+        res_id = getattr(rr, "id", rr[0])
+        r_id = getattr(rr, "room_id", rr[1])
+        reserved_by = getattr(rr, "reserved_by", rr[2]) or ""
+        remarks = getattr(rr, "remarks", rr[7]) or ""
+        status = getattr(rr, "status", rr[6])
+        start_time = getattr(rr, "start_time", rr[4])
+        end_time = getattr(rr, "end_time", rr[5])
+
+        current = start_time
+        while current < end_time:
+            label = current.strftime("%H:%M")
+            if r_id in availability and label in availability[r_id]:
+
+                # Approved or Blocked → booked
+                if status in ("Approved", "Blocked"):
+                    availability[r_id][label]["status"] = "booked"
+
+                elif status == "Pending":
+                    # Only apply if not already booked
+                    if availability[r_id][label]["status"] != "booked":
+                        availability[r_id][label]["status"] = "pending"
+
+                availability[r_id][label]["by"] = reserved_by
+                availability[r_id][label]["remarks"] = remarks
+                availability[r_id][label]["reserved_by"] = reserved_by
+                availability[r_id][label + "_id"] = res_id
+
+            current += timedelta(minutes=30)
+
+    conn.close()
+
+    return render_template(
+        "index.html",
+        rooms=rooms,
+        availability=availability,
+        selected_date=selected_date,
+        focus_room=focus_room
+    )
+
+
+@app.route('/calendar_view', methods=['GET'])
+@login_required
+def calendar_view():
+    from datetime import datetime
+
+    # --- Selected Date ---
     date_str = request.args.get("date")
     if date_str:
         try:
@@ -376,135 +502,152 @@ def room_list():
     else:
         selected_date = session.get("selected_date", datetime.now().date())
 
-    if isinstance(selected_date, str):
-        try:
-            selected_date = datetime.strptime(selected_date, "%Y-%m-%d").date()
-        except Exception:
-            selected_date = datetime.now().date()
-
     session["selected_date"] = selected_date
 
-    start_of_day = datetime.combine(selected_date, datetime.min.time())
-    end_of_day = start_of_day + timedelta(days=1)
-
-    conn = get_db_connection(); cursor = conn.cursor()
-    cursor.execute("""
-        SELECT id, name, capacity, location, description, group_code, is_combined
-        FROM dbo.rooms
-        WHERE status = 'Active'
-        ORDER BY location, name
-    """)
-    rooms = cursor.fetchall()
-
-    cursor.execute("""
-        SELECT id, room_id, start_time, end_time, status, reserved_by, remarks
-        FROM dbo.reservations
-        WHERE status IN ('Pending', 'Approved', 'Blocked')
-          AND start_time < ? AND end_time > ?
-    """, (end_of_day, start_of_day))
-    reservations = cursor.fetchall()
-
-    availability = {}
-    for room in rooms:
-        rid = room.id if hasattr(room, "id") else room[0]
-        availability[rid] = {}
-        for hour in range(6, 20):
-            for minute in [0, 30]:
-                time_label = f"{hour:02d}:{minute:02d}"
-                availability[rid][time_label] = "available"
-                availability[rid][f"{time_label}_id"] = ""
-                availability[rid][f"{time_label}_reserved_by"] = ""
-                availability[rid][f"{time_label}_status"] = ""
-
-    # for res in reservations:
-    #     rid = res.room_id if hasattr(res, "room_id") else res[1]
-    #     start_time = res.start_time if hasattr(res, "start_time") else res[2]
-    #     end_time = res.end_time if hasattr(res, "end_time") else res[3]
-    #     status = res.status if hasattr(res, "status") else res[4]
-    #
-    #     reserved_by = res.reserved_by if hasattr(res, "reserved_by") else res[5]
-    #     res_id = res.id if hasattr(res, "id") else res[0]
-    #
-    #     # normalize datetimes to naive local (DB might be naive)
-    #     current = start_time
-    #     while current < end_time:
-    #         label = current.strftime("%H:%M")
-    #         if rid in availability and label in availability[rid]:
-    #             availability[rid][label] = "booked" if status in ("Approved", "Blocked") else "available"
-    #             availability[rid][f"{label}_id"] = res_id
-    #             availability[rid][f"{label}_reserved_by"] = reserved_by
-    #             availability[rid][f"{label}_status"] = status
-    #         current += timedelta(minutes=30)
-    # mark booked & pending slots
-    for res in reservations:
-        rid = res.room_id if hasattr(res, "room_id") else res[0]
-        start_time = res.start_time if hasattr(res, "start_time") else res[1]
-        end_time = res.end_time if hasattr(res, "end_time") else res[2]
-        status = res.status if hasattr(res, "status") else res[3]
-        reserved_by = res.reserved_by if hasattr(res, "reserved_by") else res[4]
-        remarks = res.remarks if hasattr(res, "remarks") else res[5]
-
-        if rid not in availability:
-            continue
-
-        current = start_time
-        while current < end_time:
-            label = current.strftime("%H:%M")
-            if label in availability[rid]:
-                if status == "Approved" or status == "Blocked":
-                    availability[rid][label] = {
-                        "status": "booked",
-                        "by": reserved_by,
-                        "remarks": remarks
-                    }
-                elif status == "Pending":
-                    availability[rid][label] = {
-                        "status": "pending",
-                        "by": reserved_by,
-                        "remarks": remarks
-                    }
-            current += timedelta(minutes=30)
-
-    conn.close()
-
-    # optional focus highlight param
-    focus_room = request.args.get('focus', None)
-    return render_template("index.html", rooms=rooms, availability=availability, selected_date=selected_date, focus_room=focus_room)
-
-@app.route('/calendar_view', methods=['GET'])
-@login_required
-def calendar_view():
-    date_str = request.args.get("date")
-    if date_str:
-        try:
-            selected_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-        except Exception:
-            selected_date = datetime.now().date()
-    else:
-        selected_date = datetime.now().date()
-    session["selected_date"] = selected_date
-
-    conn = get_db_connection(); cursor = conn.cursor()
+    # --- Fetch Active Rooms ---
+    conn = get_db_connection()
+    cursor = conn.cursor()
     cursor.execute("""
         SELECT id, name, capacity, location, description, status
         FROM dbo.rooms
         WHERE status = 'Active'
         ORDER BY location, name
     """)
-    rows = cursor.fetchall(); conn.close()
+    rows = cursor.fetchall()
+    conn.close()
+    location_filter = request.args.get("location", "all")
 
+    # --- SAFE conversion: pyodbc → serializable dict ---
     rooms = []
     for r in rows:
         rooms.append({
-            "id": r.id if hasattr(r, "id") else r[0],
-            "name": r.name if hasattr(r, "name") else r[1],
-            "capacity": r.capacity if hasattr(r, "capacity") else r[2],
-            "location": r.location if hasattr(r, "location") else r[3],
-            "description": r.description if hasattr(r, "description") else r[4],
-            "status": r.status if hasattr(r, "status") else r[5],
+            "id": int(r.id),
+            "name": str(r.name),
+            "capacity": int(r.capacity) if r.capacity is not None else 0,
+            "location": str(r.location) if r.location else "General",
+            "description": str(r.description) if r.description else "",
+            "status": str(r.status)
         })
 
-    return render_template("calendar_view.html", selected_date=selected_date, rooms=rooms)
+    print("⚠️ Paramter", location_filter)
+
+    return render_template(
+        "calendar_view.html",
+        selected_date=selected_date,
+        rooms=rooms,
+        location_filter=location_filter
+    )
+
+
+# @app.route('/rooms', methods=['GET'])
+# @login_required
+# def room_list():
+#     # ensure selected_date is a date object
+#     date_str = request.args.get("date")
+#     if date_str:
+#         try:
+#             selected_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+#         except Exception:
+#             selected_date = datetime.now().date()
+#     else:
+#         selected_date = session.get("selected_date", datetime.now().date())
+#
+#     if isinstance(selected_date, str):
+#         try:
+#             selected_date = datetime.strptime(selected_date, "%Y-%m-%d").date()
+#         except Exception:
+#             selected_date = datetime.now().date()
+#
+#     session["selected_date"] = selected_date
+#
+#     start_of_day = datetime.combine(selected_date, datetime.min.time())
+#     end_of_day = start_of_day + timedelta(days=1)
+#
+#     conn = get_db_connection(); cursor = conn.cursor()
+#     cursor.execute("""
+#         SELECT id, name, capacity, location, description, group_code, is_combined
+#         FROM dbo.rooms
+#         WHERE status = 'Active'
+#         ORDER BY location, name
+#     """)
+#     rooms = cursor.fetchall()
+#
+#     cursor.execute("""
+#         SELECT id, room_id, start_time, end_time, status, reserved_by, remarks
+#         FROM dbo.reservations
+#         WHERE status IN ('Pending', 'Approved', 'Blocked')
+#           AND start_time < ? AND end_time > ?
+#     """, (end_of_day, start_of_day))
+#     reservations = cursor.fetchall()
+#
+#     availability = {}
+#     for room in rooms:
+#         rid = room.id if hasattr(room, "id") else room[0]
+#         availability[rid] = {}
+#         for hour in range(6, 20):
+#             for minute in [0, 30]:
+#                 time_label = f"{hour:02d}:{minute:02d}"
+#                 availability[rid][time_label] = "available"
+#                 availability[rid][f"{time_label}_id"] = ""
+#                 availability[rid][f"{time_label}_reserved_by"] = ""
+#                 availability[rid][f"{time_label}_status"] = ""
+#
+#     # for res in reservations:
+#     #     rid = res.room_id if hasattr(res, "room_id") else res[1]
+#     #     start_time = res.start_time if hasattr(res, "start_time") else res[2]
+#     #     end_time = res.end_time if hasattr(res, "end_time") else res[3]
+#     #     status = res.status if hasattr(res, "status") else res[4]
+#     #
+#     #     reserved_by = res.reserved_by if hasattr(res, "reserved_by") else res[5]
+#     #     res_id = res.id if hasattr(res, "id") else res[0]
+#     #
+#     #     # normalize datetimes to naive local (DB might be naive)
+#     #     current = start_time
+#     #     while current < end_time:
+#     #         label = current.strftime("%H:%M")
+#     #         if rid in availability and label in availability[rid]:
+#     #             availability[rid][label] = "booked" if status in ("Approved", "Blocked") else "available"
+#     #             availability[rid][f"{label}_id"] = res_id
+#     #             availability[rid][f"{label}_reserved_by"] = reserved_by
+#     #             availability[rid][f"{label}_status"] = status
+#     #         current += timedelta(minutes=30)
+#     # mark booked & pending slots
+#     for res in reservations:
+#         rid = res.room_id if hasattr(res, "room_id") else res[0]
+#         start_time = res.start_time if hasattr(res, "start_time") else res[1]
+#         end_time = res.end_time if hasattr(res, "end_time") else res[2]
+#         status = res.status if hasattr(res, "status") else res[3]
+#         reserved_by = res.reserved_by if hasattr(res, "reserved_by") else res[4]
+#         remarks = res.remarks if hasattr(res, "remarks") else res[5]
+#
+#         if rid not in availability:
+#             continue
+#
+#         current = start_time
+#         while current < end_time:
+#             label = current.strftime("%H:%M")
+#             if label in availability[rid]:
+#                 if status == "Approved" or status == "Blocked":
+#                     availability[rid][label] = {
+#                         "status": "booked",
+#                         "by": reserved_by,
+#                         "remarks": remarks
+#                     }
+#                 elif status == "Pending":
+#                     availability[rid][label] = {
+#                         "status": "pending",
+#                         "by": reserved_by,
+#                         "remarks": remarks
+#                     }
+#             current += timedelta(minutes=30)
+#
+#     conn.close()
+#
+#     # optional focus highlight param
+#     focus_room = request.args.get('focus', None)
+#     return render_template("index.html", rooms=rooms, availability=availability, selected_date=selected_date, focus_room=focus_room)
+#
+
 
 # ... (export_excel, api_reservations, helpers unchanged, keep them as in your existing file) ...
 # We'll include reserve / reserve_post / api_check_slot / api_room_availability / api_booked_slots / room_schedule unchanged
@@ -997,7 +1140,7 @@ def api_reservations():
        query += " AND LOWER(LTRIM(RTRIM(rm.name))) = LOWER(?)"
        params.append(room.strip())
    query += " ORDER BY r.start_time"
-   print("🧠 SQL RUN:", query)
+   # print("🧠 SQL RUN:", query)
    print("🧩 Params:", params)
    cursor.execute(query, params)
    rows = cursor.fetchall()
