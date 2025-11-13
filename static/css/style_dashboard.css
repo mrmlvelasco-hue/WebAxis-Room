@@ -1,7 +1,9 @@
 /* =======================================
    PCPPI WebAXIS Dashboard / Admin Layout
+   CLEAN & FIXED VERSION
    ======================================= */
 
+/* Base Layout */
 body {
   font-family: "Segoe UI", sans-serif;
   background-color: #f9f9fb;
@@ -10,7 +12,9 @@ body {
   overflow-x: hidden;
 }
 
-/* ========== SIDEBAR ========== */
+/* ============================
+   SIDEBAR (DESKTOP MODE)
+   ============================ */
 .sidebar {
   position: fixed;
   top: 0;
@@ -19,7 +23,7 @@ body {
   width: 230px;
   background-color: #212529;
   color: #fff;
-  transition: all 0.3s ease;
+  transition: width 0.3s ease;
   z-index: 100;
 }
 
@@ -31,13 +35,14 @@ body {
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+/* Sidebar links */
 .sidebar .nav-link {
   color: #adb5bd;
   font-weight: 500;
   display: block;
   padding: 10px 20px;
-  transition: all 0.3s;
   white-space: nowrap;
+  transition: 0.3s;
 }
 
 .sidebar .nav-link:hover {
@@ -51,7 +56,7 @@ body {
   border-radius: 8px;
 }
 
-/* Collapsed Sidebar */
+/* Desktop collapsed state */
 .sidebar.collapsed {
   width: 70px;
 }
@@ -77,7 +82,9 @@ body {
   left: 70px;
 }
 
-/* ========== TOPBAR ========== */
+/* ============================
+   TOPBAR
+   ============================ */
 .topbar {
   position: fixed;
   top: 0;
@@ -100,24 +107,21 @@ body {
   background: transparent;
   font-size: 1.25rem;
   cursor: pointer;
-  transition: color 0.2s;
 }
 
 #toggleSidebar:hover {
   color: #0d6efd;
 }
 
-.user-info {
-  font-weight: 500;
-}
-
-/* ========== CONTENT AREA ========== */
+/* ============================
+   CONTENT AREA
+   ============================ */
 .content-area {
   margin-left: 230px;
   padding: 2rem;
-  background-color: #f9f9fb;
   min-height: 100vh;
   transition: margin-left 0.3s ease;
+  background-color: #f9f9fb;
 }
 
 @media (max-width: 992px) {
@@ -127,12 +131,42 @@ body {
   }
 }
 
-/* ========== DASHBOARD CARDS ========== */
+/* ============================
+   RESPONSIVE MOBILE SIDEBAR
+   ============================ */
+@media (max-width: 992px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: -250px;
+    width: 250px;
+    height: 100vh;
+    z-index: 2000;
+    transition: left 0.3s ease;
+  }
+
+  .sidebar.open {
+    left: 0;
+  }
+
+  .topbar {
+    left: 0 !important;
+  }
+
+  /* Prevent content shifting on mobile */
+  .content-area {
+    margin-left: 0 !important;
+  }
+}
+
+/* ============================
+   CARDS / TABLES / GENERAL UI
+   ============================ */
 .card {
   border: none;
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+  transition: 0.2s ease-in-out;
 }
 
 .card:hover {
@@ -140,12 +174,6 @@ body {
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
 }
 
-.card h6 {
-  font-size: 0.95rem;
-  letter-spacing: 0.3px;
-}
-
-/* Charts */
 canvas {
   background-color: #ffffff;
   border-radius: 12px;
@@ -153,14 +181,6 @@ canvas {
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
 }
 
-/* ========== FLASH MESSAGE ========== */
-.alert {
-  border-radius: 0;
-  margin-bottom: 0;
-  font-weight: 500;
-}
-
-/* ========== FOOTER ========== */
 .footer {
   text-align: center;
   color: #999;
@@ -168,779 +188,97 @@ canvas {
   margin-top: 3rem;
 }
 
-/* ========== SIDEBAR TOGGLE MOBILE ========== */
-@media (max-width: 992px) {
-  .sidebar {
-    position: fixed;
-    width: 220px;
-    transform: translateX(-220px);
-    transition: transform 0.3s ease-in-out;
-    z-index: 1050;
-  }
-
-  .sidebar.active {
-    transform: translateX(0);
-  }
-
-  .topbar {
-    left: 0;
-  }
-
-  #toggleSidebar {
-    display: inline-block;
-  }
-}
-
-/* Smooth fade for overlay effect when sidebar is active (optional) */
-.sidebar.active::after {
-  content: "";
-  position: fixed;
-  top: 0;
-  left: 220px;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(0, 0, 0, 0.25);
-  backdrop-filter: blur(1px);
-  z-index: -1;
-  transition: opacity 0.3s;
-}
-/* =======================================
-   DARK MODE THEME
-   ======================================= */
-
+/* ============================
+   DARK MODE
+   ============================ */
 body.dark-mode {
   background-color: #121212;
   color: #ddd;
 }
 
-/* Sidebar */
-body.dark-mode .sidebar {
-  background-color: #000;
-  color: #fff;
-}
-
-body.dark-mode .sidebar .nav-link {
-  color: #ccc;
-}
-
-body.dark-mode .sidebar .nav-link.active {
-  background-color: #0d6efd;
-  color: #fff;
-}
-
-body.dark-mode .sidebar .nav-link:hover {
-  background-color: rgba(13,110,253,0.25);
-  color: #fff !important;
-}
-
-/* Topbar */
-body.dark-mode .topbar {
-  background-color: #1e1e1e;
-  border-bottom: 1px solid #333;
-}
-
-body.dark-mode #toggleSidebar,
-body.dark-mode #toggleTheme {
-  color: #ccc;
-  border-color: #444;
-}
-
-body.dark-mode #toggleSidebar:hover,
-body.dark-mode #toggleTheme:hover {
-  color: #0d6efd;
-}
-
-/* Cards */
-body.dark-mode .card {
-  background-color: #1e1e1e;
-  color: #ddd;
-  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.08);
-}
-
-body.dark-mode .card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 8px 20px rgba(255, 255, 255, 0.12);
-}
-
-/* Chart background */
-body.dark-mode canvas {
-  background-color: #1e1e1e;
-  box-shadow: 0 2px 10px rgba(255, 255, 255, 0.05);
-}
-
-/* Footer */
-body.dark-mode .footer {
-  color: #777;
-}
-/* =======================================
-   DARK MODE FIX PATCH (v2)
-   ======================================= */
-
-/* Match dashboard header background to dark mode */
-body.dark-mode .content-area {
-  background-color: #181818;
-  color: #ddd;
-}
-
-/* Brighten the blue text in dark mode (KPI cards, titles, etc.) */
-body.dark-mode .text-primary {
-  color: #4d9bff !important;
-}
-
-/* Fix topbar border contrast */
-body.dark-mode .topbar {
-  border-bottom: 1px solid #444;
-}
-
-/* Chart.js container correction */
-body.dark-mode canvas {
-  background-color: #181818 !important;
-  border-radius: 12px;
-  box-shadow: 0 2px 10px rgba(255, 255, 255, 0.05);
-}
-
-/* Improve card color balance */
-body.dark-mode .card {
-  background-color: #202020;
-  color: #e2e2e2;
-  box-shadow: 0 3px 8px rgba(255, 255, 255, 0.08);
-}
-
-/* Flash messages (if any appear in dark mode) */
-body.dark-mode .alert {
-  background-color: #1e1e1e;
-  color: #ddd;
-  border: 1px solid #333;
-}
-
-/* Sidebar active link brighter */
-body.dark-mode .sidebar .nav-link.active {
-  background-color: #0d6efd !important;
-  color: #fff !important;
-}
-
-/* Ensure all borders use slightly lighter gray */
-body.dark-mode hr,
-body.dark-mode .border-bottom {
-  border-color: #333 !important;
-}
-
-/* =======================================
-   HEADER TEXT VISIBILITY FIX
-   ======================================= */
-
-.page-title {
-  color: #0047AB; /* PCPPI blue */
-}
-
-body.dark-mode .page-title {
-  color: #4d9bff !important; /* bright blue for contrast */
-}
-/* =======================================
-   FINAL DARK MODE POLISH + TRANSITION
-   ======================================= */
-
-/* Smooth transition for theme switching */
-body, .sidebar, .topbar, .card, canvas, .content-area {
-  transition: background-color 0.35s ease, color 0.35s ease, box-shadow 0.35s ease;
-}
-
-/* Fix header background & text in dark mode */
-body.dark-mode .topbar {
-  background-color: #111 !important;
-  color: #e2e2e2 !important;
-  border-bottom: 1px solid #333;
-}
-
-/* Ensure greeting text and icons visible */
-body.dark-mode .topbar span,
-body.dark-mode .topbar .user-info {
-  color: #e2e2e2 !important;
-}
-
-/* Adjust toggle buttons in dark mode */
-body.dark-mode #toggleSidebar,
-body.dark-mode #toggleTheme {
-  color: #e2e2e2 !important;
-  border-color: #444;
-  background: transparent;
-}
-
-body.dark-mode #toggleSidebar:hover,
-body.dark-mode #toggleTheme:hover {
-  color: #0d6efd !important;
-  background: rgba(13,110,253,0.1);
-}
-
-/* Fix sidebar contrast consistency */
 body.dark-mode .sidebar {
   background-color: #0c0c0c !important;
-  color: #fff;
 }
 
-body.dark-mode .sidebar-header {
-  color: #fff;
+body.dark-mode .topbar {
+  background-color: #111 !important;
+  border-bottom: 1px solid #333;
 }
 
-body.dark-mode .sidebar .nav-link {
-  color: #b5b5b5;
-}
-
-body.dark-mode .sidebar .nav-link.active {
-  background-color: #0d6efd !important;
-  color: #fff !important;
-}
-
-body.dark-mode .sidebar .nav-link:hover {
-  background-color: rgba(13, 110, 253, 0.25);
-  color: #fff !important;
-}
-
-/* Make content background pure dark */
 body.dark-mode .content-area {
   background-color: #181818 !important;
-  color: #e2e2e2;
 }
 
-/* Fix KPI card contrast */
 body.dark-mode .card {
   background-color: #202020;
   color: #e2e2e2;
-  border: 1px solid #2a2a2a;
-  box-shadow: 0 3px 8px rgba(255, 255, 255, 0.08);
-}
-
-/* Footer */
-body.dark-mode .footer {
-  color: #888;
-}
-
-/* Header Title (Dashboard title) */
-body.dark-mode .page-title {
-  color: #4d9bff !important;
-}
-
-/* Flash message background in dark mode */
-body.dark-mode .alert {
-  background-color: #1e1e1e;
-  color: #ddd;
-  border: 1px solid #333;
-}
-
-/* Chart fix (dark canvas & text contrast) */
-body.dark-mode canvas {
-  background-color: #181818 !important;
-  box-shadow: 0 2px 10px rgba(255, 255, 255, 0.05);
-}
-/* =======================================
-   HEADER TITLE PREMIUM ACCENT STYLE
-   ======================================= */
-
-/* Base header style */
-.page-title {
-  position: relative;
-  color: #0047AB;
-  font-weight: 800;
-  letter-spacing: 0.3px;
-  display: inline-block;
-}
-
-/* Gradient underline in light mode */
-.page-title::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  bottom: -6px;
-  width: 100%;
-  height: 4px;
-  border-radius: 4px;
-  background: linear-gradient(90deg, #0047AB 0%, #0b63ce 50%, #1E90FF 100%);
-  opacity: 0.25;
-  transition: opacity 0.3s ease, transform 0.3s ease;
-}
-
-/* Hover effect */
-.page-title:hover::after {
-  opacity: 0.55;
-  transform: scaleX(1.05);
-}
-
-/* Blue glow in dark mode */
-body.dark-mode .page-title {
-  color: #4d9bff;
-  text-shadow: 0 0 6px rgba(77, 155, 255, 0.6);
-}
-
-body.dark-mode .page-title::after {
-  background: linear-gradient(90deg, #1E90FF 0%, #3fa9ff 50%, #87cefa 100%);
-  opacity: 0.3;
-}
-
-/* Enhanced hover in dark mode */
-body.dark-mode .page-t
-/* =======================================
-   GLOW ANIMATION ON LOAD (OPTIONAL)
-   ======================================= */
-
-@keyframes glowIn {
-  from {
-    text-shadow: 0 0 0 rgba(77, 155, 255, 0);
-    opacity: 0.7;
-  }
-  to {
-    text-shadow: 0 0 8px rgba(77, 155, 255, 0.8);
-    opacity: 1;
-  }
-}
-
-body.dark-mode .page-title {
-    animation: glowIn 0.8s ease-out
-}
-
-/* =======================================
-   SIDEBAR LOGO GLOW EFFECT (BRANDED)
-   ======================================= */
-
-/* Sidebar header logo text */
-.sidebar-header {
-  font-size: 1.2rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #ffffff;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 6px;
-  transition: text-shadow 0.4s ease;
-}
-
-/* Default (light mode) */
-.sidebar-header i {
-  color: #0d6efd;
-}
-
-/* Dark mode glow animation */
-@keyframes logoGlow {
-  0% {
-    text-shadow: 0 0 0 rgba(77, 155, 255, 0.4);
-  }
-  50% {
-    text-shadow: 0 0 8px rgba(77, 155, 255, 0.75);
-  }
-  100% {
-    text-shadow: 0 0 0 rgba(77, 155, 255, 0.4);
-  }
-}
-
-/* Apply glowing pulse only in dark mode */
-body.dark-mode .sidebar-header {
-  color: #4d9bff;
-  text-shadow: 0 0 4px rgba(77, 155, 255, 0.6);
-  animation: logoGlow 2.5s infinite ease-in-out;
-}
-
-/* Sidebar icon color in dark mode */
-body.dark-mode .sidebar-header i {
-  color: #4d9bff;
-}
-
-body.dark-mode .page-title {
-  animation: glowIn 0.8s ease-out, logoGlow 3s infinite ease-in-out;
-}
-
-/* =======================================
-   PAGE CONTENT + TABLE CONSISTENCY
-   ======================================= */
-
-/* Page Container Card */
-.card {
-  border: none;
-  border-radius: 14px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
-}
-
-/* Table Design */
-.table {
-  margin-top: 1rem;
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.table th {
-  font-weight: 700;
-  text-transform: uppercase;
-  background-color: #e9f1ff;
-}
-
-.table td, .table th {
-  padding: 0.9rem 1rem;
-  vertical-align: middle;
-}
-
-/* Hover highlight */
-.table-hover tbody tr:hover {
-  background-color: rgba(13, 110, 253, 0.05);
-}
-
-/* Button styling */
-.btn-outline-primary {
-  border-color: #0d6efd;
-  color: #0d6efd;
-  font-weight: 600;
-  transition: all 0.25s ease;
-}
-
-.btn-outline-primary:hover {
-  background-color: #0d6efd;
-  color: #fff;
-  box-shadow: 0 0 8px rgba(13, 110, 253, 0.4);
-}
-
-/* Dark mode adjustments */
-body.dark-mode .table {
-  background-color: #181818;
-  color: #ddd;
-}
-
-body.dark-mode .table th {
-  background-color: #1f1f1f;
-  color: #e2e2e2;
-}
-
-body.dark-mode .table-hover tbody tr:hover {
-  background-color: rgba(13, 110, 253, 0.1);
-}
-
-body.dark-mode .btn-outline-primary {
-  border-color: #4d9bff;
-  color: #4d9bff;
-}
-
-body.dark-mode .btn-outline-primary:hover {
-  background-color: #4d9bff;
-  color: #000;
-  box-shadow: 0 0 8px rgba(77, 155, 255, 0.6);
-}
-/* =======================================
-   ADMIN DASHBOARD PAGE REFINEMENTS
-   ======================================= */
-
-/* Back button alignment */
-.back-btn {
-  border-radius: 8px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-  transition: all 0.25s ease-in-out;
-}
-
-.back-btn:hover {
-  background-color: #0d6efd;
-  color: #fff !important;
-  box-shadow: 0 0 8px rgba(13, 110, 253, 0.3);
-}
-
-/* Adjust page header spacing on small screens */
-@media (max-width: 576px) {
-  .back-btn {
-    width: 100%;
-    text-align: center;
-    margin-top: 10px;
-  }
-}
-
-/* Dark-mode back button */
-body.dark-mode .back-btn {
-  border-color: #4d9bff;
-  color: #4d9bff;
-}
-
-body.dark-mode .back-btn:hover {
-  background-color: #4d9bff;
-  color: #000 !important;
-  box-shadow: 0 0 8px rgba(77, 155, 255, 0.5);
-}
-
-/* =======================================
-   USER MAINTENANCE PAGE POLISH
-   ======================================= */
-
-/* Form card */
-.user-form-card {
-  background-color: #fdfdfd;
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-}
-
-.user-table-card {
-  background-color: #fdfdfd;
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-}
-
-/* Input fields */
-.form-control, .form-select {
-  border-radius: 8px;
-  font-weight: 500;
-}
-
-.form-control:focus, .form-select:focus {
-  border-color: #0d6efd;
-  box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
 }
 
 /* Buttons */
 .btn-primary {
   background-color: #0047AB;
   border-color: #0047AB;
-  transition: all 0.25s ease-in-out;
 }
 
-.btn-primary:hover {
-  background-color: #0b63ce;
-  box-shadow: 0 0 8px rgba(13, 110, 253, 0.4);
-}
-
-/* Dark mode compatibility */
-body.dark-mode .user-form-card,
-body.dark-mode .user-table-card {
-  background-color: #202020;
-  box-shadow: 0 3px 10px rgba(255, 255, 255, 0.05);
-}
-
-body.dark-mode .form-control,
-body.dark-mode .form-select {
-  background-color: #1a1a1a;
-  color: #e2e2e2;
-  border-color: #333;
-}
-
-body.dark-mode .form-control:focus,
-body.dark-mode .form-select:focus {
-  border-color: #4d9bff;
-  box-shadow: 0 0 0 0.2rem rgba(77, 155, 255, 0.25);
-}
-
-body.dark-mode .btn-primary {
-  background-color: #4d9bff;
-  border-color: #4d9bff;
-  color: #000;
-}
-
-body.dark-mode .btn-primary:hover {
-  background-color: #1E90FF;
-  box-shadow: 0 0 8px rgba(77, 155, 255, 0.6);
-}
-/* =======================================
-   RESERVATIONS PAGE POLISH
-   ======================================= */
-
-/* Reservation Card */
-.reservation-card {
-  background-color: #fdfdfd;
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-}
-
-/* Badge styling */
-.badge {
-  font-weight: 600;
-  padding: 0.5em 0.75em;
-  border-radius: 8px;
-}
-
-.badge.bg-warning {
-  background-color: #ffc107 !important;
-  color: #000 !important;
-}
-
-/* Buttons inside table */
-.btn-sm {
-  padding: 4px 10px;
-  font-size: 0.85rem;
-  border-radius: 6px;
-}
-
-.btn-success, .btn-danger {
-  transition: all 0.25s ease-in-out;
-}
-
-.btn-success:hover {
-  background-color: #198754;
-  box-shadow: 0 0 8px rgba(25, 135, 84, 0.4);
-}
-
-.btn-danger:hover {
-  background-color: #dc3545;
-  box-shadow: 0 0 8px rgba(220, 53, 69, 0.4);
-}
-
-/* Table improvements */
-.table th, .table td {
-  vertical-align: middle;
-}
-
-.table thead th {
-  font-weight: 700;
-}
-
-/* Dark Mode Enhancements */
-body.dark-mode .reservation-card {
-  background-color: #202020;
-  box-shadow: 0 3px 10px rgba(255, 255, 255, 0.05);
-}
-
-body.dark-mode .badge.bg-warning {
-  background-color: #ffcc00 !important;
-  color: #222 !important;
-}
-
-body.dark-mode .btn-success {
-  background-color: #4dd599;
-  border: none;
-  color: #000;
-}
-
-body.dark-mode .btn-success:hover {
-  box-shadow: 0 0 8px rgba(77, 213, 153, 0.5);
-}
-
-body.dark-mode .btn-danger {
-  background-color: #ff4d4d;
-  color: #fff;
-  border: none;
-}
-
-body.dark-mode .btn-danger:hover {
-  box-shadow: 0 0 8px rgba(255, 77, 77, 0.5);
-}
-/* =======================================
-   RESERVE ROOM PAGE POLISH
-   ======================================= */
-
-.reservation-room-card,
-.reservation-form-card {
-  background-color: #fdfdfd;
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-}
-
-/* Form fields */
-.reservation-form-card .form-control,
-.reservation-form-card .form-select,
-.reservation-form-card textarea {
-  border-radius: 8px;
-  font-weight: 500;
-}
-
-.reservation-form-card .form-control:focus,
-.reservation-form-card textarea:focus {
+.btn-outline-primary {
   border-color: #0d6efd;
-  box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+  color: #0d6efd;
 }
 
-/* Button */
-.reservation-form-card .btn-primary {
-  background-color: #0047AB;
-  border-color: #0047AB;
-  transition: all 0.25s ease-in-out;
-}
-
-.reservation-form-card .btn-primary:hover {
-  background-color: #0b63ce;
-  box-shadow: 0 0 8px rgba(13, 110, 253, 0.4);
-}
-
-/* Dark mode compatibility */
-body.dark-mode .reservation-room-card,
-body.dark-mode .reservation-form-card {
-  background-color: #202020;
-  box-shadow: 0 3px 10px rgba(255, 255, 255, 0.05);
-}
-
-body.dark-mode .form-control,
-body.dark-mode textarea {
-  background-color: #1a1a1a;
-  color: #e2e2e2;
-  border-color: #333;
-}
-
-body.dark-mode .form-control:focus,
-body.dark-mode textarea:focus {
+/* Dark mode button adjustments */
+body.dark-mode .btn-outline-primary {
   border-color: #4d9bff;
-  box-shadow: 0 0 0 0.2rem rgba(77, 155, 255, 0.25);
+  color: #4d9bff;
 }
 
-body.dark-mode .btn-primary {
-  background-color: #4d9bff;
-  border-color: #4d9bff;
-  color: #000;
+/* Tables */
+.table {
+  border-radius: 12px;
+  overflow: hidden;
 }
 
-body.dark-mode .btn-primary:hover {
-  background-color: #1E90FF;
-  box-shadow: 0 0 8px rgba(77, 155, 255, 0.6);
+.table th {
+  background-color: #e9f1ff;
 }
 
-.slot-cell {
-  width: 25px;
-  height: 25px;
-  border-radius: 4px;
-  transition: background-color 0.3s ease;
-}
-.btn-outline-primary.active {
-  background-color: #0047AB;
-  color: #fff;
-  border-color: #0047AB;
+body.dark-mode .table {
+  background-color: #181818;
 }
 
-/* Sidebar layout fixes */
-#wrapper {
-  display: flex;
-  min-height: 100vh;
-  overflow-x: hidden;
+body.dark-mode .table th {
+  background-color: #1f1f1f;
 }
 
-#sidebar {
-  width: 250px;
-  background-color: #212529;
-  color: #fff;
-  flex-shrink: 0;
-  transition: all 0.3s;
+/* ============================
+   GLOBAL TRANSITIONS
+   ============================ */
+body, .sidebar, .topbar, .card, canvas, .content-area {
+  transition: background-color 0.35s ease, color 0.35s ease, box-shadow 0.35s ease;
+}
+#sidebar-overlay {
+    display: none;
+}
+/* Pull-to-refresh indicator */
+#ptr-indicator {
+    position: fixed;
+    top: -60px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40px;
+    height: 40px;
+    background: #0047AB;
+    color: #fff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    z-index: 3000;
+    transition: top 0.25s ease, opacity 0.25s ease;
+    opacity: 0;
 }
 
-#sidebar .nav-link {
-  color: #adb5bd;
-  font-weight: 500;
-  padding: 8px 20px;
-}
-
-#sidebar .nav-link:hover,
-#sidebar .nav-link.active {
-  color: #fff;
-  background-color: #0d6efd;
-  border-radius: 4px;
-}
-
-#page-content-wrapper {
-  flex-grow: 1;
-  margin-left: 250px;
-  background-color: #f8f9fa;
-  padding: 20px;
-}
-
-/* For small screens */
-@media (max-width: 768px) {
-  #sidebar {
-    position: absolute;
-    left: -250px;
-  }
-
-  #sidebar.active {
-    left: 0;
-  }
-
-  #page-content-wrapper {
-    margin-left: 0;
-  }
+#ptr-indicator.active {
+    top: 20px;
+    opacity: 1;
 }

@@ -4,15 +4,16 @@
 {% block content %}
 <div class="container-fluid mt-3">
   <div class="row">
-    <div class="col-md-3 col-lg-2 border-end bg-light px-3 py-3">
+<!--    <div class="col-md-3 col-lg-2 border-end bg-light px-3 py-3">-->
+      <div class="col-md-3 col-lg-2 border-end bg-light px-3 py-3 page-left-panel">
       <h5 class="fw-bold text-primary mb-3">Meeting Room</h5>
 
       <div class="d-grid gap-2 mb-3">
         <a href="{{ url_for('room_list') }}" class="btn btn-primary fw-semibold">
           <i class="bi bi-grid-3x3-gap me-2"></i> Timeline View
         </a>
-        <a href="{{ url_for('calendar_view') }}" class="btn btn-outline-primary fw-semibold {% if request.endpoint == 'calendar_view' %}active{% endif %}">
-           <i class="bi bi-calendar3 me-2"></i> Calendar View
+        <a href="#" id="sidebarCalendarBtn" class="btn btn-outline-primary fw-semibold">
+          <i class="bi bi-calendar3 me-2"></i> Calendar View
         </a>
       </div>
 
@@ -43,12 +44,6 @@
             <h3 class="fw-bold mb-0 text-primary me-3">
               <i class="bi bi-door-open me-2"></i> Shared Resources
             </h3>
-            <div class="d-flex align-items-center gap-2 small">
-              <span><span class="badge bg-success me-1">&nbsp;</span> Available</span>
-              <span><span class="badge bg-danger me-1">&nbsp;</span> Booked</span>
-              <span><span class="badge bg-secondary me-1">&nbsp;</span> Past</span>
-              <span><span class="badge bg-warning me-1">&nbsp;</span> Pending</span>
-            </div>
           </div>
           <div class="d-flex align-items-center">
             <button id="refreshBtn" class="btn btn-outline-secondary btn-sm me-2">
@@ -64,7 +59,7 @@
 
         <div class="slot-container mt-3">
           {% for room in rooms %}
-          <div class="room-row mb-4 {% if focus_room and focus_room|int == room.id %}border border-primary{% endif %}" data-location="{{ (room.location or 'General')|trim }}">
+          <div class="room-row mb-4 {% if focus_room and focus_room|int == room.id %}border border-primary{% endif %} room-card" data-location="{{ (room.location or 'General')|trim }}">
             <div class="room-header d-flex justify-content-between align-items-center p-3 rounded bg-white shadow-sm" data-roomid="{{ room.id }}">
               <div>
                 <div class="d-flex align-items-center">
@@ -79,7 +74,11 @@
               </button>
             </div>
 
+            <!-- Hybrid timeline wrapper:
+                 - .timeline keeps the horizontal scroll on desktop
+                 - .slot-grid inside supports flex on desktop and becomes grid on tablet/phone -->
             <div class="timeline d-flex flex-nowrap overflow-auto border rounded bg-transparent p-3 mt-2" data-room-id="{{ room.id }}">
+              <div class="slot-grid d-flex align-items-center">
               {% for hour in range(6, 20) %}
                 {% for minute in [0, 30] %}
                   {% set time_label = "%02d:%02d"|format(hour, minute) %}
@@ -120,12 +119,13 @@
                   </div>
                 {% endfor %}
               {% endfor %}
-            </div>
+              </div><!-- /.slot-grid -->
+            </div><!-- /.timeline -->
 
-          </div>
+          </div><!-- /.room-row -->
           {% endfor %}
-        </div>
-      </div>
+        </div><!-- /.slot-container -->
+      </div><!-- /.card -->
     </div>
   </div>
 </div>
@@ -193,7 +193,7 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-  // Elements
+  // Keep your original references and logic — minimal additions only
   const modalEl = document.getElementById('newReservationModal');
   const bsModal = new bootstrap.Modal(modalEl);
   const form = document.getElementById('reservationForm');
@@ -209,7 +209,7 @@ document.addEventListener('DOMContentLoaded', function () {
     localStorage.setItem("selectedDate", viewDate.value);
   });
 
-  // --- Filter persistence and normalization ---
+  // --- Filter persistence and normalization (unchanged) ---
   const savedFilter = localStorage.getItem('roomFilter') || 'all';
   locationFilter.value = savedFilter;
   applyFilter();
@@ -233,7 +233,7 @@ document.addEventListener('DOMContentLoaded', function () {
     return `${y}-${m}-${d}T${h}:${min}`;
   }
 
-  // --- Open reserve modal ---
+  // --- Open reserve modal (unchanged) ---
   function openReserve(roomId, roomName, startTime, endTime) {
     document.getElementById('modalRoomId').value = roomId;
     document.getElementById('modalRoomName').textContent = roomName;
@@ -243,7 +243,7 @@ document.addEventListener('DOMContentLoaded', function () {
     bsModal.show();
   }
 
-  // --- Slot coloring and state management ---
+  // --- Slot coloring and state management (kept as original) ---
   function updatePastSlots() {
     const selectedStr = viewDate.value;
     const now = new Date();
@@ -252,7 +252,6 @@ document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('.slot-cell').forEach(cell => {
       const status = (cell.dataset.status || 'available').toLowerCase();
       cell.classList.remove('bg-success','bg-danger','bg-warning','bg-secondary','text-white','text-dark');
-      // reset pointer
       cell.style.pointerEvents = '';
 
       if (status === 'booked') {
@@ -263,12 +262,11 @@ document.addEventListener('DOMContentLoaded', function () {
       }
       if (status === 'pending') {
         cell.classList.add('bg-warning','text-dark');
-        cell.style.pointerEvents = 'auto'; // allow pending popup
+        cell.style.pointerEvents = 'auto';
         cell.title = cell.title || 'Pending approval — click for details';
         return;
       }
 
-      // past/unavailable check
       if (!selectedStr) return;
       if (selectedStr < todayStr) {
         cell.classList.add('bg-secondary','text-white');
@@ -288,13 +286,12 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         return;
       }
-      // future
       cell.classList.add('bg-success','text-white');
       cell.title = 'Available';
     });
   }
 
-  // --- Auto scroll to nearest available slot for today ---
+  // --- Auto scroll to nearest available slot for today (unchanged) ---
   function autoScrollToCurrentSlot() {
     const todayStr = new Date().toISOString().slice(0,10);
     document.querySelectorAll('.timeline').forEach(timeline => {
@@ -318,7 +315,7 @@ document.addEventListener('DOMContentLoaded', function () {
   updatePastSlots();
   autoScrollToCurrentSlot();
 
-  // --- Refresh & date navigation ---
+  // --- Refresh & date navigation (unchanged) ---
   document.getElementById('refreshBtn').addEventListener('click', () => {
     const selected = viewDate.value;
     window.location.href = `/rooms?date=${selected}`;
@@ -328,17 +325,16 @@ document.addEventListener('DOMContentLoaded', function () {
     const selected = viewDate.value;
     const location = document.getElementById('locationFilter').value;
     window.location.href = `/calendar_view?date=${selected}&location=${location}`;
-});
+  });
 
   viewDate.addEventListener('change', () => {
     window.location.href = `/rooms?date=${viewDate.value}`;
   });
 
-
-
-  // --- Selection (drag) handling with robust highlighting ---
+  // --- Selection (drag) handling (keeps your logic intact) ---
   function attachSlotSelectionHandlers() {
     document.querySelectorAll('.timeline').forEach(timeline => {
+      // now timeline.querySelectorAll('.slot-cell') still finds slot-cells inside .slot-grid
       const cells = Array.from(timeline.querySelectorAll('.slot-cell'));
       if (!cells.length) return;
 
@@ -347,13 +343,10 @@ document.addEventListener('DOMContentLoaded', function () {
       function clearSelection() { cells.forEach(c => c.classList.remove('selected')); }
 
       cells.forEach(cell => {
-        // pointerdown for better cross-device behavior
         cell.addEventListener('pointerdown', (e) => {
-          // ignore right click / ctrl etc
           if (e.button && e.button !== 0) return;
           const status = (cell.dataset.status||'available').toLowerCase();
           if (['booked','pending'].includes(status) || cell.classList.contains('bg-secondary')) {
-            // do not start selection on unavailable slots
             return;
           }
           isDragging = true; dragStart = cell; dragEnd = cell;
@@ -396,11 +389,10 @@ document.addEventListener('DOMContentLoaded', function () {
           dragTimer = setTimeout(() => dragTimer = null, 50);
         });
 
-        // click (single)
         cell.addEventListener('click', (e) => {
           if (dragTimer) return;
           const status = (cell.dataset.status || 'available').toLowerCase();
-          if (status === 'pending') return; // handled separately by pending popup
+          if (status === 'pending') return;
           if (status === 'booked' || cell.classList.contains('bg-danger')) {
             Swal.fire({ icon: "error", title: "Time Slot Unavailable", text: "This slot is already booked or blocked.", confirmButtonColor: "#0047AB" });
             return;
@@ -413,7 +405,6 @@ document.addEventListener('DOMContentLoaded', function () {
           openReserve(cell.dataset.roomId, cell.dataset.roomName, formatLocalDate(startDate), formatLocalDate(endDate));
         });
 
-        // global pointerup cleanup
         document.addEventListener('pointerup', () => {
           if (isDragging) { isDragging = false; dragStart = null; dragEnd = null; clearSelection(); }
         });
@@ -421,9 +412,8 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  // --- Pending detail popup (delegated) ---
+  // --- Pending detail popup (unchanged) ---
   function attachPendingDetailHandlers() {
-    // Use event delegation on container
     document.querySelectorAll('.slot-container').forEach(container => {
       container.addEventListener('click', async (ev) => {
         const cell = ev.target.closest('.slot-cell');
@@ -531,13 +521,10 @@ document.addEventListener('DOMContentLoaded', function () {
           const data = await resp.json();
           if (data.success) {
             Swal.fire({ icon: "success", title: "Reservation Cancelled", text: data.message, confirmButtonColor: "#0047AB" });
-            // update UI: find all slots that match the same time range and set to available
             slot.classList.remove('bg-danger','text-white');
             slot.classList.add('bg-success','text-white');
             slot.dataset.status = 'available';
             if (slot.querySelector('.cancel-btn')) slot.querySelector('.cancel-btn').remove();
-
-            // optionally reload to reflect other changes
             setTimeout(() => {
               updatePastSlots();
               attachPendingDetailHandlers();
@@ -552,16 +539,18 @@ document.addEventListener('DOMContentLoaded', function () {
       });
     });
   }
+
+  // --- Repeat daily handling (unchanged) ---
   const repeatDaily = document.getElementById('repeatDaily');
-const repeatUntilContainer = document.getElementById('repeatUntilContainer');
-const repeatUntil = document.getElementById('repeatUntil');
+  const repeatUntilContainer = document.getElementById('repeatUntilContainer');
+  const repeatUntil = document.getElementById('repeatUntil');
 
-repeatDaily?.addEventListener('change', (e) => {
-  repeatUntilContainer.style.display = e.target.checked ? '' : 'none';
-  if (!e.target.checked) repeatUntil.value = '';
-});
+  repeatDaily?.addEventListener('change', (e) => {
+    repeatUntilContainer.style.display = e.target.checked ? '' : 'none';
+    if (!e.target.checked) repeatUntil.value = '';
+  });
 
-  // --- AJAX reservation submit (modal) + immediate UI update ---
+  // --- AJAX reservation submit (modal) + immediate UI update (unchanged) ---
   (function attachReservationSubmit(){
     if (!form) return;
     form.addEventListener("submit", async function (e) {
@@ -573,19 +562,15 @@ repeatDaily?.addEventListener('change', (e) => {
         if (contentType.includes("application/json")) {
           const data = await resp.json();
           if (data.success) {
-            // show success then hide modal and update UI slots to pending (yellow)
             Swal.fire({
               icon: "success",
               title: "Reservation Submitted",
               text: data.message,
               confirmButtonColor: "#0047AB"
             }).then(() => {
-              // hide bootstrap modal
               bsModal.hide();
-              // update slots in UI to pending
               document.querySelectorAll(`.slot-cell[data-room-id='${data.room_id}']`).forEach(cell => {
                 const t = cell.dataset.time;
-                // data.start/end are HH:MM strings per your JSON; handle inclusive check:
                 if (t >= data.start && t < data.end) {
                   cell.classList.remove('bg-success','text-white');
                   cell.classList.add('bg-warning','text-dark');
@@ -593,7 +578,6 @@ repeatDaily?.addEventListener('change', (e) => {
                   cell.title = 'Pending Approval';
                 }
               });
-              // reattach handlers shortly
               setTimeout(() => {
                 updatePastSlots();
                 attachPendingDetailHandlers();
@@ -606,7 +590,6 @@ repeatDaily?.addEventListener('change', (e) => {
             return;
           }
         } else {
-          // fallback reload (server returned HTML or redirect)
           window.location.reload();
         }
       } catch (err) {
@@ -630,23 +613,84 @@ repeatDaily?.addEventListener('change', (e) => {
     attachCancelHandlers();
   });
 });
+
+// Top + sidebar calendar link bindings (keeps your existing behavior)
+document.getElementById('calendarSyncBtn').addEventListener('click', () => {
+  const selectedDate = document.getElementById('viewDate').value;
+  const selectedLocation = document.getElementById('locationFilter').value;
+  window.location.href = `/calendar_view?date=${selectedDate}&location=${selectedLocation}`;
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+    const sidebarCalBtn = document.getElementById("sidebarCalendarBtn");
+    if (sidebarCalBtn) {
+        sidebarCalBtn.addEventListener("click", (e) => {
+            e.preventDefault();
+            const selectedDate = document.getElementById("viewDate")?.value || "";
+            const selectedLocation = document.getElementById("locationFilter")?.value || "all";
+            window.location.href = `/calendar_view?date=${selectedDate}&location=${selectedLocation}`;
+        });
+    }
+});
 </script>
 
 <style>
-/* Visual polish to match sample */
+/* Visual polish & Hybrid responsive behaviour */
 .border-end { border-right: 1px solid #dee2e6 !important; }
+.room-card { border-radius: 12px; overflow: hidden; }
 .room-header { cursor: default; }
 .room-header h5 { font-size: 1.05rem; }
 .timeline { scroll-behavior: smooth; user-select: none; min-height: 84px; align-items: center; }
-.slot-cell { font-size: 0.82rem; font-weight: 600; border-radius: 10px; min-width:72px; width:72px; height:56px; position:relative; }
+
+/* slot-grid default: flex (desktop) to preserve horizontal timeline scroll */
+.slot-grid { display:flex; gap:0.5rem; align-items:center; }
+
+/* slot cell (keeps your existing sizing) */
+.slot-cell { font-size: 0.82rem; font-weight: 600; border-radius: 10px; min-width:72px; width:72px; height:56px; position:relative; transition: transform .12s ease; }
 .slot-cell .slot-time { line-height:1; }
 .slot-cell .slot-duration { font-size:0.68rem; }
 .slot-cell:hover { transform: translateY(-3px); box-shadow: 0 6px 14px rgba(0,0,0,0.06); cursor: pointer; }
 .slot-cell.selected { border: 2px solid #0047AB !important; background-color: #cfe8ff !important; transform: scale(1.04); }
 .slot-cell.bg-success { background-color: #0b8a44 !important; }  /* keep green readable */
 .slot-cell.bg-danger { background-color: #d23a3a !important; }
-.slot-cell.bg-warning { background-color: #ffc107 !important; color: #222; } /* A: Bootstrap yellow chosen */
+.slot-cell.bg-warning { background-color: #ffc107 !important; color: #222; }
 .slot-cell.bg-secondary { background-color: #9fa6ad !important; color:#fff; opacity:0.86; }
 .cancel-btn { border: none; background: rgba(255,255,255,0.95); border-radius: 50%; width:18px; height:18px; padding:0; display:flex; align-items:center; justify-content:center; }
+
+/* Tablet: slightly smaller min widths */
+@media (max-width: 1024px) {
+  .slot-cell { min-width:56px; width:56px; height:48px; }
+  .slot-grid { gap:0.4rem; }
+  .room-header h5 { font-size: 1rem; }
+}
+
+/* Mobile: turn .slot-grid into wrapping grid to make slots readable; timeline remains horizontally scrollable container but grid will wrap */
+@media (max-width: 768px) {
+<!--  .col-md-3 { display: none !important; }-->
+.page-left-panel {
+    display: none !important;
+  }
+  /* hide sidebar on phone (if you already have a toggle in base, this ensures visual consistency) */
+  .room-card { margin-left: 0 !important; margin-right: 0 !important; }
+  .slot-grid {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(48px, 1fr));
+    gap: 0.35rem;
+    align-items: stretch;
+    width: 100%;
+  }
+  .slot-cell { min-width:48px; width:100%; height:42px; font-size:0.75rem; padding:6px 4px; }
+  .room-header { padding-right: 0.5rem; padding-left:0.5rem; }
+  .room-header h5 { font-size: 0.95rem; }
+  .room-header .badge { display:none; } /* compress header on phone for space */
+  .slot-container { padding:0 8px; }
+}
+
+/* Accessibility & touch target */
+.slot-cell { touch-action: manipulation; -webkit-tap-highlight-color: rgba(0,0,0,0); }
+
+/* Keep timeline scrollbars neat */
+.timeline::-webkit-scrollbar { height:8px; }
+.timeline::-webkit-scrollbar-thumb { background:#cfd8e3; border-radius:4px; }
 </style>
 {% endblock %}

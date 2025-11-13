@@ -55,3 +55,10 @@ body {
   opacity: 0.9;
 }
 
+.page-left-panel {
+  z-index: 1;
+}
+
+.sidebar {
+  z-index: 2000 !important;   /* Ensure real sidebar always stays above */
+}

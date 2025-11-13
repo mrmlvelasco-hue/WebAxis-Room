@@ -36,18 +36,25 @@ app.secret_key = FLASK_SECRET_KEY or os.urandom(24)
 app.permanent_session_lifetime = timedelta(days=7)
 
 def get_db_connection():
+    """
+    SQL Server 2008 compatible connection.
+    Force TLS off and trust certificate.
+    """
     driver = '{ODBC Driver 17 for SQL Server}'
-    encrypt_option = 'yes' if str(DB_ENCRYPT).lower() == 'yes' else 'no'
+
     conn_str = (
-        f'DRIVER={driver};'
-        f'SERVER={DB_HOST};'
-        f'DATABASE={DB_DATABASE};'
-        f'UID={DB_USERNAME};'
-        f'PWD={DB_PASSWORD};'
-        f'Encrypt={encrypt_option};'
-        f'TrustServerCertificate=yes;'
+        f"DRIVER={driver};"
+        f"SERVER={DB_HOST};"
+        f"DATABASE={DB_DATABASE};"
+        f"UID={DB_USERNAME};"
+        f"PWD={DB_PASSWORD};"
+        "Encrypt=no;"
+        "TrustServerCertificate=yes;"
     )
+
     return pyodbc.connect(conn_str, autocommit=False)
+
+
 
 login_manager = LoginManager()
 login_manager.login_view = 'login'
