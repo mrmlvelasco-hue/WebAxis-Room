@@ -131,566 +131,652 @@
 </div>
 
 <!-- Reservation Modal -->
-<div class="modal fade" id="newReservationModal" tabindex="-1" aria-labelledby="newReservationModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <form id="reservationForm" method="POST">
+<!-- RESERVATION MODAL w/ Recurrence -->
+<!-- RESERVATION MODAL w/ Recurrence (replace existing) -->
+<!-- ======================== -->
+<!-- RESERVATION MODAL (FULL) -->
+<!-- ======================== -->
+<div class="modal fade" id="newReservationModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <form id="reservationForm">
+
       <div class="modal-content">
+
+        <!-- HEADER -->
         <div class="modal-header">
-          <h5 class="modal-title" id="newReservationModalLabel">New Reservation</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          <h5 class="modal-title fw-bold">New Reservation</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
+
+        <!-- BODY -->
         <div class="modal-body">
+
+          <!-- Room -->
           <input type="hidden" id="modalRoomId" name="room_id">
-          <div class="mb-2">
-            <label class="form-label">Room</label>
-            <div id="modalRoomName" class="fw-semibold"></div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Room</label>
+            <div id="modalRoomName" class="fw-bold"></div>
           </div>
-          <div class="row g-2">
-            <div class="col-12">
-              <label for="modalStartTime" class="form-label">Start</label>
+
+          <!-- Start / End -->
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Start</label>
               <input id="modalStartTime" name="start_time" type="datetime-local" class="form-control" required>
             </div>
-            <div class="col-12">
-              <label for="modalEndTime" class="form-label">End</label>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">End</label>
               <input id="modalEndTime" name="end_time" type="datetime-local" class="form-control" required>
             </div>
           </div>
 
-          <div class="form-check mt-2">
-            <input class="form-check-input" type="checkbox" id="repeatDaily" name="repeat_daily">
-            <label class="form-check-label" for="repeatDaily">Repeat daily</label>
-          </div>
-          <div id="repeatUntilContainer" class="mt-2" style="display:none;">
-            <label for="repeatUntil" class="form-label">Repeat until</label>
-            <input id="repeatUntil" name="repeat_until" type="date" class="form-control">
-          </div>
-
-          <div class="mt-2">
-            <label for="modalReservedBy" class="form-label">Reserved By</label>
-            <input id="modalReservedBy" name="reserved_by" type="text" class="form-control"
+          <!-- Reserved By -->
+          <div class="mt-3">
+            <label class="form-label fw-semibold">Reserved By</label>
+            <input id="modalReservedBy" name="reserved_by" class="form-control"
                    value="{{ current_user.display_name or current_user.username }}" required>
           </div>
+
+          <!-- Email -->
           <div class="mt-2">
-            <label for="modalEmail" class="form-label">Email</label>
+            <label class="form-label fw-semibold">Email</label>
             <input id="modalEmail" name="email" type="email" class="form-control"
                    value="{{ current_user.email or '' }}">
           </div>
+
+          <!-- Remarks -->
           <div class="mt-2">
-            <label for="modalRemarks" class="form-label">Remarks</label>
-            <textarea id="modalRemarks" name="remarks" class="form-control" rows="2" placeholder="Optional"></textarea>
+            <label class="form-label fw-semibold">Remarks</label>
+            <textarea id="modalRemarks" name="remarks" class="form-control" rows="2"></textarea>
           </div>
+
+          <hr class="my-4">
+
+          <!-- ======================== -->
+          <!-- RECURRENCE UI -->
+          <!-- ======================== -->
+          <h6 class="fw-bold">Repeat</h6>
+
+          <!-- Recurrence Type -->
+          <div class="mb-2">
+            <select id="recurrenceType" name="recurrence_type" class="form-select form-select-sm">
+              <option value="none">No repeat</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
+
+          <!-- WEEKLY Options -->
+          <div id="weeklyOptions" class="mb-3" style="display:none;">
+            <label class="form-label small fw-semibold">Repeat on:</label>
+            <div class="d-flex flex-wrap gap-3 mb-2">
+              <label class="form-check"><input class="form-check-input wkday" value="MO" type="checkbox"> Mon</label>
+              <label class="form-check"><input class="form-check-input wkday" value="TU" type="checkbox"> Tue</label>
+              <label class="form-check"><input class="form-check-input wkday" value="WE" type="checkbox"> Wed</label>
+              <label class="form-check"><input class="form-check-input wkday" value="TH" type="checkbox"> Thu</label>
+              <label class="form-check"><input class="form-check-input wkday" value="FR" type="checkbox"> Fri</label>
+              <label class="form-check"><input class="form-check-input wkday" value="SA" type="checkbox"> Sat</label>
+              <label class="form-check"><input class="form-check-input wkday" value="SU" type="checkbox"> Sun</label>
+            </div>
+
+            <div class="row g-2">
+              <div class="col-auto">
+                <label class="form-label small">Every</label>
+                <input id="weeklyInterval" name="weekly_interval" type="number" min="1" value="1"
+                       class="form-control form-control-sm" style="width:90px;">
+              </div>
+              <div class="col-auto d-flex align-items-end">weeks</div>
+            </div>
+          </div>
+
+          <!-- MONTHLY Options -->
+          <div id="monthlyOptions" class="mb-3" style="display:none;">
+            <label class="form-label small fw-semibold">Monthly pattern:</label>
+
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="monthly_mode" value="date" checked>
+              <label class="form-check-label">Same date each month (e.g., 15th)</label>
+            </div>
+
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="monthly_mode" value="weekday">
+              <label class="form-check-label">Same weekday each month (e.g., 3rd Monday)</label>
+            </div>
+
+            <div class="row g-2 mt-2">
+              <div class="col-auto">
+                <label class="form-label small">Every</label>
+                <input id="monthlyInterval" name="monthly_interval" type="number" min="1" value="1"
+                       class="form-control form-control-sm" style="width:90px;">
+              </div>
+              <div class="col-auto d-flex align-items-end">months</div>
+            </div>
+          </div>
+
+          <!-- END OPTIONS -->
+          <h6 class="fw-bold mt-3">Ends</h6>
+
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="end_mode" id="end_never" value="never" checked>
+            <label class="form-check-label">Never (max 1 year)</label>
+          </div>
+
+          <div class="form-check mt-1">
+            <input class="form-check-input" type="radio" name="end_mode" id="end_on" value="on">
+            <label class="form-check-label">On date</label>
+            <input id="endOnDate" name="end_on_date" type="date" class="form-control form-control-sm mt-1" disabled>
+          </div>
+
+          <div class="form-check mt-1">
+            <input class="form-check-input" type="radio" name="end_mode" id="end_after" value="after">
+            <label class="form-check-label">After</label>
+            <input id="endAfterCount" name="end_after_count" type="number" min="1" value="10"
+                   class="form-control form-control-sm d-inline-block ms-2" style="width:100px;" disabled>
+            <span class="small">occurrences</span>
+          </div>
+
+          <small class="text-muted d-block mt-2">
+            Note: Conflicted dates will be skipped but shown in summary.
+          </small>
+
         </div>
+
+        <!-- FOOTER -->
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-primary">Submit Reservation</button>
+          <button type="submit" class="btn btn-primary fw-semibold" id="reserveSubmitBtn">Submit Reservation</button>
         </div>
+
       </div>
     </form>
   </div>
 </div>
+
+
 {% endblock %}
 
 {% block scripts %}
 <script>
-document.addEventListener('DOMContentLoaded', function () {
-  // Keep your original references and logic — minimal additions only
-  const modalEl = document.getElementById('newReservationModal');
-  const bsModal = new bootstrap.Modal(modalEl);
-  const form = document.getElementById('reservationForm');
-  const locationFilter = document.getElementById('locationFilter');
-  const viewDate = document.getElementById('viewDate');
-  const today = new Date().toISOString().slice(0, 10);
+/* ========================================================================
+   WebAXIS RoomSys — FINAL PATCHED UNIFIED JS
+   ======================================================================== */
 
-  // --- Persist selected date ---
-  if (localStorage.getItem("selectedDate")) {
-    viewDate.value = localStorage.getItem("selectedDate");
-  }
-  viewDate.addEventListener("change", () => {
-    localStorage.setItem("selectedDate", viewDate.value);
-  });
+let submitting = false;
 
-  // --- Filter persistence and normalization (unchanged) ---
-  const savedFilter = localStorage.getItem('roomFilter') || 'all';
-  locationFilter.value = savedFilter;
-  applyFilter();
-  function applyFilter() {
-    const selected = (locationFilter.value || 'all').trim();
-    localStorage.setItem('roomFilter', selected);
-    document.querySelectorAll('.room-row').forEach(r => {
-      const loc = (r.dataset.location || '').trim();
-      r.style.display = (selected === 'all' || loc === selected) ? '' : 'none';
-    });
-  }
-  locationFilter.addEventListener('change', applyFilter);
+/* ---------------------------
+   Helper: Weekday Code (MO/TU)
+   --------------------------- */
+function getJsWeekday(date) {
+    const map = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+    return map[date.getDay()];
+}
 
-  // --- Helper to format local datetime for inputs ---
-  function formatLocalDate(dateObj) {
+/* ---------------------------
+   Helper: Format for datetime-local
+   --------------------------- */
+function formatLocalDate(dateObj) {
     const y = dateObj.getFullYear();
     const m = String(dateObj.getMonth() + 1).padStart(2, '0');
     const d = String(dateObj.getDate()).padStart(2, '0');
     const h = String(dateObj.getHours()).padStart(2, '0');
     const min = String(dateObj.getMinutes()).padStart(2, '0');
     return `${y}-${m}-${d}T${h}:${min}`;
-  }
+}
 
-  // --- Open reserve modal (unchanged) ---
-  function openReserve(roomId, roomName, startTime, endTime) {
-    document.getElementById('modalRoomId').value = roomId;
-    document.getElementById('modalRoomName').textContent = roomName;
-    document.getElementById('modalStartTime').value = startTime;
-    document.getElementById('modalEndTime').value = endTime;
-    form.action = `/reserve_post/${roomId}`;
-    bsModal.show();
-  }
-
-  // --- Slot coloring and state management (kept as original) ---
-  function updatePastSlots() {
-    const selectedStr = viewDate.value;
-    const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
-
-    document.querySelectorAll('.slot-cell').forEach(cell => {
-      const status = (cell.dataset.status || 'available').toLowerCase();
-      cell.classList.remove('bg-success','bg-danger','bg-warning','bg-secondary','text-white','text-dark');
-      cell.style.pointerEvents = '';
-
-      if (status === 'booked') {
-        cell.classList.add('bg-danger','text-white');
-        cell.style.pointerEvents = 'auto';
-        cell.title = cell.title || 'Booked';
-        return;
-      }
-      if (status === 'pending') {
-        cell.classList.add('bg-warning','text-dark');
-        cell.style.pointerEvents = 'auto';
-        cell.title = cell.title || 'Pending approval — click for details';
-        return;
-      }
-
-      if (!selectedStr) return;
-      if (selectedStr < todayStr) {
-        cell.classList.add('bg-secondary','text-white');
-        cell.style.pointerEvents = 'none';
-        cell.title = 'Past';
-        return;
-      }
-      if (selectedStr === todayStr) {
-        const slotDate = new Date(`${selectedStr}T${cell.dataset.time}:00`);
-        if (slotDate < now) {
-          cell.classList.add('bg-secondary','text-white');
-          cell.style.pointerEvents = 'none';
-          cell.title = 'Past';
-        } else {
-          cell.classList.add('bg-success','text-white');
-          cell.title = 'Available';
-        }
-        return;
-      }
-      cell.classList.add('bg-success','text-white');
-      cell.title = 'Available';
-    });
-  }
-
-  // --- Auto scroll to nearest available slot for today (unchanged) ---
-  function autoScrollToCurrentSlot() {
-    const todayStr = new Date().toISOString().slice(0,10);
-    document.querySelectorAll('.timeline').forEach(timeline => {
-      const slots = Array.from(timeline.querySelectorAll('.slot-cell'));
-      if (!slots.length) return;
-      if (viewDate.value === todayStr) {
-        const now = new Date();
-        const upcoming = slots.find(s => {
-          const st = new Date(`${viewDate.value}T${s.dataset.time}:00`);
-          return st > now && !s.classList.contains('bg-danger');
-        });
-        if (upcoming) timeline.scrollTo({ left: Math.max(0, upcoming.offsetLeft - 120), behavior: 'smooth' });
-        else timeline.scrollTo({ left: 0, behavior: 'smooth' });
-      } else {
-        timeline.scrollTo({ left: 0, behavior: 'smooth' });
-      }
-    });
-  }
-
-  // initial color + scroll
-  updatePastSlots();
-  autoScrollToCurrentSlot();
-
-  // --- Refresh & date navigation (unchanged) ---
-  document.getElementById('refreshBtn').addEventListener('click', () => {
-    const selected = viewDate.value;
-    window.location.href = `/rooms?date=${selected}`;
-  });
-
-  document.getElementById('calendarSyncBtn').addEventListener('click', () => {
-    const selected = viewDate.value;
-    const location = document.getElementById('locationFilter').value;
-    window.location.href = `/calendar_view?date=${selected}&location=${location}`;
-  });
-
-  viewDate.addEventListener('change', () => {
-    window.location.href = `/rooms?date=${viewDate.value}`;
-  });
-
-  // --- Selection (drag) handling (keeps your logic intact) ---
-  function attachSlotSelectionHandlers() {
-    document.querySelectorAll('.timeline').forEach(timeline => {
-      // now timeline.querySelectorAll('.slot-cell') still finds slot-cells inside .slot-grid
-      const cells = Array.from(timeline.querySelectorAll('.slot-cell'));
-      if (!cells.length) return;
-
-      let isDragging = false, dragStart = null, dragEnd = null, dragTimer = null;
-
-      function clearSelection() { cells.forEach(c => c.classList.remove('selected')); }
-
-      cells.forEach(cell => {
-        cell.addEventListener('pointerdown', (e) => {
-          if (e.button && e.button !== 0) return;
-          const status = (cell.dataset.status||'available').toLowerCase();
-          if (['booked','pending'].includes(status) || cell.classList.contains('bg-secondary')) {
-            return;
-          }
-          isDragging = true; dragStart = cell; dragEnd = cell;
-          clearSelection();
-          cell.classList.add('selected');
-          e.preventDefault();
-        });
-
-        cell.addEventListener('pointerenter', () => {
-          if (!isDragging || !dragStart) return;
-          dragEnd = cell;
-          const startIndex = cells.indexOf(dragStart);
-          const endIndex = cells.indexOf(dragEnd);
-          const [min, max] = [Math.min(startIndex, endIndex), Math.max(startIndex, endIndex)];
-          cells.forEach((c,i) => c.classList.toggle('selected', i>=min && i<=max));
-        });
-
-        cell.addEventListener('pointerup', (e) => {
-          if (!isDragging || !dragStart) return;
-          const startIndex = cells.indexOf(dragStart);
-          const endIndex = cells.indexOf(dragEnd);
-          const [min, max] = [Math.min(startIndex, endIndex), Math.max(startIndex, endIndex)];
-          const selected = cells.slice(min, max+1);
-          const invalid = selected.some(c => {
-            const st = (c.dataset.status||'available').toLowerCase();
-            return ['booked','pending'].includes(st) || c.classList.contains('bg-secondary');
-          });
-          if (invalid) {
-            Swal.fire('⚠️ Slot Not Available', 'This range includes booked, pending, or unavailable slots.', 'warning');
-            isDragging = false; dragStart = null; dragEnd = null; clearSelection();
-            return;
-          }
-          const dateValue = viewDate.value;
-          const start = selected[0].dataset.time;
-          const end = selected[selected.length-1].dataset.time;
-          const startDate = new Date(`${dateValue}T${start}:00`);
-          const endDate = new Date(`${dateValue}T${end}:00`); endDate.setMinutes(endDate.getMinutes()+30);
-          openReserve(selected[0].dataset.roomId, selected[0].dataset.roomName, formatLocalDate(startDate), formatLocalDate(endDate));
-          isDragging = false; dragStart = null; dragEnd = null; clearSelection();
-          dragTimer = setTimeout(() => dragTimer = null, 50);
-        });
-
-        cell.addEventListener('click', (e) => {
-          if (dragTimer) return;
-          const status = (cell.dataset.status || 'available').toLowerCase();
-          if (status === 'pending') return;
-          if (status === 'booked' || cell.classList.contains('bg-danger')) {
-            Swal.fire({ icon: "error", title: "Time Slot Unavailable", text: "This slot is already booked or blocked.", confirmButtonColor: "#0047AB" });
-            return;
-          }
-          if (cell.classList.contains('bg-secondary')) return;
-          const dateValue = viewDate.value;
-          const [h,m] = cell.dataset.time.split(':');
-          const startDate = new Date(`${dateValue}T${h}:${m}:00`);
-          const endDate = new Date(startDate); endDate.setMinutes(endDate.getMinutes()+30);
-          openReserve(cell.dataset.roomId, cell.dataset.roomName, formatLocalDate(startDate), formatLocalDate(endDate));
-        });
-
-        document.addEventListener('pointerup', () => {
-          if (isDragging) { isDragging = false; dragStart = null; dragEnd = null; clearSelection(); }
-        });
-      });
-    });
-  }
-
-  // --- Pending detail popup (unchanged) ---
-  function attachPendingDetailHandlers() {
-    document.querySelectorAll('.slot-container').forEach(container => {
-      container.addEventListener('click', async (ev) => {
-        const cell = ev.target.closest('.slot-cell');
-        if (!cell) return;
-        if ((cell.dataset.status || '').toLowerCase() !== 'pending') return;
-        ev.stopPropagation();
-
-        const roomId = cell.dataset.roomId;
-        const date = viewDate.value;
-        const time = cell.dataset.time;
-        try {
-          const resp = await fetch(`/api/room_availability/${roomId}?date=${date}`);
-          const data = await resp.json();
-          const res = data.find(r => time >= r.start && time < r.end && (r.status||'').toLowerCase() === 'pending');
-          if (!res) {
-            Swal.fire({ icon: 'info', title: 'No Details Found', text: 'This pending slot has no record.', confirmButtonColor: '#0047AB' });
-            return;
-          }
-
-          let html = `
-            <div style="text-align:left">
-              <p><strong>Room:</strong> ${cell.dataset.roomName}</p>
-              <p><strong>Requested By:</strong> ${res.reserved_by}</p>
-              <p><strong>Email:</strong> ${res.email || 'N/A'}</p>
-              <p><strong>Time:</strong> ${res.start} – ${res.end}</p>
-              <p><strong>Remarks:</strong> ${res.remarks || 'None'}</p>
-              <p><strong>Status:</strong> <span style="color:orange;">Pending Approval</span></p>
-            </div>`;
-
-          const isAdmin = "{{ 'true' if current_user.is_admin() else 'false' }}" === "true";
-          if (isAdmin) {
-            html += `<div style="margin-top:1rem;text-align:center;">
-                      <button id="approveBtn" class="swal2-confirm swal2-styled" style="background:#28a745;margin-right:8px;">Approve</button>
-                      <button id="denyBtn" class="swal2-cancel swal2-styled" style="background:#dc3545;">Reject</button>
-                     </div>`;
-          }
-
-          Swal.fire({
-            title: 'Pending Reservation',
-            html,
-            showConfirmButton: false,
-            width: 560,
-            didRender: () => {
-              if (isAdmin) {
-                document.getElementById('approveBtn').addEventListener('click', async () => {
-                  await handleApproval(res.id, 'approve');
-                });
-                document.getElementById('denyBtn').addEventListener('click', async () => {
-                  await handleApproval(res.id, 'deny');
-                });
-              }
-            }
-          });
-        } catch (err) {
-          console.error('⚠️ Error loading pending details:', err);
-          Swal.fire('Error', 'Failed to load reservation details.', 'error');
-        }
-      });
-    });
-  }
-
-  async function handleApproval(resId, action) {
-    try {
-      const resp = await fetch(`/approvals/${resId}/${action}`, { method: 'POST' });
-      if (resp.ok || resp.redirected) {
-        Swal.fire({ icon: 'success', title: `Reservation ${action === 'approve' ? 'Approved' : 'Rejected'}`, confirmButtonColor: '#0047AB' })
-        .then(() => window.location.reload());
-      } else {
-        Swal.fire({ icon: 'error', title: 'Action Failed', text: 'Please try again.', confirmButtonColor: '#0047AB' });
-      }
-    } catch (err) {
-      console.error('Approval error', err);
-      Swal.fire({ icon: 'error', title: 'System Error' });
-    }
-  }
-
-  // --- Cancel reservation (delegated + confirm + ajax) ---
-  function attachCancelHandlers() {
-    document.querySelectorAll('.slot-container').forEach(container => {
-      container.addEventListener('click', async (ev) => {
-        const btn = ev.target.closest('.cancel-btn');
-        if (!btn) return;
-        ev.stopPropagation();
-        const slot = btn.closest('.slot-cell');
-        const resId = slot.dataset.resId;
-        const roomName = slot.dataset.roomName;
-        const time = slot.dataset.time;
-        if (!resId) {
-          Swal.fire({ icon: "info", title: "Missing Reservation ID", text: "This booking isn’t linked to a valid record.", confirmButtonColor: "#0047AB" });
-          return;
-        }
-        const confirmed = await Swal.fire({
-          icon: "warning",
-          title: "Cancel Reservation?",
-          html: `<p><b>Room:</b> ${roomName}<br><b>Time:</b> ${time}</p><p class="text-danger"><b>This action cannot be undone.</b></p>`,
-          showCancelButton: true,
-          confirmButtonText: "Yes, Cancel It",
-          cancelButtonText: "No, Keep It",
-          confirmButtonColor: "#d33",
-          cancelButtonColor: "#6c757d"
-        });
-        if (!confirmed.isConfirmed) return;
-        try {
-          const resp = await fetch(`/api/cancel_reservation/${resId}`, { method: "POST" });
-          const data = await resp.json();
-          if (data.success) {
-            Swal.fire({ icon: "success", title: "Reservation Cancelled", text: data.message, confirmButtonColor: "#0047AB" });
-            slot.classList.remove('bg-danger','text-white');
-            slot.classList.add('bg-success','text-white');
-            slot.dataset.status = 'available';
-            if (slot.querySelector('.cancel-btn')) slot.querySelector('.cancel-btn').remove();
-            setTimeout(() => {
-              updatePastSlots();
-              attachPendingDetailHandlers();
-            }, 150);
-          } else {
-            Swal.fire({ icon: "error", title: "Cancel Failed", text: data.message || "Unable to cancel reservation.", confirmButtonColor: "#0047AB" });
-          }
-        } catch (err) {
-          console.error("⚠️ Cancel error:", err);
-          Swal.fire({ icon: "error", title: "System Error", text: "Failed to cancel reservation. Please try again.", confirmButtonColor: "#0047AB" });
-        }
-      });
-    });
-  }
-
-  // --- Repeat daily handling (unchanged) ---
-  const repeatDaily = document.getElementById('repeatDaily');
-  const repeatUntilContainer = document.getElementById('repeatUntilContainer');
-  const repeatUntil = document.getElementById('repeatUntil');
-
-  repeatDaily?.addEventListener('change', (e) => {
-    repeatUntilContainer.style.display = e.target.checked ? '' : 'none';
-    if (!e.target.checked) repeatUntil.value = '';
-  });
-
-  // --- AJAX reservation submit (modal) + immediate UI update (unchanged) ---
-  (function attachReservationSubmit(){
-    if (!form) return;
-    form.addEventListener("submit", async function (e) {
-      e.preventDefault();
-      const formData = new FormData(form);
-      try {
-        const resp = await fetch(form.action, { method: "POST", body: formData });
-        const contentType = resp.headers.get("content-type") || "";
-        if (contentType.includes("application/json")) {
-          const data = await resp.json();
-          if (data.success) {
-            Swal.fire({
-              icon: "success",
-              title: "Reservation Submitted",
-              text: data.message,
-              confirmButtonColor: "#0047AB"
-            }).then(() => {
-              bsModal.hide();
-              document.querySelectorAll(`.slot-cell[data-room-id='${data.room_id}']`).forEach(cell => {
-                const t = cell.dataset.time;
-                if (t >= data.start && t < data.end) {
-                  cell.classList.remove('bg-success','text-white');
-                  cell.classList.add('bg-warning','text-dark');
-                  cell.dataset.status = 'pending';
-                  cell.title = 'Pending Approval';
-                }
-              });
-              setTimeout(() => {
-                updatePastSlots();
-                attachPendingDetailHandlers();
-                attachCancelHandlers();
-              }, 150);
-            });
-            return;
-          } else {
-            Swal.fire({ icon: "error", title: "Reservation Failed", text: data.message || "Unknown error occurred.", confirmButtonColor: "#0047AB" });
-            return;
-          }
-        } else {
-          window.location.reload();
-        }
-      } catch (err) {
-        console.error("⚠️ Error submitting reservation:", err);
-        Swal.fire({ icon: "error", title: "System Error", text: "There was a problem submitting your reservation. Please try again.", confirmButtonColor: "#0047AB" });
-      }
-    });
-  })();
-
-  // Initial attach
-  attachSlotSelectionHandlers();
-  attachPendingDetailHandlers();
-  attachCancelHandlers();
-
-  // Reapply on page show (back/forward navigation)
-  window.addEventListener('pageshow', () => {
-    updatePastSlots();
-    autoScrollToCurrentSlot();
-    attachSlotSelectionHandlers();
-    attachPendingDetailHandlers();
-    attachCancelHandlers();
-  });
-});
-
-// Top + sidebar calendar link bindings (keeps your existing behavior)
-document.getElementById('calendarSyncBtn').addEventListener('click', () => {
-  const selectedDate = document.getElementById('viewDate').value;
-  const selectedLocation = document.getElementById('locationFilter').value;
-  window.location.href = `/calendar_view?date=${selectedDate}&location=${selectedLocation}`;
-});
-
+/* ========================================================================
+   MAIN SCRIPT
+   ======================================================================== */
 document.addEventListener("DOMContentLoaded", () => {
-    const sidebarCalBtn = document.getElementById("sidebarCalendarBtn");
-    if (sidebarCalBtn) {
-        sidebarCalBtn.addEventListener("click", (e) => {
-            e.preventDefault();
-            const selectedDate = document.getElementById("viewDate")?.value || "";
-            const selectedLocation = document.getElementById("locationFilter")?.value || "all";
-            window.location.href = `/calendar_view?date=${selectedDate}&location=${selectedLocation}`;
+
+    /* ELEMENT REFERENCES */
+    const form = document.getElementById("reservationForm");
+    const modalEl = document.getElementById("newReservationModal");
+    const modal = new bootstrap.Modal(modalEl);
+
+    const recType = document.getElementById("recurrenceType");
+    const weeklyOptions = document.getElementById("weeklyOptions");
+    const monthlyOptions = document.getElementById("monthlyOptions");
+
+    const locationFilter = document.getElementById("locationFilter");
+    const viewDate = document.getElementById("viewDate");
+
+    const endOnDate = document.getElementById("endOnDate");
+    const endAfterCount = document.getElementById("endAfterCount");
+
+    /* ------------------------------
+       Restore Date Picker state
+       ------------------------------ */
+    function refreshEndModeState() {
+        endOnDate.disabled = !document.getElementById("end_on").checked;
+        endAfterCount.disabled = !document.getElementById("end_after").checked;
+    }
+
+    refreshEndModeState();
+
+    document.querySelectorAll("input[name='end_mode']").forEach(r => {
+        r.addEventListener("change", refreshEndModeState);
+    });
+
+    /* ------------------------------
+       Recurrence Type Switching
+       ------------------------------ */
+    recType.addEventListener("change", () => {
+        weeklyOptions.style.display = recType.value === "weekly" ? "block" : "none";
+        monthlyOptions.style.display = recType.value === "monthly" ? "block" : "none";
+    });
+
+    /* ------------------------------
+       Date Persistence
+       ------------------------------ */
+    if (localStorage.getItem("selectedDate"))
+        viewDate.value = localStorage.getItem("selectedDate");
+
+    viewDate.addEventListener("change", () => {
+        localStorage.setItem("selectedDate", viewDate.value);
+        window.location.href = `/rooms?date=${viewDate.value}`;
+    });
+
+    /* ------------------------------
+       Location Filter
+       ------------------------------ */
+    const savedFilter = localStorage.getItem('roomFilter') || 'all';
+    locationFilter.value = savedFilter;
+
+    function applyFilter() {
+        const selected = (locationFilter.value || 'all').trim();
+        localStorage.setItem('roomFilter', selected);
+        document.querySelectorAll('.room-row').forEach(r => {
+            const loc = (r.dataset.location || '').trim();
+            r.style.display = (selected === 'all' || loc === selected) ? '' : 'none';
         });
     }
+    applyFilter();
+    locationFilter.addEventListener('change', applyFilter);
+
+    /* ====================================================================
+       TIMELINE SLOT COLORING
+       ==================================================================== */
+    function updatePastSlots() {
+        const selectedStr = viewDate.value;
+        const now = new Date();
+        const todayStr = now.toISOString().slice(0, 10);
+
+        document.querySelectorAll('.slot-cell').forEach(cell => {
+
+            const status = (cell.dataset.status || 'available').toLowerCase();
+            cell.classList.remove('bg-success','bg-danger','bg-warning','bg-secondary','text-white','text-dark');
+            cell.style.pointerEvents = '';
+
+            if (status === 'booked') {
+                cell.classList.add('bg-danger','text-white');
+                return;
+            }
+
+            if (status === 'pending') {
+                cell.classList.add('bg-warning','text-dark');
+                return;
+            }
+
+            if (selectedStr < todayStr) {
+                cell.classList.add('bg-secondary','text-white');
+                cell.style.pointerEvents = 'none';
+                return;
+            }
+
+            if (selectedStr === todayStr) {
+                const slotDate = new Date(`${selectedStr}T${cell.dataset.time}:00`);
+                if (slotDate < now) {
+                    cell.classList.add('bg-secondary','text-white');
+                    cell.style.pointerEvents = 'none';
+                } else {
+                    cell.classList.add('bg-success','text-white');
+                }
+                return;
+            }
+
+            cell.classList.add('bg-success','text-white');
+        });
+    }
+
+    /* ------------------------------
+       Auto Scroll to Next Slot
+       ------------------------------ */
+    function autoScrollToCurrentSlot() {
+        const todayStr = new Date().toISOString().slice(0,10);
+
+        document.querySelectorAll('.timeline').forEach(timeline => {
+            const slots = [...timeline.querySelectorAll('.slot-cell')];
+            if (!slots.length) return;
+
+            if (viewDate.value === todayStr) {
+                const now = new Date();
+
+                const upcoming = slots.find(s => {
+                    const st = new Date(`${viewDate.value}T${s.dataset.time}:00`);
+                    return st > now && !s.classList.contains('bg-danger');
+                });
+
+                if (upcoming)
+                    timeline.scrollTo({ left: upcoming.offsetLeft - 120, behavior: 'smooth' });
+            }
+        });
+    }
+
+    /* ====================================================================
+       DRAG TO SELECT SLOTS
+       ==================================================================== */
+    function attachSlotSelectionHandlers() {
+        document.querySelectorAll('.timeline').forEach(timeline => {
+
+            const cells = [...timeline.querySelectorAll('.slot-cell')];
+            if (!cells.length) return;
+
+            let isDragging = false, dragStart = null, dragEnd = null;
+
+            function clearSel() { cells.forEach(c => c.classList.remove('selected')); }
+
+            cells.forEach(cell => {
+                cell.addEventListener('pointerdown', (e) => {
+                    if (e.button !== 0) return;
+
+                    const status = (cell.dataset.status||'available').toLowerCase();
+                    if (['booked','pending'].includes(status) || cell.classList.contains('bg-secondary')) return;
+
+                    isDragging = true;
+                    dragStart = cell;
+                    dragEnd = cell;
+
+                    clearSel();
+                    cell.classList.add('selected');
+                });
+
+                cell.addEventListener('pointerenter', () => {
+                    if (!isDragging) return;
+
+                    dragEnd = cell;
+
+                    const startIndex = cells.indexOf(dragStart);
+                    const endIndex = cells.indexOf(dragEnd);
+
+                    const min = Math.min(startIndex, endIndex);
+                    const max = Math.max(startIndex, endIndex);
+
+                    cells.forEach((c, i) => c.classList.toggle('selected', i >= min && i <= max));
+                });
+
+                cell.addEventListener('pointerup', () => {
+                    if (!isDragging) return;
+                    isDragging = false;
+
+                    const startIndex = cells.indexOf(dragStart);
+                    const endIndex = cells.indexOf(dragEnd);
+
+                    const min = Math.min(startIndex, endIndex);
+                    const max = Math.max(startIndex, endIndex);
+
+                    const selected = cells.slice(min, max+1);
+
+                    const invalid = selected.some(c => {
+                        const st = (c.dataset.status||'available').toLowerCase();
+                        return ['booked','pending'].includes(st) || c.classList.contains('bg-secondary');
+                    });
+
+                    if (invalid) {
+                        Swal.fire("Slot Not Available", "Selected slots include booked or pending slots.", "warning");
+                        clearSel();
+                        return;
+                    }
+
+                    const dateValue = viewDate.value;
+                    const start = selected[0].dataset.time;
+                    const end = selected[selected.length-1].dataset.time;
+
+                    let st = new Date(`${dateValue}T${start}:00`);
+                    let et = new Date(`${dateValue}T${end}:00`);
+                    et.setMinutes(et.getMinutes() + 30);
+
+                    openReserve(selected[0].dataset.roomId, selected[0].dataset.roomName, formatLocalDate(st), formatLocalDate(et));
+
+                    clearSel();
+                });
+            });
+
+            document.addEventListener('pointerup', () => {
+                isDragging = false;
+            });
+        });
+    }
+
+    /* ====================================================================
+       OPEN MODAL
+       ==================================================================== */
+    function openReserve(roomId, roomName, startTime, endTime) {
+        document.getElementById('modalRoomId').value = roomId;
+        document.getElementById('modalRoomName').textContent = roomName;
+        document.getElementById('modalStartTime').value = startTime;
+        document.getElementById('modalEndTime').value = endTime;
+        modal.show();
+    }
+
+    /* ====================================================================
+       SUBMIT RESERVATION + RECURRING
+       ==================================================================== */
+    form.addEventListener("submit", (e) => {
+        e.preventDefault();
+
+        if (submitting) return;
+
+        const start = document.getElementById("modalStartTime").value;
+        const end = document.getElementById("modalEndTime").value;
+
+        if (!start || !end) {
+            Swal.fire("Invalid", "Start and end time required.", "error");
+            return;
+        }
+
+        /* WEEKLY mismatch warning */
+        if (recType.value === "weekly") {
+            const weekdays = [];
+            document.querySelectorAll(".wkday").forEach(cb => {
+                if (cb.checked) weekdays.push(cb.value);
+            });
+
+            const startDate = new Date(start);
+            const wk = getJsWeekday(startDate);
+
+            if (weekdays.length && !weekdays.includes(wk)) {
+
+                let nextMatch = new Date(startDate);
+                for (let i = 1; i <= 14; i++) {
+                    const d = new Date(startDate);
+                    d.setDate(d.getDate() + i);
+                    if (weekdays.includes(getJsWeekday(d))) {
+                        nextMatch = d;
+                        break;
+                    }
+                }
+
+                return Swal.fire({
+                    icon: "warning",
+                    title: "Start date mismatch",
+                    html: `
+                        Your start date is <b>${startDate.toDateString()}</b><br>
+                        Recurs on: <b>${weekdays.join(", ")}</b><br><br>
+                        Next matching date:<br><b>${nextMatch}</b>
+                    `,
+                    showCancelButton: true,
+                    showDenyButton: true,
+                    confirmButtonText: "Adjust automatically",
+                    denyButtonText: "I'll fix manually"
+                }).then(result => {
+                    if (result.isConfirmed) {
+                        const duration = new Date(end) - new Date(start);
+                        const newStart = new Date(nextMatch);
+                        const newEnd = new Date(newStart.getTime() + duration);
+
+                        document.getElementById("modalStartTime").value = newStart.toISOString().slice(0,16);
+                        document.getElementById("modalEndTime").value = newEnd.toISOString().slice(0,16);
+
+                        submitFinal();
+                    }
+                });
+            }
+        }
+
+        submitFinal();
+    });
+
+    /* ====================================================================
+       FINAL SUBMIT — PATCHED TO SEND FORMDATA
+       ==================================================================== */
+    async function submitFinal() {
+        submitting = true;
+        modal.hide();
+
+        const roomId = document.getElementById("modalRoomId").value;
+        const fd = new FormData(form);
+
+        const weekdays = [];
+        document.querySelectorAll(".wkday").forEach(cb => {
+            if (cb.checked) weekdays.push(cb.value);
+        });
+        fd.set("weekdays", weekdays.join(","));
+
+        try {
+            /* PATCHED — Send FormData exactly as backend expects */
+            const resp = await fetch(`/reserve_post/${roomId}`, {
+                method: "POST",
+                body: fd
+            });
+
+            const data = await resp.json();
+
+            let html = `<b>${data.created_count}</b> reservations created.`;
+            if (data.skipped?.length) {
+                html += `<br><b>${data.skipped.length}</b> skipped:<ul>`;
+                data.skipped.forEach(s => html += `<li>${s}</li>`);
+                html += "</ul>";
+            }
+
+            Swal.fire({
+                icon: data.success ? "success" : "error",
+                title: data.success ? "Recurring booking result" : "Reservation Failed",
+                html,
+                confirmButtonColor: "#0047AB"
+            }).then(() => {
+                if (data.success) window.location.reload();
+                submitting = false;
+            });
+
+        } catch (err) {
+            submitting = false;
+            Swal.fire("System Error", "Please try again.", "error");
+        }
+    }
+
+    /* ====================================================================
+       INITIAL LOAD
+       ==================================================================== */
+    setTimeout(() => {
+        updatePastSlots();
+        autoScrollToCurrentSlot();
+        attachSlotSelectionHandlers();
+    }, 100);
 });
 </script>
 
 <style>
-/* Visual polish & Hybrid responsive behaviour */
+/* ======================
+   BASE LAYOUT & DESIGN
+   ====================== */
 .border-end { border-right: 1px solid #dee2e6 !important; }
 .room-card { border-radius: 12px; overflow: hidden; }
-.room-header { cursor: default; }
 .room-header h5 { font-size: 1.05rem; }
 .timeline { scroll-behavior: smooth; user-select: none; min-height: 84px; align-items: center; }
 
-/* slot-grid default: flex (desktop) to preserve horizontal timeline scroll */
-.slot-grid { display:flex; gap:0.5rem; align-items:center; }
+/* slot grid (desktop) */
+.slot-grid {
+    display:flex;
+    gap:0.5rem;
+    align-items:center;
+}
 
-/* slot cell (keeps your existing sizing) */
-.slot-cell { font-size: 0.82rem; font-weight: 600; border-radius: 10px; min-width:72px; width:72px; height:56px; position:relative; transition: transform .12s ease; }
+/* slot cell */
+.slot-cell {
+    font-size:0.82rem;
+    font-weight:600;
+    border-radius:10px;
+    min-width:72px;
+    width:72px;
+    height:56px;
+    position:relative;
+    transition:transform .12s ease;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(0,0,0,0);
+}
 .slot-cell .slot-time { line-height:1; }
 .slot-cell .slot-duration { font-size:0.68rem; }
-.slot-cell:hover { transform: translateY(-3px); box-shadow: 0 6px 14px rgba(0,0,0,0.06); cursor: pointer; }
-.slot-cell.selected { border: 2px solid #0047AB !important; background-color: #cfe8ff !important; transform: scale(1.04); }
-.slot-cell.bg-success { background-color: #0b8a44 !important; }  /* keep green readable */
-.slot-cell.bg-danger { background-color: #d23a3a !important; }
-.slot-cell.bg-warning { background-color: #ffc107 !important; color: #222; }
-.slot-cell.bg-secondary { background-color: #9fa6ad !important; color:#fff; opacity:0.86; }
-.cancel-btn { border: none; background: rgba(255,255,255,0.95); border-radius: 50%; width:18px; height:18px; padding:0; display:flex; align-items:center; justify-content:center; }
 
-/* Tablet: slightly smaller min widths */
-@media (max-width: 1024px) {
-  .slot-cell { min-width:56px; width:56px; height:48px; }
-  .slot-grid { gap:0.4rem; }
-  .room-header h5 { font-size: 1rem; }
+.slot-cell:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 14px rgba(0,0,0,0.06);
+    cursor:pointer;
 }
 
-/* Mobile: turn .slot-grid into wrapping grid to make slots readable; timeline remains horizontally scrollable container but grid will wrap */
-@media (max-width: 768px) {
-<!--  .col-md-3 { display: none !important; }-->
-.page-left-panel {
-    display: none !important;
-  }
-  /* hide sidebar on phone (if you already have a toggle in base, this ensures visual consistency) */
-  .room-card { margin-left: 0 !important; margin-right: 0 !important; }
-  .slot-grid {
-    display: grid !important;
-    grid-template-columns: repeat(auto-fit, minmax(48px, 1fr));
-    gap: 0.35rem;
-    align-items: stretch;
-    width: 100%;
-  }
-  .slot-cell { min-width:48px; width:100%; height:42px; font-size:0.75rem; padding:6px 4px; }
-  .room-header { padding-right: 0.5rem; padding-left:0.5rem; }
-  .room-header h5 { font-size: 0.95rem; }
-  .room-header .badge { display:none; } /* compress header on phone for space */
-  .slot-container { padding:0 8px; }
+/* selected slot */
+.slot-cell.selected {
+    border:2px solid #0047AB !important;
+    background:#cfe8ff !important;
+    transform:scale(1.04);
 }
 
-/* Accessibility & touch target */
-.slot-cell { touch-action: manipulation; -webkit-tap-highlight-color: rgba(0,0,0,0); }
+/* ======================
+   COLOR STATUS CLASSES
+   ====================== */
+.slot-cell.bg-success { background-color:#0b8a44 !important; color:white !important; }
+.slot-cell.bg-danger  { background-color:#d23a3a !important; color:white !important; }
+.slot-cell.bg-warning { background-color:#ffc107 !important; color:#222 !important; }
+.slot-cell.bg-secondary { background-color:#9fa6ad !important; color:white !important; opacity:0.86; }
 
-/* Keep timeline scrollbars neat */
+/* cancel (X) button */
+.cancel-btn {
+    border:none;
+    background:rgba(255,255,255,0.95);
+    border-radius:50%;
+    width:18px; height:18px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+
+/* ======================
+   SCROLLBAR TWEAKS
+   ====================== */
 .timeline::-webkit-scrollbar { height:8px; }
 .timeline::-webkit-scrollbar-thumb { background:#cfd8e3; border-radius:4px; }
+
+/* ======================
+   MOBILE FIXES
+   ====================== */
+@media (max-width: 768px) {
+    .page-left-panel { display:none !important; }
+
+    .slot-grid {
+        display:grid !important;
+        grid-template-columns:repeat(auto-fit, minmax(48px,1fr));
+        gap:0.35rem;
+    }
+
+    .slot-cell {
+        min-width:48px;
+        width:100%;
+        height:42px;
+        font-size:0.75rem;
+        padding:4px;
+    }
+}
+
 </style>
 {% endblock %}
+

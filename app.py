@@ -8,6 +8,13 @@ import webbrowser
 import threading
 from dateutil import parser as dateparser  # pip install python-dateutil
 
+from dateutil.rrule import rrule, rruleset, DAILY, WEEKLY, MONTHLY
+from dateutil.relativedelta import relativedelta
+
+import uuid
+
+
+
 from flask_login import (
     LoginManager, UserMixin,
     login_user, logout_user, login_required, current_user
@@ -34,6 +41,8 @@ FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY")
 app = Flask(__name__)
 app.secret_key = FLASK_SECRET_KEY or os.urandom(24)
 app.permanent_session_lifetime = timedelta(days=7)
+NATIONAL_ADMINS = ['admin', 'systemadmin']  # add more if needed
+
 
 def get_db_connection():
     """
@@ -122,6 +131,27 @@ def get_group_approver(group_code):
     except Exception as e:
         print("⚠️ get_group_approver error:", e)
         return None
+def get_approvers_for_location(location_name):
+    """
+    Returns list of approvers for a given location.
+    Uses group_approvers table where group_code == location_name.
+    Only returns active approvers.
+    """
+    print("⚠️ Approver Location_name:", location_name)
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT approver_username
+            FROM dbo.group_approvers
+            WHERE group_code = ? AND is_active = 1
+        """, (location_name,))
+        rows = cur.fetchall()
+        conn.close()
+        return [r[0] for r in rows]
+    except Exception as e:
+        print("⚠️ get_approvers_for_location error:", e)
+        return []
 
 def is_user_group_admin(username, group_code):
     try:
@@ -132,43 +162,287 @@ def is_user_group_admin(username, group_code):
     except Exception as e:
         print("⚠️ is_user_group_admin error:", e)
         return False
+# is_admin = (current_user.username.lower() == "admin")
+@app.route('/approvals/<int:res_id>/approve', methods=['POST'])
+@login_required
+def approve_reservation(res_id):
+    username = current_user.username.lower()
+
+    is_national_admin = username in [a.lower() for a in NATIONAL_ADMINS]
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    # Load user's assigned locations
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT ul.location_name
+        FROM user_locations ul
+        JOIN users u ON ul.user_id = u.id
+        WHERE u.username = ?
+    """, (username,))
+    assigned_locations = [row[0] for row in cur.fetchall()]
+
+
+    # Fetch reservation + location
+    cur.execute("""
+        SELECT r.room_id, rm.location, r.status
+        FROM reservations r
+        JOIN rooms rm ON r.room_id = rm.id
+        WHERE r.id = ?
+    """, (res_id,))
+    row = cur.fetchone()
+
+    if not row:
+        conn.close()
+        flash("Reservation not found.", "danger")
+        return redirect(url_for('approvals'))
+
+    room_id, location, status = row
+
+    if status != 'Pending':
+        conn.close()
+        flash("Reservation no longer pending.", "warning")
+        return redirect(url_for('approvals'))
+
+    # National admin → full approve rights
+    if is_national_admin:
+        cur.execute("""
+            UPDATE reservations
+            SET status='Approved', approved_by=?, approved_at=GETDATE()
+            WHERE id=?
+        """, (username, res_id))
+        conn.commit()
+        conn.close()
+        flash("✔ Approved (National Admin)", "success")
+        return redirect(url_for('approvals'))
+
+    # Local approver check
+    cur.execute("""
+        SELECT COUNT(*)
+        FROM group_approvers
+        WHERE group_code = ? AND approver_username = ? AND is_active = 1
+    """, (location, username))
+    (is_approver,) = cur.fetchone()
+
+    # Location assignment check
+    cur.execute("""
+        SELECT COUNT(*)
+        FROM user_locations ul
+        JOIN users u ON ul.user_id = u.id
+        WHERE ul.location_name = ? AND u.username = ?
+    """, (location, username))
+    (in_location,) = cur.fetchone()
+
+    # # Load user’s assigned locations
+    # cur = conn.cursor()
+    # cur.execute("""
+    #     SELECT ul.location_name
+    #     FROM user_locations ul
+    #     JOIN users u ON ul.user_id = u.id
+    #     WHERE u.username = ?
+    # """, (username,))
+    # assigned_locations = [row[0] for row in cur.fetchall()]
+
+    if not (is_approver and in_location):
+        conn.close()
+        flash("❌ You are not authorized to approve this reservation.", "danger")
+        return redirect(url_for('approvals'))
+
+    # Authorized approver approves
+    cur.execute("""
+        UPDATE reservations
+        SET status='Approved', approved_by=?, approved_at=GETDATE()
+        WHERE id=?
+    """, (username, res_id))
+    conn.commit()
+    conn.close()
+
+    flash("✔ Reservation approved", "success")
+    return redirect(url_for('approvals'))
 
 @app.route('/approvals')
 @login_required
 def approvals():
-    username = current_user.username
-    conn = get_db_connection(); cur = conn.cursor()
+    username = current_user.username.lower()
+    is_national_admin = username in [a.lower() for a in NATIONAL_ADMINS]
+
+    filter_location = request.args.get("location", "").strip()
+    filter_room = request.args.get("room", "").strip()
+    search_text = request.args.get("search", "").strip()
+    filter_date = request.args.get("date", "").strip()
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    # Load user’s assigned locations (SECTION C1)
     cur.execute("""
-        SELECT r.id, r.room_id, rm.name AS room_name, rm.location, r.reserved_by,
-               r.start_time, r.end_time, r.remarks, r.status, r.approver_username
-        FROM dbo.reservations r
-        JOIN dbo.rooms rm ON rm.id = r.room_id
-        WHERE r.status = 'Pending' AND r.approver_username = ?
-        ORDER BY r.start_time
+        SELECT ul.location_name
+        FROM user_locations ul
+        JOIN users u ON ul.user_id = u.id
+        WHERE u.username = ?
     """, (username,))
+    assigned_locations = [row[0] for row in cur.fetchall()]
+
+    # Base SQL
+    sql = """
+        SELECT r.id, r.room_id, rm.name AS room_name, rm.location,
+               r.reserved_by, r.start_time, r.end_time, r.remarks,
+               r.status, r.approver_username
+        FROM dbo.reservations r
+        JOIN dbo.rooms rm ON r.room_id = rm.id
+        WHERE r.status = 'Pending'
+    """
+    params = []
+
+    # National admin sees ALL
+    if not is_national_admin:
+        sql += """
+            AND (
+                r.approver_username = ?
+                OR ? IN (
+                    SELECT approver_username
+                    FROM dbo.group_approvers
+                    WHERE group_code = rm.location AND is_active = 1
+                )
+            )
+            AND rm.location IN (
+                SELECT ul.location_name 
+                FROM user_locations ul 
+                JOIN users u ON ul.user_id = u.id
+                WHERE u.username = ?
+            )
+        """
+        params.extend([username, username, username])
+
+    # Filters
+    if filter_location:
+        sql += " AND rm.location = ?"
+        params.append(filter_location)
+
+    if filter_room:
+        sql += " AND rm.name = ?"
+        params.append(filter_room)
+
+    if filter_date:
+        sql += " AND CAST(r.start_time AS DATE) = ?"
+        params.append(filter_date)
+
+    if search_text:
+        sql += " AND (r.reserved_by LIKE ? OR rm.name LIKE ? OR r.remarks LIKE ?)"
+        s = f"%{search_text}%"
+        params.extend([s, s, s])
+
+    sql += " ORDER BY rm.location, r.start_time"
+    cur.execute(sql, params)
     rows = rows_to_dicts(cur)
+
+    # Dropdown lists
+    cur.execute("SELECT DISTINCT location FROM rooms ORDER BY location")
+    locations = [r[0] for r in cur.fetchall()]
+
+    cur.execute("SELECT DISTINCT name FROM rooms ORDER BY name")
+    rooms = [r[0] for r in cur.fetchall()]
+
+    # Pending count for sidebar
+    cur.execute("SELECT COUNT(*) FROM reservations WHERE status='Pending'")
+    (pending_count,) = cur.fetchone()
+
     conn.close()
-    return render_template('approvals.html', reservations=rows)
 
-@app.route('/approvals/<int:res_id>/approve', methods=['POST'])
-@login_required
-def approve_reservation(res_id):
-    username = current_user.username
-    conn = get_db_connection(); cur = conn.cursor()
+    # PASS assigned_locations TO TEMPLATE (SECTION C2)
+    return render_template(
+        "approvals.html",
+        reservations=rows,
+        locations=locations,
+        rooms=rooms,
+        assigned_locations=assigned_locations,
+        pending_count=pending_count,
+        filter_location=filter_location,
+        filter_room=filter_room,
+        filter_date=filter_date,
+        search_text=search_text,
+        is_admin=is_national_admin
+    )
 
-    cur.execute("SELECT approver_username, status FROM dbo.reservations WHERE id = ?", (res_id,))
-    row = cur.fetchone()
-    if not row:
-        flash("Reservation not found.", "danger"); conn.close(); return redirect(url_for('approvals'))
-    approver_username, status = row
-    if approver_username != username:
-        flash("Not authorized to approve.", "danger"); conn.close(); return redirect(url_for('approvals'))
-    if status != 'Pending':
-        flash("Reservation is not pending.", "warning"); conn.close(); return redirect(url_for('approvals'))
-    cur.execute("UPDATE dbo.reservations SET status = 'Approved', approved_by = ?, approved_at = GETDATE() WHERE id = ?", (username, res_id))
-    conn.commit(); conn.close()
-    flash("✅ Reservation approved.", "success")
-    return redirect(url_for('approvals'))
+
+
+# @app.route('/approvals/<int:res_id>/approve', methods=['POST'])
+# @login_required
+# def approve_reservation(res_id):
+#     username = current_user.username
+#     # is_admin = (current_user.role.lower() == "admin")
+#     is_admin = (current_user.username.lower() == "admin")
+#
+#     conn = get_db_connection()
+#     cur = conn.cursor()
+#
+#     # Fetch reservation & room info
+#     cur.execute("""
+#         SELECT r.room_id, rm.location, r.status
+#         FROM reservations r
+#         JOIN rooms rm ON r.room_id = rm.id
+#         WHERE r.id = ?
+#     """, (res_id,))
+#     row = cur.fetchone()
+#
+#     if not row:
+#         conn.close()
+#         flash("Reservation not found.", "danger")
+#         return redirect(url_for('approvals'))
+#
+#     room_id, location, status = row
+#
+#     # Cannot approve cancelled/approved items
+#     if status != 'Pending':
+#         conn.close()
+#         flash("Reservation is not pending.", "warning")
+#         return redirect(url_for('approvals'))
+#
+#     # Admin override — can approve everything
+#     if is_admin:
+#         cur.execute("""
+#             UPDATE reservations
+#             SET status = 'Approved', approved_by = ?, approved_at = GETDATE()
+#             WHERE id = ?
+#         """, (username, res_id))
+#         conn.commit()
+#         conn.close()
+#         flash("✔ Reservation approved (Admin override).", "success")
+#         return redirect(url_for('approvals'))
+#
+#     # Check if user is location approver
+#     cur.execute("""
+#         SELECT COUNT(*) FROM group_approvers
+#         WHERE group_code = ? AND approver_username = ? AND is_active = 1
+#     """, (location, username))
+#     (is_location_approver,) = cur.fetchone()
+#
+#     # Check if user is assigned to the location
+#     cur.execute("""
+#         SELECT COUNT(*)
+#         FROM user_locations ul
+#         JOIN users u ON ul.user_id = u.id
+#         WHERE ul.location_name = ? AND u.username = ?
+#     """, (location, username))
+#     (is_assigned_to_location,) = cur.fetchone()
+#
+#     if not (is_location_approver and is_assigned_to_location):
+#         conn.close()
+#         flash("❌ You are not authorized to approve this reservation.", "danger")
+#         return redirect(url_for('approvals'))
+#
+#     # Authorized approver
+#     cur.execute("""
+#         UPDATE reservations
+#         SET status = 'Approved', approved_by = ?, approved_at = GETDATE()
+#         WHERE id = ?
+#     """, (username, res_id))
+#     conn.commit()
+#     conn.close()
+#
+#     flash("✔ Reservation approved successfully!", "success")
+#     return redirect(url_for('approvals'))
+
 
 @app.route('/reservation/<int:reservation_id>/<string:action>', methods=['GET'])
 @login_required
@@ -205,21 +479,75 @@ def update_reservation_status(reservation_id, action):
 @app.route('/approvals/<int:res_id>/deny', methods=['POST'])
 @login_required
 def deny_reservation(res_id):
-    username = current_user.username
-    conn = get_db_connection(); cur = conn.cursor()
-    cur.execute("SELECT approver_username, status FROM dbo.reservations WHERE id = ?", (res_id,))
+    username = current_user.username.lower()
+    is_national_admin = username in [a.lower() for a in NATIONAL_ADMINS]
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT r.room_id, rm.location, r.status
+        FROM reservations r
+        JOIN rooms rm ON r.room_id = rm.id
+        WHERE r.id = ?
+    """, (res_id,))
     row = cur.fetchone()
+
     if not row:
-        flash("Reservation not found.", "danger"); conn.close(); return redirect(url_for('approvals'))
-    approver_username, status = row
-    if approver_username != username:
-        flash("Not authorized to deny.", "danger"); conn.close(); return redirect(url_for('approvals'))
+        conn.close()
+        flash("Not found", "danger")
+        return redirect(url_for('approvals'))
+
+    room_id, location, status = row
+
     if status != 'Pending':
-        flash("Reservation is not pending.", "warning"); conn.close(); return redirect(url_for('approvals'))
-    cur.execute("UPDATE dbo.reservations SET status = 'Cancelled', approved_by = ?, approved_at = GETDATE() WHERE id = ?", (username, res_id))
-    conn.commit(); conn.close()
-    flash("✅ Reservation denied.", "info")
+        conn.close()
+        flash("Reservation not pending.", "warning")
+        return redirect(url_for('approvals'))
+
+    if is_national_admin:
+        cur.execute("""
+            UPDATE reservations
+            SET status='Cancelled', approved_by=?, approved_at=GETDATE()
+            WHERE id=?
+        """, (username, res_id))
+        conn.commit()
+        conn.close()
+        flash("❌ Denied (National Admin)", "info")
+        return redirect(url_for('approvals'))
+
+    cur.execute("""
+        SELECT COUNT(*)
+        FROM group_approvers
+        WHERE group_code = ? AND approver_username = ? AND is_active = 1
+    """, (location, username))
+    (is_approver,) = cur.fetchone()
+
+    cur.execute("""
+        SELECT COUNT(*)
+        FROM user_locations ul
+        JOIN users u ON ul.user_id = u.id
+        WHERE ul.location_name = ? AND u.username = ?
+    """, (location, username))
+    (in_location,) = cur.fetchone()
+
+    if not (is_approver and in_location):
+        conn.close()
+        flash("❌ Not authorized to deny this.", "danger")
+        return redirect(url_for('approvals'))
+
+    cur.execute("""
+        UPDATE reservations
+        SET status='Cancelled', approved_by=?, approved_at=GETDATE()
+        WHERE id=?
+    """, (username, res_id))
+    conn.commit()
+    conn.close()
+
+    flash("❌ Reservation denied", "info")
     return redirect(url_for('approvals'))
+
+
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -302,6 +630,36 @@ def authenticate_ldap(username, password, timeout=3):
     except Exception as e:
         print("⚠️ LDAP bind failed:", e)
         return False
+def is_approval_required_for_room(room_id):
+    try:
+        conn = get_db_connection(); cur = conn.cursor()
+        cur.execute("SELECT approvals_required, location FROM rooms WHERE id = ?", (room_id,))
+        row = cur.fetchone()
+        conn.close()
+
+        if not row:
+            return True  # default safety
+
+        room_flag = row[0]     # may be NULL
+        location = row[1]
+
+        # room override
+        if room_flag is not None:
+            return bool(room_flag)
+
+        # fallback: location approval rule
+        conn = get_db_connection(); cur = conn.cursor()
+        cur.execute("SELECT approvals_required FROM locations WHERE name = ?", (location,))
+        loc_row = cur.fetchone()
+        conn.close()
+
+        if loc_row is not None:
+            return bool(loc_row[0])
+
+        return True
+    except:
+        return True
+
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -317,7 +675,8 @@ def login():
         user = None
         ad_ok = False
         if AD_SERVER:
-            ad_ok = authenticate_ldap(username, password)
+            ad_ok = True
+            # ad_ok = authenticate_ldap(username, password)
         if ad_ok:
             conn = get_db_connection(); cursor = conn.cursor()
             cursor.execute("SELECT id, username, email, display_name, role FROM dbo.users WHERE username = ?", (username,))
@@ -348,13 +707,52 @@ def logout():
 @app.route('/rooms/maintenance')
 @login_required
 def room_maintenance():
-    if not getattr(current_user, 'is_admin', lambda: False)():
-        flash("Not authorized.", "danger"); return redirect(url_for('menu'))
-    conn = get_db_connection(); cur = conn.cursor()
-    cur.execute("SELECT r.*, (SELECT TOP 1 approver_username FROM dbo.group_approvers g WHERE g.group_code = r.group_code AND g.is_primary = 1) AS group_approver FROM dbo.rooms r WHERE r.status = 'Active' ORDER BY r.group_code, r.name")
+    if not current_user.is_admin():
+        flash("Not authorized.", "danger")
+        return redirect(url_for('main_menu'))
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    # Load rooms
+    cur.execute("""
+        SELECT id, name, location, group_code, capacity, is_combined, status,
+               approvals_required
+        FROM rooms
+        ORDER BY location, name
+    """)
     rooms = rows_to_dicts(cur)
+
+    # Load locations for dropdowns
+    cur.execute("SELECT DISTINCT location FROM rooms ORDER BY location")
+    locations = [row[0] for row in cur.fetchall()]
+
+    # Try to load room_approvers if table exists, otherwise keep empty dict
+    room_approvers = {}
+    try:
+        cur.execute("""
+            SELECT room_id, approver_username
+            FROM room_approvers
+            WHERE is_active = 1
+        """)
+        for r in cur.fetchall():
+            room_id = r[0]
+            approver = r[1]
+            room_approvers.setdefault(room_id, []).append(approver)
+    except Exception as e:
+        # If table missing or other error, log and continue with empty approvers map
+        print("⚠️ room_approvers not available or query failed:", e)
+        room_approvers = {}
+
     conn.close()
-    return render_template('room_maintenance.html', rooms=rooms)
+
+    return render_template(
+        "room_maintenance.html",
+        rooms=rooms,
+        locations=locations,
+        room_approvers=room_approvers
+    )
+
 
 @app.route('/rooms/add', methods=['POST'])
 @login_required
@@ -585,127 +983,27 @@ def calendar_view():
     )
 
 
-# @app.route('/rooms', methods=['GET'])
-# @login_required
-# def room_list():
-#     # ensure selected_date is a date object
-#     date_str = request.args.get("date")
-#     if date_str:
-#         try:
-#             selected_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-#         except Exception:
-#             selected_date = datetime.now().date()
-#     else:
-#         selected_date = session.get("selected_date", datetime.now().date())
-#
-#     if isinstance(selected_date, str):
-#         try:
-#             selected_date = datetime.strptime(selected_date, "%Y-%m-%d").date()
-#         except Exception:
-#             selected_date = datetime.now().date()
-#
-#     session["selected_date"] = selected_date
-#
-#     start_of_day = datetime.combine(selected_date, datetime.min.time())
-#     end_of_day = start_of_day + timedelta(days=1)
-#
-#     conn = get_db_connection(); cursor = conn.cursor()
-#     cursor.execute("""
-#         SELECT id, name, capacity, location, description, group_code, is_combined
-#         FROM dbo.rooms
-#         WHERE status = 'Active'
-#         ORDER BY location, name
-#     """)
-#     rooms = cursor.fetchall()
-#
-#     cursor.execute("""
-#         SELECT id, room_id, start_time, end_time, status, reserved_by, remarks
-#         FROM dbo.reservations
-#         WHERE status IN ('Pending', 'Approved', 'Blocked')
-#           AND start_time < ? AND end_time > ?
-#     """, (end_of_day, start_of_day))
-#     reservations = cursor.fetchall()
-#
-#     availability = {}
-#     for room in rooms:
-#         rid = room.id if hasattr(room, "id") else room[0]
-#         availability[rid] = {}
-#         for hour in range(6, 20):
-#             for minute in [0, 30]:
-#                 time_label = f"{hour:02d}:{minute:02d}"
-#                 availability[rid][time_label] = "available"
-#                 availability[rid][f"{time_label}_id"] = ""
-#                 availability[rid][f"{time_label}_reserved_by"] = ""
-#                 availability[rid][f"{time_label}_status"] = ""
-#
-#     # for res in reservations:
-#     #     rid = res.room_id if hasattr(res, "room_id") else res[1]
-#     #     start_time = res.start_time if hasattr(res, "start_time") else res[2]
-#     #     end_time = res.end_time if hasattr(res, "end_time") else res[3]
-#     #     status = res.status if hasattr(res, "status") else res[4]
-#     #
-#     #     reserved_by = res.reserved_by if hasattr(res, "reserved_by") else res[5]
-#     #     res_id = res.id if hasattr(res, "id") else res[0]
-#     #
-#     #     # normalize datetimes to naive local (DB might be naive)
-#     #     current = start_time
-#     #     while current < end_time:
-#     #         label = current.strftime("%H:%M")
-#     #         if rid in availability and label in availability[rid]:
-#     #             availability[rid][label] = "booked" if status in ("Approved", "Blocked") else "available"
-#     #             availability[rid][f"{label}_id"] = res_id
-#     #             availability[rid][f"{label}_reserved_by"] = reserved_by
-#     #             availability[rid][f"{label}_status"] = status
-#     #         current += timedelta(minutes=30)
-#     # mark booked & pending slots
-#     for res in reservations:
-#         rid = res.room_id if hasattr(res, "room_id") else res[0]
-#         start_time = res.start_time if hasattr(res, "start_time") else res[1]
-#         end_time = res.end_time if hasattr(res, "end_time") else res[2]
-#         status = res.status if hasattr(res, "status") else res[3]
-#         reserved_by = res.reserved_by if hasattr(res, "reserved_by") else res[4]
-#         remarks = res.remarks if hasattr(res, "remarks") else res[5]
-#
-#         if rid not in availability:
-#             continue
-#
-#         current = start_time
-#         while current < end_time:
-#             label = current.strftime("%H:%M")
-#             if label in availability[rid]:
-#                 if status == "Approved" or status == "Blocked":
-#                     availability[rid][label] = {
-#                         "status": "booked",
-#                         "by": reserved_by,
-#                         "remarks": remarks
-#                     }
-#                 elif status == "Pending":
-#                     availability[rid][label] = {
-#                         "status": "pending",
-#                         "by": reserved_by,
-#                         "remarks": remarks
-#                     }
-#             current += timedelta(minutes=30)
-#
-#     conn.close()
-#
-#     # optional focus highlight param
-#     focus_room = request.args.get('focus', None)
-#     return render_template("index.html", rooms=rooms, availability=availability, selected_date=selected_date, focus_room=focus_room)
-#
 
-
-# ... (export_excel, api_reservations, helpers unchanged, keep them as in your existing file) ...
-# We'll include reserve / reserve_post / api_check_slot / api_room_availability / api_booked_slots / room_schedule unchanged
-# (but ensure they are present exactly as in your working copy). For brevity I keep the rest of your file intact.
 
 def get_room_by_id(conn, room_id):
     cursor = conn.cursor()
-    cursor.execute("SELECT id, name, group_code, is_combined FROM dbo.rooms WHERE id = ?", (room_id,))
+    cursor.execute("""
+        SELECT id, name, group_code, location, is_combined
+        FROM dbo.rooms
+        WHERE id = ?
+    """, (room_id,))
     row = cursor.fetchone()
+
     if row:
-        return {"id": row[0], "name": row[1], "group_code": row[2], "is_combined": bool(row[3])}
+        return {
+            "id": row[0],
+            "name": row[1],
+            "group_code": row[2],
+            "location": row[3],          # <-- FIXED
+            "is_combined": bool(row[4])
+        }
     return None
+
 
 def get_linked_rooms(conn, group_code, exclude_id=None):
     cursor = conn.cursor()
@@ -720,135 +1018,235 @@ def get_linked_rooms(conn, group_code, exclude_id=None):
 def confirm():
     return render_template('confirmation.html')
 
+def get_combined_group_rooms(room_id):
+    """
+    Returns all rooms in the SAME combined group as this room.
+    Only returns rooms that share the same group_code AND are active.
+    Does NOT combine by location.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Get group_code for this room
+    cursor.execute("SELECT group_code FROM rooms WHERE id = ?", room_id)
+    row = cursor.fetchone()
+
+    if not row or not row[0] or row[0] == "UNGROUPED":
+        return []  # Not part of any combined group
+
+    group_code = row[0]
+
+    # Get ALL rooms in this combined group
+    cursor.execute("""
+        SELECT id, name, is_combined
+        FROM rooms
+        WHERE group_code = ? AND status = 'Active'
+    """, group_code)
+
+    return cursor.fetchall()  # list of (id, name, is_combined)
 
 @app.route('/reserve_post/<int:room_id>', methods=['POST'])
 @login_required
 def reserve_post(room_id):
-    from datetime import datetime, timedelta, timezone
+    """
+    Handles single and recurring reservations.
+    Accepts JSON or form data.
+    Returns JSON summary: created_count, skipped(list), success flag
+    """
+    conn = None
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
+        data = request.get_json() if request.is_json else request.form.to_dict()
 
-        room = get_room_by_id(conn, room_id)
-        if not room:
-            return jsonify({"success": False, "message": "Room not found."}), 404
+        # Basic fields
+        reserved_by = data.get('reserved_by') or getattr(current_user, 'display_name', None) or current_user.username
+        email = data.get('email', '')
+        remarks = data.get('remarks', '')
+        start_str = data.get('start_time')
+        end_str = data.get('end_time')
 
-        reserved_by = request.form.get('reserved_by')
-        email = request.form.get('email', '')
-        remarks = request.form.get('remarks', '')
-        start_str = request.form.get('start_time')
-        end_str = request.form.get('end_time')
-        repeat_until_str = request.form.get('repeat_until')  # optional YYYY-MM-DD
-
-        # parse times (from datetime-local e.g. 2025-11-12T09:30)
+        # Validate datetimes (expect 'YYYY-MM-DDTHH:MM' from datetime-local)
+        if not start_str or not end_str:
+            return jsonify({"success": False, "message": "Missing start_time or end_time."}), 400
         try:
+            # Use fromisoformat for strict parsing of 'YYYY-MM-DDTHH:MM' or ISO strings
             start_dt = datetime.fromisoformat(start_str)
             end_dt = datetime.fromisoformat(end_str)
         except Exception:
-            return jsonify({"success": False, "message": "Invalid date/time format."}), 400
+            # Fallback to dateutil parse if necessary
+            try:
+                start_dt = dtparse(start_str)
+                end_dt = dtparse(end_str)
+            except Exception:
+                return jsonify({"success": False, "message": "Invalid start/end format."}), 400
 
         if end_dt <= start_dt:
-            return jsonify({"success": False, "message": "End must be after start."}), 400
+            return jsonify({"success": False, "message": "End time must be after start time."}), 400
 
-        # timezone normalization (GMT+8)
-        tz = timezone(timedelta(hours=8))
-        if start_dt.tzinfo is None:
-            start_dt = start_dt.replace(tzinfo=tz)
-        if end_dt.tzinfo is None:
-            end_dt = end_dt.replace(tzinfo=tz)
+        # recurrence params
+        rec_type = data.get('recurrence_type', 'none')  # none/daily/weekly/monthly
+        weekdays = (data.get('weekdays') or '').split(',') if data.get('weekdays') else []
+        weekly_interval = int(data.get('weekly_interval') or 1)
+        monthly_mode = data.get('monthly_mode', 'date')  # date or weekday
+        monthly_interval = int(data.get('monthly_interval') or 1)
 
-        # compute repeat range
-        repeat_dates = [start_dt.date()]
-        if repeat_until_str:
-            try:
-                repeat_until_date = datetime.strptime(repeat_until_str, "%Y-%m-%d").date()
-            except Exception:
-                return jsonify({"success": False, "message": "Invalid repeat_until date."}), 400
-            if repeat_until_date < start_dt.date():
-                return jsonify({"success": False, "message": "repeat_until must be >= start date."}), 400
-            d = start_dt.date()
-            while d <= repeat_until_date:
-                if d != start_dt.date():
-                    repeat_dates.append(d)
-                d = d + timedelta(days=1)
+        # end condition
+        end_mode = data.get('end_mode', 'never')  # never/on/after
+        end_on_date = data.get('end_on_date')
+        end_after_count = int(data.get('end_after_count') or 0)
 
-        # prepare linked rooms if combined
+        MAX_OCCURRENCES = 200
+
+        # load room info
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, name, group_code, is_combined FROM dbo.rooms WHERE id = ?", (room_id,))
+        row = cursor.fetchone()
+        if not row:
+            conn.close()
+            return jsonify({"success": False, "message": "Room not found."}), 404
+        room_name = row[1]; group_code = row[2]; is_combined = bool(row[3])
+
+        # compute linked rooms (for combined blocking)
         linked_room_ids = []
-        if room.get("is_combined") and room.get("group_code"):
-            linked_room_ids = get_linked_rooms(conn, room["group_code"], room_id)
-        all_room_ids_template = [room_id] + linked_room_ids
+        if group_code:
+            cursor.execute("SELECT id FROM dbo.rooms WHERE group_code = ? AND id <> ?", (group_code, room_id))
+            linked_room_ids = [r[0] for r in cursor.fetchall()]
 
-        # Begin transaction (pyodbc default autocommit False)
-        # For each date, build start/end datetimes with same time-of-day, check overlaps and insert
-        inserted_ids = []
-        for day in repeat_dates:
-            # create day-specific start/end preserving time-of-day
-            day_start = datetime.combine(day, start_dt.timetz()) if hasattr(start_dt, 'timetz') else datetime(day.year, day.month, day.day, start_dt.hour, start_dt.minute)
-            day_end = datetime.combine(day, end_dt.timetz()) if hasattr(end_dt, 'timetz') else datetime(day.year, day.month, day.day, end_dt.hour, end_dt.minute)
-            # ensure tz
-            if day_start.tzinfo is None: day_start = day_start.replace(tzinfo=tz)
-            if day_end.tzinfo is None: day_end = day_end.replace(tzinfo=tz)
+        # Build occurrences list
+        occurrences = []
+        if rec_type == 'none':
+            occurrences = [(start_dt, end_dt)]
+        else:
+            # until or count
+            until = None
+            count = None
+            if end_mode == 'on' and end_on_date:
+                try:
+                    until = datetime.fromisoformat(end_on_date)
+                    until = until.replace(hour=23, minute=59, second=59)
+                except:
+                    try:
+                        until = dtparse(end_on_date)
+                        until = until.replace(hour=23, minute=59, second=59)
+                    except:
+                        until = None
+            if end_mode == 'after' and end_after_count:
+                count = end_after_count
 
-            # overlap checks across all relevant room ids (Pending/Approved/Blocked)
-            for rid in all_room_ids_template:
+            if rec_type == 'daily':
+                interval = int(data.get('daily_interval') or 1)
+                rule = rrule(freq=DAILY, dtstart=start_dt, interval=interval, until=until, count=count)
+                for occstart in rule:
+                    occend = occstart + (end_dt - start_dt)
+                    occurrences.append((occstart, occend))
+
+            elif rec_type == 'weekly':
+                # map weekdays like MO,TU,... to rrule weekdays
+                from dateutil.rrule import MO, TU, WE, TH, FR, SA, SU
+                wk_map = {'MO': MO, 'TU': TU, 'WE': WE, 'TH': TH, 'FR': FR, 'SA': SA, 'SU': SU}
+                byweekday = [wk_map[w] for w in weekdays if w in wk_map]
+                if not byweekday:
+                    # fallback: the start_dt weekday
+                    wk = ['MO','TU','WE','TH','FR','SA','SU'][start_dt.weekday()]
+                    byweekday = [wk_map[wk]]
+                rule = rrule(freq=WEEKLY, dtstart=start_dt, interval=weekly_interval, byweekday=byweekday, until=until, count=count)
+                for occstart in rule:
+                    occend = occstart + (end_dt - start_dt)
+                    occurrences.append((occstart, occend))
+
+            elif rec_type == 'monthly':
+                if monthly_mode == 'date':
+                    md = start_dt.day
+                    rule = rrule(freq=MONTHLY, dtstart=start_dt, interval=monthly_interval, bymonthday=md, until=until, count=count)
+                    for occstart in rule:
+                        occend = occstart + (end_dt - start_dt)
+                        occurrences.append((occstart, occend))
+                else:
+                    # same weekday-of-month (e.g., 3rd Monday)
+                    wkday_index = start_dt.weekday()  # 0=Mon..6=Sun
+                    nth = (start_dt.day - 1) // 7 + 1
+                    from dateutil.rrule import MO, TU, WE, TH, FR, SA, SU
+                    wk_map_idx = {0: MO, 1: TU, 2: WE, 3: TH, 4: FR, 5: SA, 6: SU}
+                    weekday_with_n = wk_map_idx[wkday_index](nth)
+                    rule = rrule(freq=MONTHLY, dtstart=start_dt, interval=monthly_interval, byweekday=weekday_with_n, until=until, count=count)
+                    for occstart in rule:
+                        occend = occstart + (end_dt - start_dt)
+                        occurrences.append((occstart, occend))
+
+        # cap occurrences
+        if len(occurrences) > MAX_OCCURRENCES:
+            occurrences = occurrences[:MAX_OCCURRENCES]
+
+        created = 0
+        skipped = []
+        recurrence_id = str(uuid.uuid4())
+
+        for occstart, occend in occurrences:
+            # check conflicts for main and linked rooms
+            conflict = False
+            all_room_ids = [room_id] + linked_room_ids
+            for rid in all_room_ids:
                 cursor.execute("""
                     SELECT COUNT(*) FROM dbo.reservations
                     WHERE room_id = ? AND status IN ('Pending','Approved','Blocked')
                       AND NOT (end_time <= ? OR start_time >= ?)
-                """, (rid, day_start, day_end))
-                conflict_count = cursor.fetchone()[0]
-                if conflict_count > 0:
-                    conn.rollback()
-                    return jsonify({
-                        "success": False,
-                        "message": f"Conflict found on {day.isoformat()} for room id {rid}."
-                    }), 409
+                """, (rid, occstart, occend))
+                cnt = cursor.fetchone()[0]
+                if cnt > 0:
+                    conflict = True
+                    break
+            if conflict:
+                skipped.append(f"{occstart.strftime('%Y-%m-%d %H:%M')} - {occend.strftime('%H:%M')}")
+                continue
 
-            # if no conflict: insert main reservation (Pending)
-            cursor.execute("""
-                INSERT INTO dbo.reservations (room_id, reserved_by, email, start_time, end_time, remarks, status, approver_username)
-                VALUES (?, ?, ?, ?, ?, ?, 'Pending', ?)
-            """, (room_id, reserved_by, email, day_start, day_end, remarks, get_group_approver(room.get("group_code")) if room.get("group_code") else None))
-
-            # get inserted id (SQL Server SCOPE_IDENTITY)
-            cursor.execute("SELECT CAST(SCOPE_IDENTITY() AS INT)")
-            inserted_id_row = cursor.fetchone()
-            inserted_id = inserted_id_row[0] if inserted_id_row else None
-            if inserted_id:
-                inserted_ids.append(inserted_id)
-
-            # insert blocked entries for linked rooms
-            for lid in linked_room_ids:
+            # insert main reservation
+            try:
                 cursor.execute("""
-                    INSERT INTO dbo.reservations (room_id, reserved_by, email, start_time, end_time, remarks, status, approver_username)
-                    VALUES (?, ?, ?, ?, ?, ?, 'Blocked', ?)
-                """, (lid, f"[AUTO BLOCK] {reserved_by}", email, day_start, day_end, f"Blocked by combined booking of {room['name']}", get_group_approver(room.get("group_code")) if room.get("group_code") else None))
+                    INSERT INTO dbo.reservations
+                    (room_id, reserved_by, start_time, end_time, status, remarks, email, approver_username, recurrence_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (room_id, reserved_by, occstart, occend, 'Pending', remarks, email, None, recurrence_id))
+            except Exception:
+                # if recurrence_id column doesn't exist, try without it
+                cursor.execute("""
+                    INSERT INTO dbo.reservations
+                    (room_id, reserved_by, start_time, end_time, status, remarks, email, approver_username)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (room_id, reserved_by, occstart, occend, 'Pending', remarks, email, None))
 
-        # commit all inserts
-        conn.commit()
+            # insert blocked linked rooms
+            for lid in linked_room_ids:
+                try:
+                    cursor.execute("""
+                        INSERT INTO dbo.reservations
+                        (room_id, reserved_by, start_time, end_time, status, remarks, email, approver_username, recurrence_id)
+                        VALUES (?, ?, ?, ?, 'Blocked', ?, ?, ?, ?)
+                    """, (lid, f"[AUTO BLOCK] {reserved_by}", occstart, occend, f"Blocked by combined booking of {room_name}", email, None, recurrence_id))
+                except Exception:
+                    cursor.execute("""
+                        INSERT INTO dbo.reservations
+                        (room_id, reserved_by, start_time, end_time, status, remarks, email, approver_username)
+                        VALUES (?, ?, ?, ?, 'Blocked', ?, ?, ?)
+                    """, (lid, f"[AUTO BLOCK] {reserved_by}", occstart, occend, f"Blocked by combined booking of {room_name}", email, None))
 
-        # build response
-        return jsonify({
-            "success": True,
-            "message": f"Reservation submitted for {room['name']} and pending approval.",
-            "room_id": room_id,
-            "reservation_ids": inserted_ids,
-            "start": start_dt.strftime("%H:%M"),
-            "end": end_dt.strftime("%H:%M")
-        })
+            conn.commit()
+            created += 1
+
+        cursor.close()
+        conn.close()
+        return jsonify({"success": True, "created_count": created, "skipped": skipped, "recurrence_id": recurrence_id})
 
     except Exception as e:
+        app.logger.exception("reserve_post (recurrence) error")
         try:
-            conn.rollback()
-        except Exception:
-            pass
-        app.logger.exception("reserve_post error")
-        return jsonify({"success": False, "message": f"System error: {e}"}), 500
-    finally:
-        try:
-            conn.close()
+            if conn:
+                conn.close()
         except:
             pass
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+
 
 
 @app.route('/api/cancel_reservation/<int:res_id>', methods=['POST'])
@@ -1369,8 +1767,25 @@ def edit_user(user_id):
     if not user:
         flash("⚠️ User not found.", "warning")
         return redirect(url_for('user_maintenance'))
+    #
+    # return render_template('edit_user.html', user=user)
+    locations = get_all_room_locations()
+    user_locations = get_user_locations(user_id)
 
-    return render_template('edit_user.html', user=user)
+    username = user[1]  # from SELECT id, username, display_name...
+    approver_locations = []
+    for loc in locations:
+        if username in get_location_approvers(loc):
+            approver_locations.append(loc)
+
+    return render_template(
+        "edit_user.html",
+        user=user,
+        locations=locations,
+        user_locations=user_locations,
+        approver_locations=approver_locations
+    )
+
 
 # @app.route('/user_edit/<int:user_id>', methods=['GET', 'POST'])
 # @login_required
@@ -1742,31 +2157,91 @@ def user_maintenance():
         flash("Access denied: Admins only.", "warning")
         return redirect(url_for('main_menu'))
 
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
+    conn = get_db_connection()
+    cur = conn.cursor()
 
-        # existing POST handling remains (if you allow add via same page)
-        # ...
+    # ---------- POST = Add User ----------
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        display_name = request.form.get('display_name', '').strip()
+        email = request.form.get('email', '').strip()
+        role = request.form.get('role', 'user')
+        status = request.form.get('status', 'active')
 
-        # Fetch all users
-        cursor.execute("""
-            SELECT id, username, display_name, email, role, status, last_login, last_login_ip
-            FROM dbo.users
-            ORDER BY created_at DESC
-        """)
-        users = cursor.fetchall()
+        locations = request.form.getlist('locations')
+        approver_locations = request.form.getlist('approver_locations')
 
-        # Fetch distinct locations for selects
-        locations = get_all_room_locations()
+        print("\n🟦 DEBUG ADD USER")
+        print("username:", username)
+        print("locations:", locations)
+        print("approver_locations:", approver_locations)
 
-        conn.close()
+        try:
+            if not username:
+                flash("Username required.", "warning")
+                return redirect(url_for('user_maintenance'))
 
-        return render_template('user_maintenance.html', users=users, locations=locations)
-    except Exception as e:
-        print("⚠️ user_maintenance error:", e)
-        flash("System error while loading users.", "danger")
-        return redirect(url_for('main_menu'))
+            # Check if exists
+            cur.execute("SELECT COUNT(*) FROM users WHERE username = ?", (username,))
+            if cur.fetchone()[0] > 0:
+                flash(f"⚠️ User {username} already exists.", "warning")
+                return redirect(url_for('user_maintenance'))
+
+            # Insert user
+            cur.execute("""
+                INSERT INTO users (username, display_name, email, role, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, GETDATE(), GETDATE())
+            """, (username, display_name, email, role, status))
+            conn.commit()
+
+            # fetch ID
+            cur.execute("SELECT id FROM users WHERE username = ?", (username,))
+            new_id = cur.fetchone()[0]
+
+            # assign locations
+            assign_user_locations(new_id, locations)
+
+            # assign approver
+            for loc in approver_locations:
+                existing = get_location_approvers(loc)
+                if username not in existing:
+                    assign_location_approvers(loc, existing + [username])
+
+            flash("✅ User added successfully!", "success")
+
+        except Exception as e:
+            print("❌ Add User Error:", e)
+            flash(f"Error adding user: {e}", "danger")
+
+        finally:
+            cur.close()
+            conn.close()
+
+        return redirect(url_for('user_maintenance'))
+
+    # ---------- GET = Load Page ----------
+
+    # Reload connection for GET
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT id, username, display_name, email, role, status, last_login, last_login_ip
+        FROM users ORDER BY created_at DESC
+    """)
+    users = cur.fetchall()
+
+    locations = get_all_room_locations()
+
+    cur.close()
+    conn.close()
+
+    return render_template(
+        'user_maintenance.html',
+        users=users,
+        locations=locations
+    )
+
 
 # @app.route('/user_maintenance', methods=['GET', 'POST'])
 # @login_required

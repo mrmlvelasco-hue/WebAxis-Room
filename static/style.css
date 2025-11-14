@@ -59,6 +59,27 @@ body {
   z-index: 1;
 }
 
-.sidebar {
-  z-index: 2000 !important;   /* Ensure real sidebar always stays above */
+/* ensure proper stacking with SweetAlert and modal backdrop */
+.modal-backdrop.show {
+  opacity: 0.65 !important;
+  background-color: #000 !important;
+  z-index: 1070 !important;
+}
+.modal {
+  z-index: 1080 !important; /* above page but below SweetAlert if SweetAlert uses 1100 */
+}
+.swal2-container {
+  z-index: 2005 !important; /* ensure SweetAlert is above modal */
+}
+.modal-backdrop.show {
+  opacity: 0.6 !important;
+  z-index: 1070 !important;
+}
+
+.modal {
+  z-index: 1080 !important;
+}
+
+.swal2-container {
+  z-index: 2000 !important;
 }

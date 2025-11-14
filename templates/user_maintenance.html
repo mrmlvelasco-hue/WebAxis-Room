@@ -42,6 +42,33 @@
       </select>
     </div>
   </div>
+<!-- Assigned Locations -->
+<div class="mb-3">
+    <label class="form-label fw-bold">Assigned Locations</label>
+    <select name="locations" class="form-select" multiple>
+        {% for loc in locations %}
+            <option value="{{ loc }}">{{ loc }}</option>
+        {% endfor %}
+    </select>
+    <div class="form-text">Select one or more locations this user belongs to.</div>
+</div>
+
+<!-- Approver for Locations -->
+<div class="mb-3">
+    <label class="form-label fw-bold">Approver for Locations</label>
+    <div class="row">
+        {% for loc in locations %}
+        <div class="col-4">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox"
+                       name="approver_locations" value="{{ loc }}">
+                <label class="form-check-label">{{ loc }}</label>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    <div class="form-text">Tick locations where this user should serve as approver.</div>
+</div>
 
   <div class="mt-3 text-end">
     <button type="submit" class="btn btn-primary fw-semibold px-4">

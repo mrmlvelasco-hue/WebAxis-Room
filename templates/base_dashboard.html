@@ -74,11 +74,15 @@
         </li>
 
         <li>
-            <a href="{{ url_for('approvals') }}" class="nav-link">
-                <i class="bi bi-check2-square me-2"></i>
-                <span class="link-text">Approvals</span>
-            </a>
-        </li>
+  <a href="{{ url_for('approvals') }}" class="nav-link">
+    <i class="bi bi-clipboard-check"></i>
+    Approvals
+    {% if pending_count and pending_count > 0 %}
+      <span class="badge bg-danger ms-1">{{ pending_count }}</span>
+    {% endif %}
+  </a>
+</li>
+
         {% endif %}
 
         <li class="mt-auto">

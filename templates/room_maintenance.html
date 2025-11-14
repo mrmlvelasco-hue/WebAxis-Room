@@ -3,28 +3,84 @@
 
 {% block content %}
 <div class="container-fluid py-4">
+
+  <!-- HEADER -->
   <div class="d-flex justify-content-between align-items-center mb-3">
-    <h3 class="fw-bold text-primary"><i class="bi bi-building-gear me-2"></i> Room Maintenance</h3>
+    <h3 class="fw-bold text-primary">
+      <i class="bi bi-building-gear me-2"></i> Room Maintenance
+    </h3>
     <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addRoomModal">
       <i class="bi bi-plus-lg"></i> Add Room
     </button>
   </div>
 
+  <!-- ADVANCED FILTER BAR -->
+  <div class="card p-3 shadow-sm mb-3">
+    <div class="row g-3 align-items-end">
+
+      <!-- Search -->
+      <div class="col-md-4">
+        <label class="form-label fw-semibold small">Search</label>
+        <input id="searchFilter" type="text" class="form-control form-control-sm"
+               placeholder="Room name, group code, approver...">
+      </div>
+
+      <!-- Location -->
+      <div class="col-md-3">
+        <label class="form-label fw-semibold small">Location</label>
+        <select id="locationFilter" class="form-select form-select-sm">
+          <option value="all">All</option>
+          {% for loc in rooms|map(attribute='location')|unique %}
+            <option value="{{ loc }}">{{ loc }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Status -->
+      <div class="col-md-2">
+        <label class="form-label fw-semibold small">Status</label>
+        <select id="statusFilter" class="form-select form-select-sm">
+          <option value="all">All</option>
+          <option value="Active">Active</option>
+          <option value="Inactive">Inactive</option>
+        </select>
+      </div>
+
+      <!-- Combined -->
+      <div class="col-md-2">
+        <label class="form-label fw-semibold small">Combined</label>
+        <select id="combinedFilter" class="form-select form-select-sm">
+          <option value="all">All</option>
+          <option value="Yes">Yes</option>
+          <option value="No">No</option>
+        </select>
+      </div>
+
+      <!-- Reset -->
+      <div class="col-md-1 text-end">
+        <button id="filterResetBtn" class="btn btn-secondary btn-sm w-100">Reset</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ROOM TABLE -->
   <div class="table-responsive shadow-sm">
-    <table class="table table-sm table-striped align-middle">
+    <table class="table table-sm table-striped align-middle" id="roomTable">
       <thead class="table-light">
         <tr>
-          <th>ID</th>
-          <th>Name</th>
-          <th>Location</th>
-          <th>Group Code</th>
-          <th>Capacity</th>
-          <th>Approver</th>
-          <th>Combined</th>
-          <th>Status</th>
-          <th></th>
+          <th data-col="0" class="sortable">ID ⬍</th>
+          <th data-col="1" class="sortable">Name ⬍</th>
+          <th data-col="2" class="sortable">Location ⬍</th>
+          <th data-col="3" class="sortable">Group Code ⬍</th>
+          <th data-col="4" class="sortable">Capacity ⬍</th>
+          <th data-col="5" class="sortable">Approver ⬍</th>
+          <th data-col="6" class="sortable">Combined ⬍</th>
+          <th data-col="7" class="sortable">Status ⬍</th>
+          <th class="text-end">Actions</th>
         </tr>
       </thead>
+
       <tbody>
         {% for r in rooms %}
         <tr>
@@ -33,64 +89,252 @@
           <td>{{ r.location or '—' }}</td>
           <td>{{ r.group_code or '—' }}</td>
           <td>{{ r.capacity or 0 }}</td>
-          <td>{{ r.approver or '—' }}</td>
+          <td>{{ r.group_approver or '—' }}</td>
           <td>{{ 'Yes' if r.is_combined else 'No' }}</td>
           <td>{{ r.status }}</td>
+
           <td class="text-end">
-            <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editModal{{ r.id }}">Edit</button>
-            <a href="{{ url_for('deactivate_room', id=r.id) }}" class="btn btn-outline-danger btn-sm">Deactivate</a>
+            <button class="btn btn-outline-primary btn-sm"
+                    data-bs-toggle="modal" data-bs-target="#editModal{{ r.id }}">
+              Edit
+            </button>
+            <a href="{{ url_for('deactivate_room', id=r.id) }}"
+               class="btn btn-outline-danger btn-sm">
+              Deactivate
+            </a>
           </td>
         </tr>
-
-        <!-- Edit Modal -->
-        <div class="modal fade" id="editModal{{ r.id }}" tabindex="-1">
-          <div class="modal-dialog">
-            <form class="modal-content" method="post" action="{{ url_for('edit_room', id=r.id) }}">
-              <div class="modal-header">
-                <h5 class="modal-title">Edit Room</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-              </div>
-              <div class="modal-body">
-                <div class="mb-2"><label class="form-label">Name</label><input name="name" value="{{ r.name }}" class="form-control" required></div>
-                <div class="mb-2"><label class="form-label">Location</label><input name="location" value="{{ r.location }}" class="form-control"></div>
-                <div class="mb-2"><label class="form-label">Group Code</label><input name="group_code" value="{{ r.group_code }}" class="form-control"></div>
-                <div class="mb-2"><label class="form-label">Capacity</label><input name="capacity" type="number" value="{{ r.capacity }}" class="form-control"></div>
-                <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="is_combined" {% if r.is_combined %}checked{% endif %}><label class="form-check-label">Is Combined</label></div>
-              </div>
-              <div class="modal-footer">
-                <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button class="btn btn-primary">Save</button>
-              </div>
-            </form>
-          </div>
-        </div>
         {% endfor %}
       </tbody>
+
     </table>
   </div>
+
 </div>
 
-<!-- Add Room Modal -->
+
+<!-- ADD ROOM MODAL -->
 <div class="modal fade" id="addRoomModal" tabindex="-1">
-  <div class="modal-dialog">
-    <form class="modal-content" method="post" action="{{ url_for('add_room') }}">
-      <div class="modal-header">
-        <h5 class="modal-title">Add Room</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+  <div class="modal-dialog modal-dialog-centered modal-md">
+    <form class="modal-content shadow" method="post" action="{{ url_for('add_room') }}">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title fw-semibold"><i class="bi bi-plus-circle me-2"></i>Add Room</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
+
       <div class="modal-body">
-        <div class="mb-2"><label class="form-label">Name</label><input name="name" class="form-control" required></div>
-        <div class="mb-2"><label class="form-label">Location</label><input name="location" class="form-control"></div>
-        <div class="mb-2"><label class="form-label">Group Code</label><input name="group_code" class="form-control"></div>
-        <div class="mb-2"><label class="form-label">Capacity</label><input name="capacity" type="number" class="form-control"></div>
-        <div class="mb-2"><label class="form-label">Approver (username)</label><input name="approver" class="form-control"></div>
-        <div class="form-check"><input class="form-check-input" type="checkbox" name="is_combined"><label class="form-check-label">Is Combined</label></div>
+        <div class="row g-3">
+
+          <div class="col-12">
+            <label class="form-label fw-semibold">Room Name</label>
+            <input name="name" class="form-control form-control-sm" required>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Location</label>
+            <input name="location" class="form-control form-control-sm" required>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Group Code</label>
+            <input name="group_code" class="form-control form-control-sm">
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Capacity</label>
+            <input name="capacity" type="number" class="form-control form-control-sm">
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Approval Required</label>
+            <select name="approvals_required" class="form-select form-select-sm">
+              <option value="auto">Auto</option>
+              <option value="yes">Yes — Require Approval</option>
+              <option value="no">No — Auto Approve</option>
+            </select>
+          </div>
+
+          <div class="col-12">
+            <div class="form-check mt-2">
+              <input class="form-check-input" type="checkbox" name="is_combined">
+              <label class="form-check-label fw-semibold">Is Combined</label>
+            </div>
+          </div>
+
+        </div>
       </div>
-      <div class="modal-footer">
+
+      <div class="modal-footer justify-content-end">
         <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        <button class="btn btn-primary">Add Room</button>
+        <button class="btn btn-primary fw-semibold">Add</button>
       </div>
     </form>
   </div>
 </div>
+
+
+<!-- EDIT ROOM MODALS (ALL MOVED BELOW TABLE) -->
+{% for r in rooms %}
+<div class="modal fade" id="editModal{{ r.id }}" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-md">
+    <form class="modal-content shadow" method="post" action="{{ url_for('edit_room', id=r.id) }}">
+
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title fw-semibold">
+          <i class="bi bi-pencil-square me-2"></i>Edit Room
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+
+      <div class="modal-body">
+        <div class="row g-3">
+
+          <div class="col-12">
+            <label class="form-label fw-semibold">Room Name</label>
+            <input name="name" value="{{ r.name }}" class="form-control form-control-sm" required>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Location</label>
+            <input name="location" value="{{ r.location }}" class="form-control form-control-sm">
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Group Code</label>
+            <input name="group_code" value="{{ r.group_code }}" class="form-control form-control-sm">
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Capacity</label>
+            <input name="capacity" type="number" value="{{ r.capacity }}" class="form-control form-control-sm">
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Approval Required</label>
+            <select name="approvals_required" class="form-select form-select-sm">
+              <option value="auto" {% if r.approvals_required == 'auto' %}selected{% endif %}>Auto</option>
+              <option value="yes" {% if r.approvals_required == 'yes' %}selected{% endif %}>Yes</option>
+              <option value="no" {% if r.approvals_required == 'no' %}selected{% endif %}>No</option>
+            </select>
+          </div>
+
+          <div class="col-12">
+            <div class="form-check mt-2">
+              <input class="form-check-input" type="checkbox" name="is_combined"
+                     {% if r.is_combined %}checked{% endif %}>
+              <label class="form-check-label fw-semibold">Is Combined</label>
+            </div>
+          </div>
+
+          <div class="col-12">
+            <label class="form-label fw-semibold">Status</label>
+            <select name="status" class="form-select form-select-sm">
+              <option value="Active" {% if r.status == 'Active' %}selected{% endif %}>Active</option>
+              <option value="Inactive" {% if r.status == 'Inactive' %}selected{% endif %}>Inactive</option>
+            </select>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="modal-footer justify-content-end">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary fw-semibold">Save</button>
+      </div>
+
+    </form>
+  </div>
+</div>
+{% endfor %}
+
+
+{% endblock %}
+
+
+{% block scripts %}
+<script>
+// =========================
+// ADVANCED FILTERS
+// =========================
+document.addEventListener("DOMContentLoaded", () => {
+
+  const searchInput = document.getElementById("searchFilter");
+  const locationFilter = document.getElementById("locationFilter");
+  const statusFilter = document.getElementById("statusFilter");
+  const combinedFilter = document.getElementById("combinedFilter");
+  const resetBtn = document.getElementById("filterResetBtn");
+  const rows = document.querySelectorAll("#roomTable tbody tr");
+
+  function applyFilters() {
+    const searchVal = searchInput.value.toLowerCase();
+    const locVal = locationFilter.value.toLowerCase();
+    const statusVal = statusFilter.value.toLowerCase();
+    const combinedVal = combinedFilter.value.toLowerCase();
+
+    rows.forEach(row => {
+      const cols = row.querySelectorAll("td");
+
+      const name = (cols[1]?.innerText || "").toLowerCase();
+      const location = (cols[2]?.innerText || "").toLowerCase();
+      const groupCode = (cols[3]?.innerText || "").toLowerCase();
+      const approver = (cols[5]?.innerText || "").toLowerCase();
+      const combined = (cols[6]?.innerText || "").toLowerCase();
+      const status = (cols[7]?.innerText || "").toLowerCase();
+
+      let show = true;
+
+      if (searchVal) {
+        const text = name + groupCode + approver;
+        if (!text.includes(searchVal)) show = false;
+      }
+      if (locVal !== "all" && location !== locVal) show = false;
+      if (statusVal !== "all" && status !== statusVal) show = false;
+      if (combinedVal !== "all" && combined !== combinedVal) show = false;
+
+      row.style.display = show ? "" : "none";
+    });
+  }
+
+  searchInput.addEventListener("input", applyFilters);
+  locationFilter.addEventListener("change", applyFilters);
+  statusFilter.addEventListener("change", applyFilters);
+  combinedFilter.addEventListener("change", applyFilters);
+
+  resetBtn.addEventListener("click", () => {
+    searchInput.value = "";
+    locationFilter.value = "all";
+    statusFilter.value = "all";
+    combinedFilter.value = "all";
+    applyFilters();
+  });
+
+});
+
+// =========================
+// COLUMN SORTING
+// =========================
+document.querySelectorAll(".sortable").forEach(header => {
+  header.addEventListener("click", () => {
+    const table = document.getElementById("roomTable");
+    const tbody = table.querySelector("tbody");
+    const colIndex = header.getAttribute("data-col");
+    const rows = Array.from(tbody.querySelectorAll("tr"));
+
+    const asc = header.classList.toggle("asc");
+
+    rows.sort((a, b) => {
+      const A = a.children[colIndex].innerText.toLowerCase();
+      const B = b.children[colIndex].innerText.toLowerCase();
+
+      if (!isNaN(A) && !isNaN(B)) {
+        return asc ? A - B : B - A;
+      }
+
+      return asc ? A.localeCompare(B) : B.localeCompare(A);
+    });
+
+    rows.forEach(r => tbody.appendChild(r));
+  });
+});
+</script>
 {% endblock %}
