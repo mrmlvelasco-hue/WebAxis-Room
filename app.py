@@ -155,6 +155,7 @@ def approvals():
 def approve_reservation(res_id):
     username = current_user.username
     conn = get_db_connection(); cur = conn.cursor()
+
     cur.execute("SELECT approver_username, status FROM dbo.reservations WHERE id = ?", (res_id,))
     row = cur.fetchone()
     if not row:
@@ -1262,6 +1263,69 @@ def api_room_availability(room_id):
 # (remaining routes & functions—api_reservations, api_room_availability, api_booked_slots, room_schedule, admin dashboard, etc.—should remain as in your working copy)
 # Keep the rest of your original file unchanged below this line (export_excel, api_reservations, api_room_availability, api_booked_slots, room_schedule, etc.)
 
+def assign_user_locations(user_id, locations):
+   """Replace all user-location assignments."""
+   try:
+       conn = get_db_connection(); cur = conn.cursor()
+       cur.execute("DELETE FROM dbo.user_locations WHERE user_id = ?", (user_id,))
+       for loc in locations:
+           cur.execute(
+               "INSERT INTO dbo.user_locations (user_id, location_name) VALUES (?, ?)",
+               (user_id, loc)
+           )
+       conn.commit()
+   except Exception as e:
+       print("⚠ assign_user_locations error:", e)
+   finally:
+       conn.close()
+def get_user_locations(user_id):
+   try:
+       conn = get_db_connection(); cur = conn.cursor()
+       cur.execute("SELECT location_name FROM dbo.user_locations WHERE user_id = ?", (user_id,))
+       rows = [r[0] for r in cur.fetchall()]
+       conn.close()
+       return rows
+   except:
+       return []
+def assign_location_approvers(location, usernames):
+   """Replace all approvers of a location."""
+   try:
+       conn = get_db_connection(); cur = conn.cursor()
+       cur.execute("DELETE FROM dbo.group_approvers WHERE group_code = ?", (location,))
+       for user in usernames:
+           cur.execute("""
+               INSERT INTO dbo.group_approvers (group_code, approver_username, is_active)
+               VALUES (?, ?, 1)
+           """, (location, user))
+       conn.commit()
+   except Exception as e:
+       print("⚠ assign_location_approvers error:", e)
+   finally:
+       conn.close()
+def get_location_approvers(location):
+   try:
+       conn = get_db_connection(); cur = conn.cursor()
+       cur.execute("""
+           SELECT approver_username
+           FROM dbo.group_approvers
+           WHERE group_code = ? AND is_active = 1
+       """, (location,))
+       rows = [r[0] for r in cur.fetchall()]
+       conn.close()
+       return rows
+   except:
+       return []
+def get_all_room_locations():
+    try:
+        conn = get_db_connection(); cur = conn.cursor()
+        cur.execute("SELECT DISTINCT location FROM dbo.rooms WHERE location IS NOT NULL")
+        rows = [r[0] for r in cur.fetchall()]
+        conn.close()
+        return rows
+    except Exception as e:
+        print("⚠️ get_all_room_locations error:", e)
+        return []
+
 # --- Edit User ---
 @app.route('/edit_user/<int:user_id>', methods=['GET', 'POST'])
 @login_required
@@ -1308,6 +1372,48 @@ def edit_user(user_id):
 
     return render_template('edit_user.html', user=user)
 
+# @app.route('/user_edit/<int:user_id>', methods=['GET', 'POST'])
+# @login_required
+# def user_edit(user_id):
+#     if not current_user.is_admin():
+#         flash("Access denied: Admins only.")
+#         return redirect(url_for('main_menu'))
+#
+#     conn = get_db_connection()
+#     cursor = conn.cursor()
+#
+#     if request.method == 'POST':
+#         display_name = request.form.get('display_name')
+#         email = request.form.get('email')
+#         role = request.form.get('role')
+#         status = request.form.get('status')
+#
+#         try:
+#             cursor.execute("""
+#                 UPDATE dbo.users
+#                 SET display_name = ?, email = ?, role = ?, status = ?, updated_at = GETDATE()
+#                 WHERE id = ?
+#             """, (display_name, email, role, status, user_id))
+#             conn.commit()
+#             flash("✅ User updated successfully.", "success")
+#             log_audit("USER_UPDATED", f"Updated user ID {user_id} ({display_name})")
+#             return redirect(url_for('user_maintenance'))
+#         except Exception as e:
+#             flash(f"⚠️ Error updating user: {e}", "danger")
+#         finally:
+#             conn.close()
+#
+#     # --- For GET: Load user info for the form ---
+#     cursor.execute("SELECT id, username, display_name, email, role, status FROM dbo.users WHERE id = ?", (user_id,))
+#     user = cursor.fetchone()
+#     conn.close()
+#
+#     if not user:
+#         flash("⚠️ User not found.", "warning")
+#         return redirect(url_for('user_maintenance'))
+#
+#     return render_template("edit_user.html", user=user)
+# --- Admin dashboard ---
 @app.route('/user_edit/<int:user_id>', methods=['GET', 'POST'])
 @login_required
 def user_edit(user_id):
@@ -1315,41 +1421,86 @@ def user_edit(user_id):
         flash("Access denied: Admins only.")
         return redirect(url_for('main_menu'))
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    conn = get_db_connection(); cursor = conn.cursor()
 
     if request.method == 'POST':
-        display_name = request.form.get('display_name')
-        email = request.form.get('email')
-        role = request.form.get('role')
-        status = request.form.get('status')
+        display_name = request.form.get('display_name', '').strip()
+        email = request.form.get('email', '').strip()
+        role = request.form.get('role', 'user')
+        status = request.form.get('status', 'active')
+        locations = request.form.getlist('locations') or []
+        approver_locations = request.form.getlist('approver_locations') or []
 
         try:
+            # update basic fields
             cursor.execute("""
                 UPDATE dbo.users
                 SET display_name = ?, email = ?, role = ?, status = ?, updated_at = GETDATE()
                 WHERE id = ?
             """, (display_name, email, role, status, user_id))
             conn.commit()
+
+            # update user locations
+            assign_user_locations(user_id, locations)
+
+            # update approver assignments:
+            # we'll merge this user into approver lists for selected approver_locations,
+            # and remove them from locations unchecked.
+            all_locations = get_all_room_locations()
+            for loc in all_locations:
+                existing = get_location_approvers(loc)
+                if loc in approver_locations:
+                    # ensure username present
+                    if current_user.username not in existing:
+                        # but we need to know the username of edited user
+                        pass
+
+            # *** We need the username of the edited user to add/remove approver rows: fetch it ***
+            cursor.execute("SELECT username FROM dbo.users WHERE id = ?", (user_id,))
+            row = cursor.fetchone()
+            username = row[0] if row else None
+
+            # Add user to approver lists for approver_locations
+            for loc in approver_locations:
+                existing = get_location_approvers(loc)
+                if username and username not in existing:
+                    new_list = existing + [username]
+                    assign_location_approvers(loc, new_list)
+
+            # Remove user as approver from locations that were unchecked
+            for loc in get_all_room_locations():
+                if loc not in approver_locations:
+                    existing = get_location_approvers(loc)
+                    if username and username in existing:
+                        new_list = [u for u in existing if u != username]
+                        assign_location_approvers(loc, new_list)
+
+            log_audit("USER_UPDATED", f"Updated user {username}: locations={locations}, approver_locations={approver_locations}")
             flash("✅ User updated successfully.", "success")
-            log_audit("USER_UPDATED", f"Updated user ID {user_id} ({display_name})")
             return redirect(url_for('user_maintenance'))
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             flash(f"⚠️ Error updating user: {e}", "danger")
         finally:
+            cursor.close()
             conn.close()
 
-    # --- For GET: Load user info for the form ---
+    # GET: show form — load user & context
     cursor.execute("SELECT id, username, display_name, email, role, status FROM dbo.users WHERE id = ?", (user_id,))
     user = cursor.fetchone()
-    conn.close()
-
     if not user:
         flash("⚠️ User not found.", "warning")
         return redirect(url_for('user_maintenance'))
 
-    return render_template("edit_user.html", user=user)
-# --- Admin dashboard ---
+    # data for form
+    locations = get_all_room_locations()
+    user_locations = get_user_locations(user_id)
+    username = user[1]
+    approver_locations = [loc for loc in locations if username in get_location_approvers(loc)]
+
+    return render_template("edit_user.html", user=user, locations=locations, user_locations=user_locations, approver_locations=approver_locations)
+
 @app.route('/admin')
 @login_required
 def admin_dashboard():
@@ -1436,46 +1587,135 @@ def admin_dashboard():
 @app.route('/add_user', methods=['POST'])
 @login_required
 def add_user():
-    if request.method == 'POST':
-        print("🧩 Received Add User POST")
-        print("Form data:", request.form)
-
     if not current_user.is_admin():
-        flash("Access denied: Admins only.")
+        flash("Access denied: Admins only.", "warning")
         return redirect(url_for('main_menu'))
+
+    username = request.form.get('username', '').strip()
+    email = request.form.get('email', '').strip()
+    display_name = request.form.get('display_name', '').strip()
+    role = request.form.get('role', 'user')
+    status = request.form.get('status', 'active')
+
+    locations = request.form.getlist('locations') or []
+    approver_locations = request.form.getlist('approver_locations') or []
+
+    print("\n🔍 ADD USER DEBUG")
+    print("username:", username)
+    print("locations:", locations)
+    print("approver_locations:", approver_locations)
+
+    if not username:
+        flash("Username required.", "warning")
+        return redirect(url_for('user_maintenance'))
 
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cur = conn.cursor()
 
-        username = request.form['username'].strip()
-        email = request.form.get('email')
-        display_name = request.form.get('display_name')
-        role = request.form.get('role', 'user')
-        status = request.form.get('status', 'active')
-
-        cursor.execute("SELECT COUNT(*) FROM dbo.users WHERE username = ?", (username,))
-        (exists,) = cursor.fetchone() or (0,)
+        # Check duplicate
+        cur.execute("SELECT COUNT(*) FROM dbo.users WHERE username = ?", (username,))
+        exists = cur.fetchone()[0]
         if exists:
-            flash(f"⚠️ User {username} already exists.")
-        else:
-            cursor.execute("""
-                INSERT INTO dbo.users (username, email, display_name, role, status, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, GETDATE(), GETDATE())
-            """, (username, email, display_name, role, status))
-            conn.commit()
-            flash(f"✅ User {username} added successfully.")
-            log_audit("USER_ADDED", f"Added user {username} with role {role}")
+            flash(f"⚠️ User {username} already exists.", "warning")
+            return redirect(url_for('user_maintenance'))
+
+        # Insert user
+        cur.execute("""
+            INSERT INTO dbo.users (username, display_name, email, role, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, GETDATE(), GETDATE())
+        """, (username, display_name, email, role, status))
+        conn.commit()
+
+        # Fetch new ID
+        cur.execute("SELECT id FROM dbo.users WHERE username = ?", (username,))
+        row = cur.fetchone()
+
+        if not row:
+            flash("⚠️ Failed to fetch new user ID!", "danger")
+            print("❌ ERROR: Could not fetch inserted user row.")
+            return redirect(url_for('user_maintenance'))
+
+        new_user_id = row[0]
+        print("✔ New user_id:", new_user_id)
+
+        # Assign locations
+        assign_user_locations(new_user_id, locations)
+
+        # Assign approver roles — merge, don't overwrite others
+        for loc in approver_locations:
+            existing = get_location_approvers(loc)
+            if username not in existing:
+                assign_location_approvers(loc, existing + [username])
+
+        log_audit("USER_ADDED", f"Added user {username} with {locations}")
+        flash(f"✅ User {username} added successfully.", "success")
 
     except Exception as e:
-        flash(f"Error adding user: {e}", "danger")
+        print("❌ add_user ERROR:", e)
+        flash(f"⚠️ Error adding user: {e}", "danger")
+        try: conn.rollback()
+        except: pass
     finally:
-        cursor.close()
-        conn.close()
+        try:
+            conn.close()
+        except:
+            pass
 
     return redirect(url_for('user_maintenance'))
 
 
+# @app.route('/add_user', methods=['POST'])
+# @login_required
+# def add_user():
+#     if request.method == 'POST':
+#         print("🧩 Received Add User POST")
+#         print("Form data:", request.form)
+#
+#     if not current_user.is_admin():
+#         flash("Access denied: Admins only.")
+#         return redirect(url_for('main_menu'))
+#
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor()
+#
+#         username = request.form['username'].strip()
+#         email = request.form.get('email')
+#         display_name = request.form.get('display_name')
+#         role = request.form.get('role', 'user')
+#         status = request.form.get('status', 'active')
+#
+#
+#         cursor.execute("SELECT COUNT(*) FROM dbo.users WHERE username = ?", (username,))
+#         (exists,) = cursor.fetchone() or (0,)
+#         if exists:
+#             flash(f"⚠️ User {username} already exists.")
+#         else:
+#             cursor.execute("""
+#                 INSERT INTO dbo.users (username, email, display_name, role, status, created_at, updated_at)
+#                 VALUES (?, ?, ?, ?, ?, GETDATE(), GETDATE())
+#             """, (username, email, display_name, role, status))
+#             conn.commit()
+#             flash(f"✅ User {username} added successfully.")
+#             log_audit("USER_ADDED", f"Added user {username} with role {role}")
+#
+#     except Exception as e:
+#         flash(f"Error adding user: {e}", "danger")
+#     finally:
+#         cursor.close()
+#         conn.close()
+#
+#     return redirect(url_for('user_maintenance'))
+
+
+# # 2. Save location mapping
+#         assign_user_locations(user_id, locations)
+# # 3. Read approver locations
+# approver_locs = request.form.getlist("approver_locations")
+# # 4. For each location selected, add user as approver
+# for loc in approver_locs:
+#    assign_location_approvers(loc, [username])   # Only assign THIS user
 
 # --- Delete User ---
 @app.route('/delete_user/<int:user_id>', methods=['POST', 'GET'])
@@ -1506,26 +1746,8 @@ def user_maintenance():
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # Handle POST (Add new user)
-        if request.method == 'POST':
-            username = request.form['username'].strip()
-            email = request.form.get('email')
-            display_name = request.form.get('display_name')
-            role = request.form.get('role', 'user')
-            status = request.form.get('status', 'active')
-
-            cursor.execute("SELECT COUNT(*) FROM dbo.users WHERE username = ?", (username,))
-            (exists,) = cursor.fetchone() or (0,)
-            if exists:
-                flash(f"⚠️ User {username} already exists.", "warning")
-            else:
-                cursor.execute("""
-                    INSERT INTO dbo.users (username, email, display_name, role, status, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, GETDATE(), GETDATE())
-                """, (username, email, display_name, role, status))
-                conn.commit()
-                flash(f"✅ User {username} added successfully.", "success")
-                log_audit("USER_ADDED", f"Added user {username} with role {role}")
+        # existing POST handling remains (if you allow add via same page)
+        # ...
 
         # Fetch all users
         cursor.execute("""
@@ -1534,23 +1756,76 @@ def user_maintenance():
             ORDER BY created_at DESC
         """)
         users = cursor.fetchall()
+
+        # Fetch distinct locations for selects
+        locations = get_all_room_locations()
+
         conn.close()
 
-        print(f"📋 Loaded {len(users)} users.")
-        return render_template('user_maintenance.html', users=users)
-
+        return render_template('user_maintenance.html', users=users, locations=locations)
     except Exception as e:
         print("⚠️ user_maintenance error:", e)
         flash("System error while loading users.", "danger")
-        # ✅ Add this redirect or fallback render:
         return redirect(url_for('main_menu'))
 
-    # except Exception as e:
-    #     print("⚠️ user_maintenance error:", e)
-    #     # Log and show descriptive error
-    #     flash(f"⚠️ A system error occurred while loading users.<br><small>{e}</small>", "danger")
-    #     # ✅ Render the page with an empty user list (so it won't break)
-    #     return render_template('user_maintenance.html', users=[])
+# @app.route('/user_maintenance', methods=['GET', 'POST'])
+# @login_required
+# def user_maintenance():
+#     if not current_user.is_admin():
+#         flash("Access denied: Admins only.", "warning")
+#         return redirect(url_for('main_menu'))
+#
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor()
+#
+#         # Handle POST (Add new user)
+#         if request.method == 'POST':
+#             username = request.form['username'].strip()
+#             email = request.form.get('email')
+#             display_name = request.form.get('display_name')
+#             role = request.form.get('role', 'user')
+#             status = request.form.get('status', 'active')
+#             # # 1. Read user locations
+#             locations = request.form.getlist("locations")
+#
+#             cursor.execute("SELECT COUNT(*) FROM dbo.users WHERE username = ?", (username,))
+#             (exists,) = cursor.fetchone() or (0,)
+#             if exists:
+#                 flash(f"⚠️ User {username} already exists.", "warning")
+#             else:
+#                 cursor.execute("""
+#                     INSERT INTO dbo.users (username, email, display_name, role, status, created_at, updated_at)
+#                     VALUES (?, ?, ?, ?, ?, GETDATE(), GETDATE())
+#                 """, (username, email, display_name, role, status))
+#                 conn.commit()
+#                 flash(f"✅ User {username} added successfully.", "success")
+#                 log_audit("USER_ADDED", f"Added user {username} with role {role}")
+#
+#         # Fetch all users
+#         cursor.execute("""
+#             SELECT id, username, display_name, email, role, status, last_login, last_login_ip
+#             FROM dbo.users
+#             ORDER BY created_at DESC
+#         """)
+#         users = cursor.fetchall()
+#         conn.close()
+#
+#         print(f"📋 Loaded {len(users)} users.")
+#         return render_template('user_maintenance.html', users=users)
+#
+#     except Exception as e:
+#         print("⚠️ user_maintenance error:", e)
+#         flash("System error while loading users.", "danger")
+#         # ✅ Add this redirect or fallback render:
+#         return redirect(url_for('main_menu'))
+#
+#     # except Exception as e:
+#     #     print("⚠️ user_maintenance error:", e)
+#     #     # Log and show descriptive error
+#     #     flash(f"⚠️ A system error occurred while loading users.<br><small>{e}</small>", "danger")
+#     #     # ✅ Render the page with an empty user list (so it won't break)
+#     #     return render_template('user_maintenance.html', users=[])
 
 @app.route('/menu')
 @login_required
