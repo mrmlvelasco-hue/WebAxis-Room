@@ -1,0 +1,281 @@
+/* =======================================================
+   WebAXIS RoomSys — Unified Dashboard + Timeline Styles
+   FINAL VERSION — Includes Modern Timeline (Option B)
+   ======================================================= */
+
+/* -------------------------------------------------------
+   BASE
+------------------------------------------------------- */
+body {
+    font-family: "Segoe UI", sans-serif;
+    background-color: #f9f9fb;
+    color: #333;
+    margin: 0;
+    overflow-x: hidden;
+    transition: background-color .35s ease, color .35s ease;
+}
+
+/* -------------------------------------------------------
+   SIDEBAR (Desktop)
+------------------------------------------------------- */
+.sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 230px;
+    height: 100vh;
+    background-color: #212529;
+    color: #fff;
+    z-index: 3001 !important;
+    transition: width .3s ease, left .3s ease;
+}
+
+.sidebar-header {
+    padding: 1rem;
+    font-weight: 700;
+    font-size: 1.1rem;
+    text-align: center;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.sidebar .nav-link {
+    padding: 10px 20px;
+    font-weight: 500;
+    color: #adb5bd;
+    display: block;
+    transition: .3s;
+}
+
+.sidebar .nav-link:hover {
+    background: rgba(13,110,253,0.15);
+    color: #0d6efd !important;
+}
+
+.sidebar .nav-link.active {
+    background-color: #0d6efd !important;
+    color: #fff !important;
+    border-radius: 8px;
+}
+
+/* collapsed */
+.sidebar.collapsed { width: 70px; }
+.sidebar.collapsed .link-text { display: none; }
+
+/* -------------------------------------------------------
+   TOPBAR
+------------------------------------------------------- */
+.topbar {
+    position: fixed;
+    top: 0;
+    left: 230px;
+    right: 0;
+    height: 56px;
+    background: #fff;
+    border-bottom: 1px solid #dee2e6;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 1.5rem;
+    z-index: 900;
+    transition: left .3s;
+}
+
+#toggleSidebar {
+    background: transparent;
+    border: none;
+    font-size: 1.25rem;
+    cursor: pointer;
+}
+
+/* -------------------------------------------------------
+   CONTENT AREA
+------------------------------------------------------- */
+.content-area {
+    margin-left: 230px;
+    padding: 2rem;
+    min-height: 100vh;
+    transition: margin-left .3s ease;
+}
+
+/* -------------------------------------------------------
+   MOBILE SIDEBAR
+------------------------------------------------------- */
+@media (max-width: 992px) {
+    .sidebar { left: -260px; width: 260px; }
+    .sidebar.open { left: 0; }
+
+    .topbar {
+        left: 0 !important;
+        width: 100%;
+        padding: 0 12px !important;
+    }
+
+    .content-area {
+        margin-left: 0 !important;
+        padding: 1rem;
+        padding-top: 85px !important;
+    }
+}
+
+/* -------------------------------------------------------
+   CARDS & TABLES
+------------------------------------------------------- */
+.card {
+    border-radius: 12px;
+    border: none;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    transition: .2s ease;
+}
+
+.card:hover {
+    box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+    transform: translateY(-3px);
+}
+
+/* -------------------------------------------------------
+   ROOM FILTER DROPDOWN IN TIMELINE (missing earlier)
+------------------------------------------------------- */
+#locationFilter {
+    min-width: 180px;
+    border-radius: 8px;
+    padding: 6px 10px;
+}
+
+/* -------------------------------------------------------
+   TIMELINE — MODERN STYLE (OPTION B)
+------------------------------------------------------- */
+.slot-grid {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-top: 0.4rem;
+}
+
+.slot-cell {
+    min-width: 72px;
+    height: 60px;
+    border-radius: 10px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 7px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    background: #f0f0f0;
+    transition: .15s ease;
+}
+
+.slot-cell:hover {
+    cursor: pointer;
+    transform: translateY(-4px);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+}
+
+/* Colors */
+.slot-cell.bg-success { background:#0b8a44 !important; color:white; }
+.slot-cell.bg-danger  { background:#d23a3a !important; color:white; }
+.slot-cell.bg-warning { background:#ffc107 !important; color:#222; }
+.slot-cell.bg-secondary { background:#9fa6ad !important; color:white; opacity:.85; }
+
+/* Drag selected */
+.slot-cell.selected {
+    border: 2px solid #0047AB !important;
+    background: #d7e9ff !important;
+    transform: scale(1.05);
+}
+
+/* Cancel button */
+.cancel-btn {
+    border: none;
+    background: rgba(255,255,255,0.9);
+    border-radius: 50%;
+    width: 18px; height: 18px;
+    position: absolute; top: 6px; right: 6px;
+    display: flex; align-items: center; justify-content: center;
+    transition: 0.2s ease;
+}
+.cancel-btn:hover { transform: scale(1.1); }
+
+/* -------------------------------------------------------
+   MOBILE TIMELINE ENHANCEMENT
+------------------------------------------------------- */
+@media (max-width: 576px) {
+
+    .slot-grid {
+        display: grid !important;
+        grid-template-columns: repeat(auto-fit, minmax(52px, 1fr));
+        gap: 6px;
+        width: 100%;
+    }
+
+    .slot-cell {
+        min-width: 52px !important;
+        height: 48px !important;
+        padding: 4px !important;
+        font-size: 0.72rem !important;
+    }
+
+    .timeline {
+        overflow-x: hidden !important;
+        padding: 0.5rem !important;
+    }
+}
+
+/* -------------------------------------------------------
+   MOBILE FILTER DRAWER
+------------------------------------------------------- */
+.mobile-filter-panel {
+    position: fixed;
+    top: 0;
+    right: -300px;
+    width: 260px;
+    height: 100vh;
+    background: #ffffff;
+    box-shadow: -4px 0px 15px rgba(0,0,0,0.15);
+    z-index: 3000;
+    padding: 15px;
+    transition: right .3s ease;
+}
+
+.mobile-filter-panel.open { right: 0; }
+
+.mobile-filter-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e1e1e1;
+}
+
+.mobile-filter-body {
+    margin-top: 15px;
+}
+
+/* Overlay (fixed z-index issue) */
+.mobile-filter-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.35);
+    display: none;
+    pointer-events: none;
+    z-index: 100; /* BELOW SIDEBAR */
+}
+
+.mobile-filter-overlay.active {
+    display: block;
+    pointer-events: auto;
+    z-index: 2500;
+}
+
+/* -------------------------------------------------------
+   MODAL & SWEETALERT Z-INDEX
+------------------------------------------------------- */
+.modal-backdrop.show {
+    opacity: 0.65 !important;
+    background-color: #000 !important;
+    z-index: 1500 !important;
+}
+
+.modal { z-index: 1600 !important; }
+.swal2-container { z-index: 2000 !important; }

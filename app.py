@@ -11,6 +11,7 @@ from dateutil import parser as dateparser  # pip install python-dateutil
 from dateutil.rrule import rrule, rruleset, DAILY, WEEKLY, MONTHLY
 from dateutil.relativedelta import relativedelta
 
+
 import uuid
 
 
@@ -807,182 +808,296 @@ def deactivate_room(id):
     flash("Room deactivated.", "warning")
     return redirect(url_for('room_maintenance'))
 
-# --- ROOM LIST (FULL REPLACEMENT) --------------------------------------------
-@app.route('/rooms', methods=['GET'])
+
+
+def get_room_availability_for_date(room_id, date,
+                                   start_hour=None, end_hour=None):
+    # Default fallback from .env if not provided
+    if start_hour is None:
+        start_hour = int(os.getenv("TIMELINE_START", 6))
+    if end_hour is None:
+        end_hour = int(os.getenv("TIMELINE_END", 22))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT id, reserved_by, email, start_time, end_time,
+               status, remarks, recurrence_id
+        FROM reservations (NOLOCK)
+        WHERE room_id = ?
+          AND CAST(start_time AS DATE) = ?
+    """, (room_id, date))
+
+    rows = cursor.fetchall()
+
+    slots = {}
+    for hour in range(start_hour, end_hour):
+        for minute in [0, 30]:
+            t = f"{hour:02d}:{minute:02d}"
+            slots[t] = "available"
+
+    for r in rows:
+        st = r.start_time
+        et = r.end_time
+
+        cur = datetime.combine(date, datetime_time(start_hour, 0))
+        end_day = datetime.combine(date, datetime_time(end_hour, 0))
+
+        while cur < end_day:
+            slot = cur.strftime("%H:%M")
+            if st <= cur < et:
+                slots[slot] = {
+                    "status": r.status.lower(),
+                    "by": r.reserved_by,
+                    "remarks": r.remarks,
+                    "id": r.id,
+                    "reserved_by": r.reserved_by
+                }
+            cur += timedelta(minutes=30)
+
+    return slots
+
+
+def get_all_room_ids():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT id FROM rooms (NOLOCK) WHERE status='Active'")
+    rows = cur.fetchall()
+    conn.close()
+    return [r[0] for r in rows]
+
+
+# --- ROOM LIST WITH LOCATION + ROOM FILTERING -------------------------------
+# --- ROOM LIST (FINAL PATCH) ---------------------------------------------------
+@app.route("/rooms")
 @login_required
 def room_list():
-    from datetime import datetime, date, time, timedelta
+    try:
+        # ----------------------------------------
+        # 1. READ INPUTS
+        # ----------------------------------------
+        selected_date = request.args.get("date") or date.today().isoformat()
+        selected_location = request.args.get("location", "all")
+        selected_room = request.args.get("room", "all")
+        focus_room = request.args.get("focus")
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
+        view_date = date.fromisoformat(selected_date)
 
-    # --- Normalize selected date from query or session
-    date_str = request.args.get("date")
-    if date_str:
-        try:
-            selected_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-        except Exception:
-            selected_date = datetime.now().date()
-    else:
-        sd = session.get("selected_date")
-        if isinstance(sd, str):
-            try:
-                selected_date = datetime.strptime(sd, "%Y-%m-%d").date()
-            except Exception:
-                selected_date = datetime.now().date()
-        elif isinstance(sd, date):
-            selected_date = sd
+        # timeline range
+        start_hour = int(os.getenv("TIMELINE_START", 6))
+        end_hour = int(os.getenv("TIMELINE_END", 22))
+
+        # ----------------------------------------
+        # 2. DB CONNECTION
+        # ----------------------------------------
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        # ----------------------------------------
+        # 3. GET USER-ASSIGNED LOCATIONS
+        # ----------------------------------------
+        if current_user.is_admin():
+            cur.execute("SELECT DISTINCT location FROM rooms WHERE status='Active'")
+            allowed_locations = [r[0] for r in cur.fetchall()]
         else:
-            selected_date = datetime.now().date()
+            cur.execute("""
+                SELECT DISTINCT ul.location_name
+                FROM user_locations ul
+                WHERE ul.user_id = ?
+            """, current_user.id)
+            allowed_locations = [r[0] for r in cur.fetchall()]
 
-    session["selected_date"] = selected_date.strftime("%Y-%m-%d")
+        if not allowed_locations:
+            allowed_locations = ["Axis T1"]
 
-    # optional focus room highlight
-    focus_room = request.args.get("focus")
+        # ----------------------------------------
+        # 4. GET ALL ROOMS UNDER ALLOWED LOCATIONS
+        # ----------------------------------------
+        cur.execute("""
+            SELECT id, name, location, capacity, description,
+                   group_code, is_combined
+            FROM rooms
+            WHERE status='Active'
+              AND location IN ({})
+            ORDER BY location, name
+        """.format(",".join("?" * len(allowed_locations))), allowed_locations)
 
-    # --- Compute day window ---
-    start_of_day = datetime.combine(selected_date, datetime.min.time())
-    end_of_day = start_of_day + timedelta(days=1)
+        rows = cur.fetchall()
 
-    # --- Fetch rooms ---
-    cursor.execute("""
-        SELECT id, name, capacity, location, description, group_code, is_combined
-        FROM dbo.rooms
-        WHERE status = 'Active'
-        ORDER BY location, name
-    """)
-    raw_rooms = cursor.fetchall()
+        all_rooms = [
+            {
+                "id": r[0],
+                "name": r[1],
+                "location": r[2],
+                "capacity": r[3],
+                "description": r[4],
+                "group_code": r[5],
+                "is_combined": bool(r[6]),
+            }
+            for r in rows
+        ]
 
-    rooms = []
-    for r in raw_rooms:
-        rooms.append({
-            "id": getattr(r, "id", r[0]),
-            "name": getattr(r, "name", r[1]),
-            "capacity": getattr(r, "capacity", r[2]),
-            "location": getattr(r, "location", r[3]) or "General",
-            "description": getattr(r, "description", r[4]),
-            "group_code": getattr(r, "group_code", r[5]),
-            "is_combined": bool(getattr(r, "is_combined", r[6])),
-        })
+        # ----------------------------------------
+        # 5. APPLY LOCATION FILTER
+        # ----------------------------------------
+        if selected_location != "all":
+            filtered_rooms = [r for r in all_rooms if r["location"] == selected_location]
+        else:
+            filtered_rooms = all_rooms[:]
 
-    # --- Fetch reservations for this day ---
-    cursor.execute("""
-        SELECT id, room_id, reserved_by, email, start_time, end_time, status, ISNULL(remarks,'') AS remarks
-        FROM dbo.reservations
-        WHERE status IN ('Pending','Approved','Blocked')
-          AND start_time < ? AND end_time > ?
-    """, (end_of_day, start_of_day))
-    raw_res = cursor.fetchall()
+        # ----------------------------------------
+        # 6. APPLY ROOM FILTER
+        # ----------------------------------------
+        if selected_room != "all":
+            rooms = [r for r in filtered_rooms if r["name"] == selected_room]
+        else:
+            rooms = filtered_rooms[:]
 
-    # --- Build availability dictionary ---
-    availability = {}
-    for room in rooms:
-        rid = room["id"]
-        availability[rid] = {}
-        for hour in range(6, 20):
-            for minute in (0, 30):
-                label = f"{hour:02d}:{minute:02d}"
-                availability[rid][label] = {
-                    "status": "available",
-                    "by": "",
-                    "remarks": "",
-                    "reserved_by": ""
-                }
+        # if no rooms left, skip reservation loading
+        if not rooms:
+            conn.close()
+            return render_template(
+                "index.html",
+                rooms=[],
+                all_rooms=all_rooms,
+                allowed_locations=allowed_locations,
+                availability={},
+                selected_date=view_date,
+                selected_room=selected_room,
+                selected_location=selected_location,
+                focus_room=focus_room,
+                start_hour=start_hour,
+                end_hour=end_hour,
+            )
 
-    # --- Mark slots based on reservations ---
-    for rr in raw_res:
-        res_id = getattr(rr, "id", rr[0])
-        r_id = getattr(rr, "room_id", rr[1])
-        reserved_by = getattr(rr, "reserved_by", rr[2]) or ""
-        remarks = getattr(rr, "remarks", rr[7]) or ""
-        status = getattr(rr, "status", rr[6])
-        start_time = getattr(rr, "start_time", rr[4])
-        end_time = getattr(rr, "end_time", rr[5])
+        room_ids = [r["id"] for r in rooms]
 
-        current = start_time
-        while current < end_time:
-            label = current.strftime("%H:%M")
-            if r_id in availability and label in availability[r_id]:
+        # ----------------------------------------
+        # 7. LOAD RESERVATIONS FOR SELECTED DATE
+        # ----------------------------------------
+        cur.execute(f"""
+            SELECT id, room_id, reserved_by, start_time, end_time,
+                   status, remarks
+            FROM reservations
+            WHERE CAST(start_time AS DATE) = ?
+              AND room_id IN ({','.join('?' * len(room_ids))})
+        """, [selected_date] + room_ids)
 
-                # Approved or Blocked → booked
-                if status in ("Approved", "Blocked"):
-                    availability[r_id][label]["status"] = "booked"
+        reservations = cur.fetchall()
 
-                elif status == "Pending":
-                    # Only apply if not already booked
-                    if availability[r_id][label]["status"] != "booked":
-                        availability[r_id][label]["status"] = "pending"
+        # ----------------------------------------
+        # 8. BUILD AVAILABILITY GRID
+        # ----------------------------------------
+        availability = {rid: {} for rid in room_ids}
 
-                availability[r_id][label]["by"] = reserved_by
-                availability[r_id][label]["remarks"] = remarks
-                availability[r_id][label]["reserved_by"] = reserved_by
-                availability[r_id][label + "_id"] = res_id
+        for r in rooms:
+            for hour in range(start_hour, end_hour):
+                for minute in (0, 30):
+                    t = f"{hour:02d}:{minute:02d}"
+                    availability[r["id"]][t] = {
+                        "status": "available",
+                        "reserved_by": "",
+                        "remarks": "",
+                        "id": "",
+                    }
 
-            current += timedelta(minutes=30)
+        # Apply reservations
+        for (res_id, rid, by, s, e, status, remarks) in reservations:
+            cur_time = s
+            while cur_time < e:
+                t = cur_time.strftime("%H:%M")
+                if rid in availability:
+                    availability[rid][t] = {
+                        "status": status.lower(),
+                        "reserved_by": by,
+                        "remarks": remarks,
+                        "id": res_id,
+                    }
+                cur_time += timedelta(minutes=30)
 
-    conn.close()
+        conn.close()
 
-    return render_template(
-        "index.html",
-        rooms=rooms,
-        availability=availability,
-        selected_date=selected_date,
-        focus_room=focus_room
-    )
+        return render_template(
+            "index.html",
+            rooms=rooms,
+            all_rooms=all_rooms,
+            allowed_locations=allowed_locations,
+            availability=availability,
+            selected_room=selected_room,
+            selected_location=selected_location,
+            selected_date=view_date,
+            focus_room=focus_room,
+            start_hour=start_hour,
+            end_hour=end_hour,
+        )
+
+    except Exception as e:
+        print("❌ ERROR in room_list:", e)
+        return f"Internal Error: {e}", 500
 
 
-@app.route('/calendar_view', methods=['GET'])
+@app.route("/calendar_view")
 @login_required
 def calendar_view():
-    from datetime import datetime
+    try:
+        selected_date = request.args.get("date")
+        selected_location = request.args.get("location")
 
-    # --- Selected Date ---
-    date_str = request.args.get("date")
-    if date_str:
-        try:
-            selected_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-        except Exception:
-            selected_date = datetime.now().date()
-    else:
-        selected_date = session.get("selected_date", datetime.now().date())
+        if not selected_date:
+            selected_date = datetime.now().strftime("%Y-%m-%d")
 
-    session["selected_date"] = selected_date
+        conn = get_db_connection()
+        cur = conn.cursor()
 
-    # --- Fetch Active Rooms ---
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT id, name, capacity, location, description, status
-        FROM dbo.rooms
-        WHERE status = 'Active'
-        ORDER BY location, name
-    """)
-    rows = cursor.fetchall()
-    conn.close()
-    location_filter = request.args.get("location", "all")
+        # Determine allowed locations
+        if current_user.is_admin():
+            cur.execute("SELECT DISTINCT location FROM rooms WHERE status='Active'")
+            allowed_locations = [row[0] for row in cur.fetchall()]
+        else:
+            cur.execute("""
+                SELECT DISTINCT ul.location_name
+                FROM user_locations ul
+                WHERE ul.user_id = ?
+            """, (current_user.id,))
+            allowed_locations = [row[0] for row in cur.fetchall()]
 
-    # --- SAFE conversion: pyodbc → serializable dict ---
-    rooms = []
-    for r in rows:
-        rooms.append({
-            "id": int(r.id),
-            "name": str(r.name),
-            "capacity": int(r.capacity) if r.capacity is not None else 0,
-            "location": str(r.location) if r.location else "General",
-            "description": str(r.description) if r.description else "",
-            "status": str(r.status)
-        })
+        # Validate requested location
+        if not selected_location or selected_location not in allowed_locations:
+            selected_location = allowed_locations[0]
 
-    print("⚠️ Paramter", location_filter)
+        # Load rooms for this user/location
+        cur.execute("""
+            SELECT *
+            FROM rooms
+            WHERE status='Active'
+              AND location = ?
+        """, (selected_location,))
+        rows = cur.fetchall()
 
-    return render_template(
-        "calendar_view.html",
-        selected_date=selected_date,
-        rooms=rooms,
-        location_filter=location_filter
-    )
+        rooms = [
+            {desc[0]: value for desc, value in zip(cur.description, row)}
+            for row in rows
+        ]
 
+        # Group rooms for dropdown
+        grouped_rooms = {}
+        for r in rooms:
+            grouped_rooms.setdefault(r["location"], []).append(r["name"])
 
+        conn.close()
+
+        return render_template(
+            "calendar_view.html",
+            rooms=rooms,
+            grouped_rooms=grouped_rooms,
+            current_location=selected_location,
+            locations=allowed_locations,
+            selected_date=selected_date
+        )
+    except Exception as e:
+        print("❌ ERROR in calendar_view:", e)
+        return "Calendar Error", 500
 
 
 def get_room_by_id(conn, room_id):
@@ -1018,241 +1133,234 @@ def get_linked_rooms(conn, group_code, exclude_id=None):
 def confirm():
     return render_template('confirmation.html')
 
+# --- Helper: get_combined_group_rooms ---
+import uuid
+# from datetime import datetime, timedelta
+
 def get_combined_group_rooms(room_id):
-    """
-    Returns all rooms in the SAME combined group as this room.
-    Only returns rooms that share the same group_code AND are active.
-    Does NOT combine by location.
-    """
-    conn = get_db()
+    conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Get group_code for this room
-    cursor.execute("SELECT group_code FROM rooms WHERE id = ?", room_id)
+    cursor.execute("""
+        SELECT group_code, is_combined
+        FROM rooms
+        WHERE id = ?
+    """, (room_id,))
     row = cursor.fetchone()
 
-    if not row or not row[0] or row[0] == "UNGROUPED":
-        return []  # Not part of any combined group
+    if not row:
+        cursor.close()
+        conn.close()
+        return [room_id]
 
-    group_code = row[0]
+    group_code, is_combined = row
 
-    # Get ALL rooms in this combined group
+    # If this room is NOT combined → do not block others
+    if not group_code or is_combined != 1:
+        cursor.close()
+        conn.close()
+        return [room_id]
+
+    # Combined room → block all rooms in same group_code
     cursor.execute("""
-        SELECT id, name, is_combined
+        SELECT id
         FROM rooms
-        WHERE group_code = ? AND status = 'Active'
-    """, group_code)
+        WHERE group_code = ?
+    """, (group_code,))
+    rooms = [r[0] for r in cursor.fetchall()]
 
-    return cursor.fetchall()  # list of (id, name, is_combined)
+    cursor.close()
+    conn.close()
+    return rooms
+
+
 
 @app.route('/reserve_post/<int:room_id>', methods=['POST'])
 @login_required
 def reserve_post(room_id):
-    """
-    Handles single and recurring reservations.
-    Accepts JSON or form data.
-    Returns JSON summary: created_count, skipped(list), success flag
-    """
-    conn = None
     try:
-        data = request.get_json() if request.is_json else request.form.to_dict()
+        conn = get_db_connection();
+        cur = conn.cursor()
 
-        # Basic fields
-        reserved_by = data.get('reserved_by') or getattr(current_user, 'display_name', None) or current_user.username
-        email = data.get('email', '')
-        remarks = data.get('remarks', '')
-        start_str = data.get('start_time')
-        end_str = data.get('end_time')
+        # Parse payload
+        payload = request.get_json() if request.is_json else request.form.to_dict()
 
-        # Validate datetimes (expect 'YYYY-MM-DDTHH:MM' from datetime-local)
-        if not start_str or not end_str:
-            return jsonify({"success": False, "message": "Missing start_time or end_time."}), 400
-        try:
-            # Use fromisoformat for strict parsing of 'YYYY-MM-DDTHH:MM' or ISO strings
-            start_dt = datetime.fromisoformat(start_str)
-            end_dt = datetime.fromisoformat(end_str)
-        except Exception:
-            # Fallback to dateutil parse if necessary
-            try:
-                start_dt = dtparse(start_str)
-                end_dt = dtparse(end_str)
-            except Exception:
-                return jsonify({"success": False, "message": "Invalid start/end format."}), 400
+        start_time = payload.get("start_time")
+        end_time = payload.get("end_time")
+        remarks = payload.get("remarks", "")
+        email = payload.get("email") or current_user.email
+        reserved_by = payload.get("reserved_by") or current_user.display_name
 
-        if end_dt <= start_dt:
-            return jsonify({"success": False, "message": "End time must be after start time."}), 400
+        recurrence_type = payload.get("recurrence_type", "none")
+        weekdays = payload.get("weekdays", "")  # CSV "MO,FR"
+        weekly_interval = int(payload.get("weekly_interval", 1))
 
-        # recurrence params
-        rec_type = data.get('recurrence_type', 'none')  # none/daily/weekly/monthly
-        weekdays = (data.get('weekdays') or '').split(',') if data.get('weekdays') else []
-        weekly_interval = int(data.get('weekly_interval') or 1)
-        monthly_mode = data.get('monthly_mode', 'date')  # date or weekday
-        monthly_interval = int(data.get('monthly_interval') or 1)
+        end_mode = payload.get("end_mode", "never")
+        end_on_date = payload.get("end_on_date")
+        after_count = payload.get("end_after_count")
 
-        # end condition
-        end_mode = data.get('end_mode', 'never')  # never/on/after
-        end_on_date = data.get('end_on_date')
-        end_after_count = int(data.get('end_after_count') or 0)
+        if not start_time or not end_time:
+            return jsonify(success=False, message="Missing start/end"), 400
 
-        MAX_OCCURRENCES = 200
+        # Convert strings -> datetime
+        start_dt = datetime.fromisoformat(start_time)
+        end_dt = datetime.fromisoformat(end_time)
+        base_duration = end_dt - start_dt
 
-        # load room info
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, name, group_code, is_combined FROM dbo.rooms WHERE id = ?", (room_id,))
-        row = cursor.fetchone()
-        if not row:
-            conn.close()
-            return jsonify({"success": False, "message": "Room not found."}), 404
-        room_name = row[1]; group_code = row[2]; is_combined = bool(row[3])
+        # --- Build all recurrence dates ---
+        all_dates = []
+        current = start_dt
 
-        # compute linked rooms (for combined blocking)
-        linked_room_ids = []
-        if group_code:
-            cursor.execute("SELECT id FROM dbo.rooms WHERE group_code = ? AND id <> ?", (group_code, room_id))
-            linked_room_ids = [r[0] for r in cursor.fetchall()]
+        recurrence_id = str(uuid.uuid4()) if recurrence_type != "none" else None
 
-        # Build occurrences list
-        occurrences = []
-        if rec_type == 'none':
-            occurrences = [(start_dt, end_dt)]
-        else:
-            # until or count
-            until = None
-            count = None
-            if end_mode == 'on' and end_on_date:
-                try:
-                    until = datetime.fromisoformat(end_on_date)
-                    until = until.replace(hour=23, minute=59, second=59)
-                except:
-                    try:
-                        until = dtparse(end_on_date)
-                        until = until.replace(hour=23, minute=59, second=59)
-                    except:
-                        until = None
-            if end_mode == 'after' and end_after_count:
-                count = end_after_count
+        def add_if_match(dt):
+            # Ensure dt <= end-limit rules
+            if end_mode == "on" and dt.date() > datetime.fromisoformat(end_on_date).date():
+                return False
+            return True
 
-            if rec_type == 'daily':
-                interval = int(data.get('daily_interval') or 1)
-                rule = rrule(freq=DAILY, dtstart=start_dt, interval=interval, until=until, count=count)
-                for occstart in rule:
-                    occend = occstart + (end_dt - start_dt)
-                    occurrences.append((occstart, occend))
+        count = 0
+        MAX_LIMIT = 370  # 1 year
 
-            elif rec_type == 'weekly':
-                # map weekdays like MO,TU,... to rrule weekdays
-                from dateutil.rrule import MO, TU, WE, TH, FR, SA, SU
-                wk_map = {'MO': MO, 'TU': TU, 'WE': WE, 'TH': TH, 'FR': FR, 'SA': SA, 'SU': SU}
-                byweekday = [wk_map[w] for w in weekdays if w in wk_map]
-                if not byweekday:
-                    # fallback: the start_dt weekday
-                    wk = ['MO','TU','WE','TH','FR','SA','SU'][start_dt.weekday()]
-                    byweekday = [wk_map[wk]]
-                rule = rrule(freq=WEEKLY, dtstart=start_dt, interval=weekly_interval, byweekday=byweekday, until=until, count=count)
-                for occstart in rule:
-                    occend = occstart + (end_dt - start_dt)
-                    occurrences.append((occstart, occend))
+        if recurrence_type == "none":
+            all_dates = [start_dt]
 
-            elif rec_type == 'monthly':
-                if monthly_mode == 'date':
-                    md = start_dt.day
-                    rule = rrule(freq=MONTHLY, dtstart=start_dt, interval=monthly_interval, bymonthday=md, until=until, count=count)
-                    for occstart in rule:
-                        occend = occstart + (end_dt - start_dt)
-                        occurrences.append((occstart, occend))
-                else:
-                    # same weekday-of-month (e.g., 3rd Monday)
-                    wkday_index = start_dt.weekday()  # 0=Mon..6=Sun
-                    nth = (start_dt.day - 1) // 7 + 1
-                    from dateutil.rrule import MO, TU, WE, TH, FR, SA, SU
-                    wk_map_idx = {0: MO, 1: TU, 2: WE, 3: TH, 4: FR, 5: SA, 6: SU}
-                    weekday_with_n = wk_map_idx[wkday_index](nth)
-                    rule = rrule(freq=MONTHLY, dtstart=start_dt, interval=monthly_interval, byweekday=weekday_with_n, until=until, count=count)
-                    for occstart in rule:
-                        occend = occstart + (end_dt - start_dt)
-                        occurrences.append((occstart, occend))
-
-        # cap occurrences
-        if len(occurrences) > MAX_OCCURRENCES:
-            occurrences = occurrences[:MAX_OCCURRENCES]
-
-        created = 0
-        skipped = []
-        recurrence_id = str(uuid.uuid4())
-
-        for occstart, occend in occurrences:
-            # check conflicts for main and linked rooms
-            conflict = False
-            all_room_ids = [room_id] + linked_room_ids
-            for rid in all_room_ids:
-                cursor.execute("""
-                    SELECT COUNT(*) FROM dbo.reservations
-                    WHERE room_id = ? AND status IN ('Pending','Approved','Blocked')
-                      AND NOT (end_time <= ? OR start_time >= ?)
-                """, (rid, occstart, occend))
-                cnt = cursor.fetchone()[0]
-                if cnt > 0:
-                    conflict = True
+        elif recurrence_type == "daily":
+            while count < MAX_LIMIT:
+                if add_if_match(current):
+                    all_dates.append(current)
+                count += 1
+                if end_mode == "after" and len(all_dates) >= int(after_count):
                     break
-            if conflict:
-                skipped.append(f"{occstart.strftime('%Y-%m-%d %H:%M')} - {occend.strftime('%H:%M')}")
+                current += timedelta(days=1)
+                if end_mode == "on" and current.date() > datetime.fromisoformat(end_on_date).date():
+                    break
+
+        elif recurrence_type == "weekly":
+            weekday_map = ["MO","TU","WE","TH","FR","SA","SU"]
+            target_days = weekdays.split(",") if weekdays else []
+            if not target_days:
+                target_days = [weekday_map[start_dt.weekday()]]
+
+            # First: include the start date
+            if weekday_map[start_dt.weekday()] in target_days:
+                all_dates.append(start_dt)
+
+            cur_dt = start_dt
+            while len(all_dates) < MAX_LIMIT:
+                cur_dt += timedelta(days=1)
+                wd = weekday_map[cur_dt.weekday()]
+
+                if wd in target_days:
+                    if not add_if_match(cur_dt):
+                        break
+                    all_dates.append(cur_dt)
+
+                if end_mode == "after" and len(all_dates) >= int(after_count):
+                    break
+                if end_mode == "on" and cur_dt.date() > datetime.fromisoformat(end_on_date).date():
+                    break
+
+        # MONTHLY—can add later if needed
+        elif recurrence_type == "monthly":
+            all_dates = [start_dt]  # TODO: support monthly rules
+
+        # =====================================================================
+        # Insert reservations + auto-block for combined AXIS_HALL rooms
+        # =====================================================================
+        group_rooms = get_combined_group_rooms(room_id)
+
+        created_count = 0
+        skipped = []
+
+        for dt in all_dates:
+            new_start = dt
+            new_end = dt + base_duration
+
+            # Check conflict in the main room
+            cur.execute("""
+                SELECT COUNT(*)
+                FROM reservations
+                WHERE room_id=?
+                AND NOT (end_time <= ? OR start_time >= ?)
+                AND status IN ('Pending','Approved','Blocked')
+            """, (room_id, new_start, new_end))
+            if cur.fetchone()[0] > 0:
+                skipped.append(new_start.isoformat())
                 continue
 
-            # insert main reservation
-            try:
-                cursor.execute("""
-                    INSERT INTO dbo.reservations
-                    (room_id, reserved_by, start_time, end_time, status, remarks, email, approver_username, recurrence_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (room_id, reserved_by, occstart, occend, 'Pending', remarks, email, None, recurrence_id))
-            except Exception:
-                # if recurrence_id column doesn't exist, try without it
-                cursor.execute("""
-                    INSERT INTO dbo.reservations
-                    (room_id, reserved_by, start_time, end_time, status, remarks, email, approver_username)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (room_id, reserved_by, occstart, occend, 'Pending', remarks, email, None))
+            # Insert main reservation
+            cur.execute("""
+                INSERT INTO reservations
+                    (room_id, reserved_by, email, start_time, end_time, status,
+                     remarks, created_at, time_zone, recurrence_id)
+                VALUES (?, ?, ?, ?, ?, 'Pending', ?, GETDATE(),
+                        'GMT+08:00 (Beijing, Singapore, Taipei)', ?)
+            """, (
+                room_id,
+                reserved_by,
+                email,
+                new_start,
+                new_end,
+                remarks,
+                recurrence_id
+            ))
+            created_count += 1
 
-            # insert blocked linked rooms
-            for lid in linked_room_ids:
-                try:
-                    cursor.execute("""
-                        INSERT INTO dbo.reservations
-                        (room_id, reserved_by, start_time, end_time, status, remarks, email, approver_username, recurrence_id)
-                        VALUES (?, ?, ?, ?, 'Blocked', ?, ?, ?, ?)
-                    """, (lid, f"[AUTO BLOCK] {reserved_by}", occstart, occend, f"Blocked by combined booking of {room_name}", email, None, recurrence_id))
-                except Exception:
-                    cursor.execute("""
-                        INSERT INTO dbo.reservations
-                        (room_id, reserved_by, start_time, end_time, status, remarks, email, approver_username)
-                        VALUES (?, ?, ?, ?, 'Blocked', ?, ?, ?)
-                    """, (lid, f"[AUTO BLOCK] {reserved_by}", occstart, occend, f"Blocked by combined booking of {room_name}", email, None))
+            # Auto-block AXIS_HALL rooms except main one
+            for rid in group_rooms:
+                if rid == room_id:
+                    continue
 
-            conn.commit()
-            created += 1
+                cur.execute("""
+                    SELECT COUNT(*) FROM reservations
+                    WHERE room_id=? AND NOT (end_time <= ? OR start_time >= ?)
+                    AND status IN ('Pending','Approved','Blocked')
+                """, (rid, new_start, new_end))
+                if cur.fetchone()[0] > 0:
+                    continue  # skip conflicts
 
-        cursor.close()
-        conn.close()
-        return jsonify({"success": True, "created_count": created, "skipped": skipped, "recurrence_id": recurrence_id})
+                cur.execute("""
+                    INSERT INTO reservations
+                        (room_id, reserved_by, email, start_time, end_time, status,
+                         remarks, created_at, time_zone, recurrence_id)
+                    VALUES (?, ?, ?, ?, ?, 'Blocked', ?, GETDATE(),
+                            'GMT+08:00 (Beijing, Singapore, Taipei)', ?)
+                """, (
+                    rid,
+                    f"[AUTO BLOCK] {reserved_by}",
+                    email,
+                    new_start,
+                    new_end,
+                    f"Blocked by combined booking of room {room_id}",
+                    recurrence_id
+                ))
+
+        conn.commit()
+
+        return jsonify(
+            success=True,
+            created_count=created_count,
+            skipped=skipped,
+            message="Recurring booking result"
+        )
 
     except Exception as e:
-        app.logger.exception("reserve_post (recurrence) error")
+        print("⚠️ Error Post", e)
         try:
-            if conn:
-                conn.close()
+            if 'conn' in locals() and conn:
+                conn.rollback()
         except:
             pass
-        return jsonify({"success": False, "message": str(e)}), 500
 
-
-
+        return jsonify(success=False, message=str(e)), 500
 
 
 @app.route('/api/cancel_reservation/<int:res_id>', methods=['POST'])
 @login_required
 def api_cancel_reservation(res_id):
     try:
+
         conn = get_db_connection(); cur = conn.cursor()
         cur.execute("SELECT id, room_id, reserved_by, status, start_time, end_time FROM dbo.reservations WHERE id = ?", (res_id,))
         row = cur.fetchone()
@@ -1358,18 +1466,42 @@ def room_schedule():
     end_day = start_day + timedelta(days=1)
 
     # fetch rooms
-    cur.execute("SELECT id, name, building, capacity, location, description FROM dbo.rooms ORDER BY building, name")
-    raw_rooms = cur.fetchall()
-    rooms = []
-    for r in raw_rooms:
-        rooms.append({
-            "id": r.id,
-            "name": getattr(r, 'name', r[1]) if hasattr(r,'id') else r[1],
-            "building": getattr(r, 'building', r[2]) if hasattr(r,'id') else r[2],
-            "capacity": getattr(r, 'capacity', r[3]) if hasattr(r,'id') else r[3],
-            "location": getattr(r, 'location', r[4]) if hasattr(r,'id') else r[4],
-            "description": getattr(r, 'description', r[5]) if hasattr(r,'id') else r[5],
-        })
+    # 4. GET ALL ROOMS FOR DROPDOWN (based on user's allowed locations)
+    cur.execute("""
+        SELECT id, name, location, capacity, description, group_code, is_combined
+        FROM rooms
+        WHERE status='Active'
+          AND location IN ({})
+        ORDER BY location, name
+    """.format(",".join("?" * len(allowed_locations))), allowed_locations)
+
+    all_room_rows = cur.fetchall()
+
+    # Convert ALL rooms to list (for dropdown)
+    all_rooms = [
+        {
+            "id": r[0],
+            "name": r[1],
+            "location": r[2],
+            "capacity": r[3],
+            "description": r[4],
+            "group_code": r[5],
+            "is_combined": bool(r[6]),
+        }
+        for r in all_room_rows
+    ]
+
+    # 5. FILTER ROOMS BASED ON SELECTED LOCATION
+    if selected_location and selected_location != "all":
+        filtered_rooms = [r for r in all_rooms if r["location"] == selected_location]
+    else:
+        filtered_rooms = all_rooms[:]  # all rooms by default
+
+    # 6. FILTER ROOMS AGAIN BASED ON SELECTED ROOM
+    if selected_room and selected_room != "all":
+        rooms = [r for r in filtered_rooms if r["name"] == selected_room]
+    else:
+        rooms = filtered_rooms[:]
 
     # fetch reservations for selected day
     cur.execute("""
@@ -1549,66 +1681,114 @@ def export_excel():
 @app.route("/api/reservations")
 @login_required
 def api_reservations():
-   room = request.args.get('room', 'all')
-   group = request.args.get('group', 'all')
-   start = request.args.get('start')
-   end = request.args.get('end')
-   from datetime import datetime, timedelta, timezone
-   from dateutil import parser as dateparser
-   # --- Parse FullCalendar range
-   try:
-       start_dt = dateparser.isoparse(start)
-       end_dt = dateparser.isoparse(end)
-   except Exception as e:
-       print("⚠️ Invalid date range:", e)
-       return jsonify([])
-   # --- Connect
-   conn = get_db_connection()
-   cursor = conn.cursor()
-   # --- Base query
-   query = """
-       SELECT rm.id, rm.name, rm.location, r.reserved_by,
-              r.start_time, r.end_time, ISNULL(r.remarks, '') AS remarks,
-              r.status
-       FROM dbo.reservations r
-       INNER JOIN dbo.rooms rm ON rm.id = r.room_id
-       WHERE r.status IN ('Approved', 'Pending')
-         AND r.start_time >= ? AND r.start_time < ?
-   """
-   params = [start_dt, end_dt]
-   # --- Apply filters dynamically
-   if group and group.lower() != "all":
-       query += " AND LOWER(LTRIM(RTRIM(rm.location))) = LOWER(?)"
-       params.append(group.strip())
-   if room and room.lower() != "all":
-       query += " AND LOWER(LTRIM(RTRIM(rm.name))) = LOWER(?)"
-       params.append(room.strip())
-   query += " ORDER BY r.start_time"
-   # print("🧠 SQL RUN:", query)
-   print("🧩 Params:", params)
-   cursor.execute(query, params)
-   rows = cursor.fetchall()
-   conn.close()
-   # --- Force timezone +08:00 for display
-   tz = timezone(timedelta(hours=8))
-   events = []
-   for rid, name, location, reserved_by, start_time, end_time, remarks, status in rows:
-       start_local = start_time.replace(tzinfo=tz)
-       end_local = end_time.replace(tzinfo=tz)
-       color = "#0047AB" if status == "Approved" else "#FFA726"
-       events.append({
-           "id": rid,
-           "title": f"{name} - {reserved_by}",
-           "start": start_local.isoformat(),
-           "end": end_local.isoformat(),
-           "room": name,
-           "location": location,
-           "description": remarks,
-           "status": status,
-           "color": color
-       })
-   print(f"✅ Returned {len(events)} events for Group={group}, Room={room}")
-   return jsonify(events)
+    room = request.args.get("room", "all")
+    group = request.args.get("group", "all")
+    start = request.args.get("start")
+    end = request.args.get("end")
+
+    # --- Parse FullCalendar range ---
+    try:
+        start_dt = dateparser.isoparse(start)
+        end_dt = dateparser.isoparse(end)
+    except Exception as e:
+        print("⚠️ Invalid date range:", e)
+        return jsonify([])
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # ==========================================================
+    # 1️⃣ Base SQL – Admin sees all, User limited to assigned locations
+    # ==========================================================
+    if current_user.role == "admin":
+        query = """
+            SELECT r.id AS reservation_id,
+                   rm.id AS room_id,
+                   rm.name AS room_name,
+                   rm.location,
+                   r.reserved_by,
+                   r.start_time,
+                   r.end_time,
+                   ISNULL(r.remarks,'') AS remarks,
+                   r.status
+            FROM reservations r
+            INNER JOIN rooms rm ON rm.id = r.room_id
+            WHERE r.status IN ('Approved','Pending')
+              AND r.start_time >= ? AND r.start_time < ?
+        """
+        params = [start_dt, end_dt]
+
+    else:
+        query = """
+            SELECT r.id AS reservation_id,
+                   rm.id AS room_id,
+                   rm.name AS room_name,
+                   rm.location,
+                   r.reserved_by,
+                   r.start_time,
+                   r.end_time,
+                   ISNULL(r.remarks,'') AS remarks,
+                   r.status
+            FROM reservations r
+            INNER JOIN rooms rm ON rm.id = r.room_id
+            INNER JOIN user_locations ul
+                ON ul.location_name = rm.location
+            WHERE ul.user_id = ?
+              AND r.status IN ('Approved','Pending')
+              AND r.start_time >= ? AND r.start_time < ?
+        """
+        params = [current_user.id, start_dt, end_dt]
+
+    # ==========================================================
+    # 2️⃣ Apply UI filters (location + room)
+    # ==========================================================
+    if group and group.lower() != "all":
+        query += " AND rm.location = ?"
+        params.append(group)
+
+    if room and room.lower() != "all":
+        query += " AND rm.name = ?"
+        params.append(room)
+
+    query += " ORDER BY r.start_time"
+
+    # Debug logs
+    print("🧩 SQL:", query)
+    print("🧩 PARAMS:", params)
+
+    cursor.execute(query, params)
+    rows = cursor.fetchall()
+    conn.close()
+
+    # ==========================================================
+    # 3️⃣ Build FullCalendar Events
+    # ==========================================================
+    tz = timezone(timedelta(hours=8))
+    events = []
+
+    for (reservation_id, room_id, room_name, location,
+         reserved_by, start_time, end_time, remarks, status) in rows:
+
+        start_local = start_time.replace(tzinfo=tz)
+        end_local = end_time.replace(tzinfo=tz)
+
+        color = "#0047AB" if status == "Approved" else "#FFA726"
+
+        events.append({
+            "id": reservation_id,         # FIXED
+            "room_id": room_id,
+            "title": f"{room_name} - {reserved_by}",
+            "start": start_local.isoformat(),
+            "end": end_local.isoformat(),
+            "room": room_name,
+            "location": location,
+            "description": remarks,
+            "status": status,
+            "color": color
+        })
+
+    print(f"✅ Returned {len(events)} events (Group={group}, Room={room})")
+    return jsonify(events)
 
 @app.route("/api/room_availability/<int:room_id>")
 @login_required
@@ -1616,7 +1796,7 @@ def api_room_availability(room_id):
     try:
         selected_date = request.args.get("date")
         if not selected_date:
-            from datetime import datetime
+            # from datetime import datetime
             selected_date = datetime.now().strftime("%Y-%m-%d")
 
         conn = get_db_connection()

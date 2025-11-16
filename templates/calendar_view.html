@@ -3,200 +3,260 @@
 
 {% block content %}
 <div class="container-fluid p-4">
+
   <!-- Header Toolbar -->
   <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap">
     <div class="d-flex align-items-center gap-2">
       <a href="{{ url_for('room_list') }}" class="btn btn-outline-secondary btn-sm">
         <i class="bi bi-arrow-left"></i> Back to Rooms
       </a>
+
       <h3 class="fw-bold text-primary mb-0 ms-2">
         <i class="bi bi-calendar3"></i> Meeting Room Calendar
       </h3>
     </div>
 
-    <div class="d-flex align-items-center gap-2 mt-2 mt-md-0 flex-wrap">
-      <!-- Group (Location) Filter -->
+    <!-- FILTERS -->
+    <div class="d-flex flex-wrap align-items-center gap-2 mt-2 mt-md-0">
+
+      <!-- LOCATION FILTER -->
       <select id="groupFilter" class="form-select form-select-sm">
-        <option value="all" {% if location_filter=='all' %}selected{% endif %}>All Locations</option>
-        {% for r in rooms | groupby('location') %}
-          <option value="{{ r.grouper }}"
-            {% if location_filter == r.grouper %} selected {% endif %}>
-            {{ r.grouper }}
+        {% for loc in locations %}
+          <option value="{{ loc }}" {% if current_location == loc %}selected{% endif %}>
+            {{ loc }}
           </option>
         {% endfor %}
       </select>
 
-      <!-- Room Filter -->
+      <!-- ROOM FILTER -->
       <select id="roomFilter" class="form-select form-select-sm">
-          <option value="all">All Rooms</option>
-          {% for room in rooms %}
-            <option value="{{ room.name }}" data-location="{{ room.location }}">{{ room.name }}</option>
-          {% endfor %}
-        </select>
+    <option value="all">All Rooms</option>
+    {% for loc, room_list in grouped_rooms.items() %}
+        <optgroup label="{{ loc }}">
+            {% for room in room_list %}
+                <option value="{{ room }}">{{ room }}</option>
+            {% endfor %}
+        </optgroup>
+    {% endfor %}
+</select>
 
 
-      <!-- Navigation Buttons -->
+      <!-- TODAY -->
       <button class="btn btn-outline-primary btn-sm" id="todayBtn">Today</button>
+
+      <!-- REFRESH -->
       <button class="btn btn-outline-secondary btn-sm" id="refreshBtn">
         <i class="bi bi-arrow-clockwise me-1"></i> Refresh
       </button>
     </div>
   </div>
 
+  <!-- LEGEND -->
+  <div class="d-flex gap-4 mb-3 flex-wrap">
+    <span class="d-flex align-items-center">
+      <span class="legend-box bg-primary me-2"></span> Approved
+    </span>
+
+    <span class="d-flex align-items-center">
+      <span class="legend-box bg-warning me-2"></span> Pending
+    </span>
+  </div>
+
   <!-- Calendar Container -->
-  <div id="calendar"></div>
+  <div id="calendar" class="calendar-container"></div>
 </div>
 
 <!-- Reservation Detail Modal -->
-<div class="modal fade" id="eventDetailModal" tabindex="-1" aria-labelledby="eventDetailModalLabel" aria-hidden="true">
+<div class="modal fade" id="eventDetailModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content shadow">
+    <div class="modal-content shadow-lg">
+
       <div class="modal-header bg-primary text-white">
-        <h5 class="modal-title" id="eventDetailModalLabel">
+        <h5 class="modal-title">
           <i class="bi bi-info-circle me-2"></i> Reservation Details
         </h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
+
       <div class="modal-body">
         <dl class="row mb-0">
-          <dt class="col-sm-4">Room</dt>
-          <dd class="col-sm-8" id="detailRoom"></dd>
-
-          <dt class="col-sm-4">Reserved By</dt>
-          <dd class="col-sm-8" id="detailUser"></dd>
-
-          <dt class="col-sm-4">Date</dt>
-          <dd class="col-sm-8" id="detailDate"></dd>
-
-          <dt class="col-sm-4">Time</dt>
-          <dd class="col-sm-8" id="detailTime"></dd>
-
-          <dt class="col-sm-4">Status</dt>
-          <dd class="col-sm-8" id="detailStatus"></dd>
-
-          <dt class="col-sm-4">Remarks</dt>
-          <dd class="col-sm-8" id="detailRemarks"></dd>
+          <dt class="col-sm-4">Room</dt><dd class="col-sm-8" id="detailRoom"></dd>
+          <dt class="col-sm-4">Reserved By</dt><dd class="col-sm-8" id="detailUser"></dd>
+          <dt class="col-sm-4">Date</dt><dd class="col-sm-8" id="detailDate"></dd>
+          <dt class="col-sm-4">Time</dt><dd class="col-sm-8" id="detailTime"></dd>
+          <dt class="col-sm-4">Status</dt><dd class="col-sm-8" id="detailStatus"></dd>
+          <dt class="col-sm-4">Remarks</dt><dd class="col-sm-8" id="detailRemarks"></dd>
         </dl>
       </div>
+
       <div class="modal-footer">
         <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
       </div>
+
     </div>
   </div>
 </div>
+
 {% endblock %}
 
 {% block scripts %}
 <!-- FullCalendar -->
 <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+
 <script>
 document.addEventListener('DOMContentLoaded', function () {
- const calendarEl = document.getElementById('calendar');
- const groupFilter = document.getElementById('groupFilter');
- const roomFilter = document.getElementById('roomFilter');
- const todayBtn = document.getElementById('todayBtn');
- const refreshBtn = document.getElementById('refreshBtn');
- const allRooms = {{ rooms|tojson }};
- const calendar = new FullCalendar.Calendar(calendarEl, {
-   initialView: 'dayGridMonth',
-   themeSystem: 'bootstrap5',
-   height: 'auto',
-   eventDisplay: 'block',
-   headerToolbar: {
-     left: 'prev,next today',
-     center: 'title',
-     right: 'dayGridMonth,dayGridWeek,dayGridDay'
-   },
-   events: function(fetchInfo, successCallback, failureCallback) {
-     const params = new URLSearchParams({
-       start: fetchInfo.startStr,
-       end: fetchInfo.endStr,
-       group: groupFilter.value || 'all',
-       room: roomFilter.value || 'all'
-     });
-     fetch(`/api/reservations?${params.toString()}`)
-       .then(r => r.json())
-       .then(data => {
-         console.log(`📅 Loaded ${data.length} events for ${groupFilter.value}/${roomFilter.value}`);
-         successCallback(data);
-       })
-       .catch(err => failureCallback(err));
-   },
-   eventContent: function(arg) {
-     const color = arg.event.extendedProps.color || '#0047AB';
-     return {
-       html: `
-<div class="p-1 rounded text-white" style="background:${color};font-size:0.75rem;">
-<b>${arg.event.title}</b><br>
-<small>${arg.timeText}</small>
-</div>`
-     };
-   },
-   eventClick: function(info) {
-     const ev = info.event;
-     document.getElementById('detailRoom').textContent = ev.extendedProps.room;
-     document.getElementById('detailUser').textContent = ev.title.split(" - ")[1];
-     document.getElementById('detailDate').textContent = ev.start.toLocaleDateString();
-     document.getElementById('detailTime').textContent =
-       `${ev.start.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})} - ${ev.end.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}`;
-     document.getElementById('detailStatus').textContent = ev.extendedProps.status;
-     document.getElementById('detailRemarks').textContent = ev.extendedProps.description || '—';
-     new bootstrap.Modal(document.getElementById('eventDetailModal')).show();
-   }
- });
- calendar.render();
- // --- Dynamically rebuild room list when group changes ---
- function updateRoomDropdown() {
-   const selectedGroup = groupFilter.value;
-   const filteredRooms = selectedGroup === 'all' ? allRooms : allRooms.filter(r => r.location === selectedGroup);
-   roomFilter.innerHTML = '<option value="all">All Rooms</option>';
-   filteredRooms.forEach(r => {
-     const opt = document.createElement('option');
-     opt.value = r.name;
-     opt.textContent = r.name;
-     roomFilter.appendChild(opt);
-   });
- }
- // --- Reload calendar cleanly ---
- function reloadCalendar() {
-   console.log("🔁 Refetching for:", groupFilter.value, roomFilter.value);
-   calendar.getEvents().forEach(e => e.remove());
-   calendar.refetchEvents();
- }
- groupFilter.addEventListener('change', function() {
-   updateRoomDropdown();
-   reloadCalendar();
- });
- roomFilter.addEventListener('change', reloadCalendar);
- refreshBtn.addEventListener('click', reloadCalendar);
- todayBtn.addEventListener('click', () => calendar.today());
+
+  const calendarEl = document.getElementById('calendar');
+  const groupFilter = document.getElementById('groupFilter');
+  const roomFilter = document.getElementById('roomFilter');
+  const todayBtn = document.getElementById('todayBtn');
+  const refreshBtn = document.getElementById('refreshBtn');
+  const groupedRooms = {{ grouped_rooms|tojson }};
+
+  const calendar = new FullCalendar.Calendar(calendarEl, {
+    initialView: 'dayGridMonth',
+    themeSystem: 'bootstrap5',
+    height: 'auto',
+    eventDisplay: 'block',
+
+    headerToolbar: {
+      left: 'prev,next today',
+      center: 'title',
+      right: 'dayGridMonth,dayGridWeek,dayGridDay'
+    },
+
+    events: function(fetchInfo, successCallback, failureCallback) {
+
+      const params = new URLSearchParams({
+        start: fetchInfo.startStr,
+        end: fetchInfo.endStr,
+        group: groupFilter.value,
+        room: roomFilter.value
+      });
+
+      fetch(`/api/reservations?${params.toString()}`)
+        .then(r => r.json())
+        .then(data => {
+          successCallback(data);
+        })
+        .catch(err => failureCallback(err));
+    },
+
+    eventContent: function(arg) {
+      const room = arg.event.extendedProps.room;
+      const color = arg.event.extendedProps.color;
+
+      return {
+        html: `
+          <div class="p-1 rounded text-white" style="background:${color};font-size:0.72rem;">
+            <div class="fw-bold">${arg.event.title.split(' - ')[1]}</div>
+            <small class="text-white-50">${room}</small><br>
+            <small>${arg.timeText}</small>
+          </div>
+        `
+      };
+    },
+
+    eventDidMount: function(info) {
+      new bootstrap.Tooltip(info.el, {
+        title: `${info.event.extendedProps.room}\n${info.event.extendedProps.description || ''}`,
+        placement: "top",
+        trigger: "hover",
+        container: "body"
+      });
+    },
+
+    eventClick: function(info) {
+      const ev = info.event;
+
+      document.getElementById('detailRoom').textContent = ev.extendedProps.room;
+      document.getElementById('detailUser').textContent = ev.title.split(" - ")[1];
+      document.getElementById('detailDate').textContent = ev.start.toLocaleDateString();
+
+      document.getElementById('detailTime').textContent =
+        `${ev.start.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} - ${ev.end.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`;
+
+      document.getElementById('detailStatus').textContent = ev.extendedProps.status;
+      document.getElementById('detailRemarks').textContent = ev.extendedProps.description || "—";
+
+      new bootstrap.Modal(document.getElementById('eventDetailModal')).show();
+    }
+  });
+
+  calendar.render();
+
+  /* UPDATE ROOM DROPDOWN BASED ON LOCATION */
+  function updateRoomDropdown() {
+    const loc = groupFilter.value;
+    roomFilter.innerHTML = '<option value="all">All Rooms</option>';
+
+    if (groupedRooms[loc]) {
+      groupedRooms[loc].forEach(room => {
+        const opt = document.createElement('option');
+        opt.value = room;
+        opt.textContent = room;
+        roomFilter.appendChild(opt);
+      });
+    }
+  }
+
+  /* RELOAD CALENDAR */
+  function reloadCalendar() {
+    calendarEl.classList.add("loading");
+    calendar.refetchEvents();
+    setTimeout(() => calendarEl.classList.remove("loading"), 250);
+  }
+
+  /* EVENT LISTENERS */
+  groupFilter.addEventListener('change', function() {
+    updateRoomDropdown();
+    reloadCalendar();
+  });
+
+  roomFilter.addEventListener('change', reloadCalendar);
+  refreshBtn.addEventListener('click', reloadCalendar);
+  todayBtn.addEventListener('click', () => calendar.today());
 });
 </script>
 
 <style>
-/* Calendar Styling */
-.fc .fc-daygrid-event {
-  border: none !important;
-  cursor: pointer;
-}
-.fc .fc-day-today {
-  background-color: rgba(0, 71, 171, 0.08) !important;
-}
-.fc .fc-toolbar-title {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #0047AB;
-}
-.fc .fc-button {
-  font-size: 0.85rem;
-}
-.modal-content dl dt {
-  font-weight: 600;
-}
-#roomFilter option[hidden] {
-  display: none;
+/* Fade-in animation */
+.calendar-container {
+  animation: fadeIn .25s ease-in-out;
 }
 
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Legend boxes */
+.legend-box {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+/* Event styling */
+.fc-daygrid-event {
+  border-radius: 6px !important;
+  padding: 0 !important;
+  cursor: pointer;
+}
+
+/* Today's highlight */
+.fc .fc-day-today {
+  background-color: rgba(0, 71, 171, 0.12) !important;
+  border-left: 3px solid #0047AB !important;
+}
+
+/* Calendar loading effect */
+#calendar.loading {
+  opacity: 0.5;
+  pointer-events: none;
+}
 </style>
+
 {% endblock %}
