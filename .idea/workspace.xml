@@ -4,17 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="e38152d8-cf4c-4200-8245-858a548afff2" name="Changes" comment="Room 11/15/2025 Home laptop V2">
-      <change afterPath="$PROJECT_DIR$/static/css/webaxis_dashboard.css" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.env" beforeDir="false" afterPath="$PROJECT_DIR$/.env" afterDir="false" />
+    <list default="true" id="e38152d8-cf4c-4200-8245-858a548afff2" name="Changes" comment="Room 11/16/2025 Home laptop V2">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/static/css/style_dashboard.css" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/static/style.css" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/templates/base.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/base.html" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/templates/base_dashboard.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/base_dashboard.html" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/templates/calendar_view.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/calendar_view.html" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/templates/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/index.html" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -168,7 +160,15 @@
       <option name="project" value="LOCAL" />
       <updated>1763144582111</updated>
     </task>
-    <option name="localTasksCounter" value="6" />
+    <task id="LOCAL-00006" summary="Room 11/16/2025 Home laptop V2">
+      <option name="closed" value="true" />
+      <created>1763300814441</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1763300814441</updated>
+    </task>
+    <option name="localTasksCounter" value="7" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -179,7 +179,8 @@
     <MESSAGE value="Room 11/13/2025 Home laptop" />
     <MESSAGE value="Room 11/14/2025 Home laptop V2" />
     <MESSAGE value="Room 11/15/2025 Home laptop V2" />
-    <option name="LAST_COMMIT_MESSAGE" value="Room 11/15/2025 Home laptop V2" />
+    <MESSAGE value="Room 11/16/2025 Home laptop V2" />
+    <option name="LAST_COMMIT_MESSAGE" value="Room 11/16/2025 Home laptop V2" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -198,16 +199,6 @@
           <url>file://$PROJECT_DIR$/app.py</url>
           <line>202</line>
           <option name="timeStamp" value="14" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/app.py</url>
-          <line>861</line>
-          <option name="timeStamp" value="16" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/app.py</url>
-          <line>812</line>
-          <option name="timeStamp" value="18" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>

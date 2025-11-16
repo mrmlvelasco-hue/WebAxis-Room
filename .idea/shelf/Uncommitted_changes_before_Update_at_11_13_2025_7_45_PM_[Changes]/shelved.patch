@@ -1,0 +1,79 @@
+Index: .idea/workspace.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+><?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<project version=\"4\">\r\n  <component name=\"AutoImportSettings\">\r\n    <option name=\"autoReloadType\" value=\"SELECTIVE\" />\r\n  </component>\r\n  <component name=\"ChangeListManager\">\r\n    <list default=\"true\" id=\"e38152d8-cf4c-4200-8245-858a548afff2\" name=\"Changes\" comment=\"Room 11/09/2025\">\r\n      <change afterPath=\"$PROJECT_DIR$/templates/approvals.html\" afterDir=\"false\" />\r\n      <change beforePath=\"$PROJECT_DIR$/.idea/WebAXIS Room.iml\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/.idea/WebAXIS Room.iml\" afterDir=\"false\" />\r\n      <change beforePath=\"$PROJECT_DIR$/.idea/misc.xml\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/.idea/misc.xml\" afterDir=\"false\" />\r\n      <change beforePath=\"$PROJECT_DIR$/.idea/workspace.xml\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/.idea/workspace.xml\" afterDir=\"false\" />\r\n      <change beforePath=\"$PROJECT_DIR$/app.py\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/app.py\" afterDir=\"false\" />\r\n      <change beforePath=\"$PROJECT_DIR$/static/style.css\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/static/style.css\" afterDir=\"false\" />\r\n      <change beforePath=\"$PROJECT_DIR$/templates/base_dashboard.html\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/templates/base_dashboard.html\" afterDir=\"false\" />\r\n      <change beforePath=\"$PROJECT_DIR$/templates/index.html\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/templates/index.html\" afterDir=\"false\" />\r\n      <change beforePath=\"$PROJECT_DIR$/templates/room_maintenance.html\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/templates/room_maintenance.html\" afterDir=\"false\" />\r\n    </list>\r\n    <option name=\"SHOW_DIALOG\" value=\"false\" />\r\n    <option name=\"HIGHLIGHT_CONFLICTS\" value=\"true\" />\r\n    <option name=\"HIGHLIGHT_NON_ACTIVE_CHANGELIST\" value=\"false\" />\r\n    <option name=\"LAST_RESOLUTION\" value=\"IGNORE\" />\r\n  </component>\r\n  <component name=\"FileTemplateManagerImpl\">\r\n    <option name=\"RECENT_TEMPLATES\">\r\n      <list>\r\n        <option value=\"Python Script\" />\r\n        <option value=\"CSS File\" />\r\n        <option value=\"HTML File\" />\r\n      </list>\r\n    </option>\r\n  </component>\r\n  <component name=\"Git.Settings\">\r\n    <option name=\"RECENT_GIT_ROOT_PATH\" value=\"$PROJECT_DIR$\" />\r\n  </component>\r\n  <component name=\"GitHubPullRequestSearchHistory\">{\r\n  &quot;lastFilter&quot;: {\r\n    &quot;state&quot;: &quot;OPEN&quot;,\r\n    &quot;assignee&quot;: &quot;mrmlvelasco-hue&quot;\r\n  }\r\n}</component>\r\n  <component name=\"GithubPullRequestsUISettings\"><![CDATA[{\r\n  \"selectedUrlAndAccountId\": {\r\n    \"url\": \"https://github.com/mrmlvelasco-hue/WebAxis-Room.git\",\r\n    \"accountId\": \"5cb6a370-6101-4134-8beb-5de7ec3dd091\"\r\n  }\r\n}]]></component>\r\n  <component name=\"ProjectColorInfo\">{\r\n  &quot;associatedIndex&quot;: 1\r\n}</component>\r\n  <component name=\"ProjectId\" id=\"35As1UHHHHOsoksZwy0hDrBZRRd\" />\r\n  <component name=\"ProjectViewState\">\r\n    <option name=\"hideEmptyMiddlePackages\" value=\"true\" />\r\n    <option name=\"showLibraryContents\" value=\"true\" />\r\n  </component>\r\n  <component name=\"PropertiesComponent\">{\r\n  &quot;keyToString&quot;: {\r\n    &quot;DefaultHtmlFileTemplate&quot;: &quot;HTML File&quot;,\r\n    &quot;JavaScript Debug.admin.html.executor&quot;: &quot;Run&quot;,\r\n    &quot;JavaScript Debug.calendar_view.html.executor&quot;: &quot;Run&quot;,\r\n    &quot;JavaScript Debug.index.html.executor&quot;: &quot;Run&quot;,\r\n    &quot;JavaScript Debug.user_maintenance.html.executor&quot;: &quot;Run&quot;,\r\n    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,\r\n    &quot;Python.app.executor&quot;: &quot;Run&quot;,\r\n    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,\r\n    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,\r\n    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,\r\n    &quot;git-widget-placeholder&quot;: &quot;master&quot;,\r\n    &quot;list.type.of.created.stylesheet&quot;: &quot;CSS&quot;,\r\n    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,\r\n    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,\r\n    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,\r\n    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,\r\n    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,\r\n    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;\r\n  }\r\n}</component>\r\n  <component name=\"RecentsManager\">\r\n    <key name=\"MoveFile.RECENT_KEYS\">\r\n      <recent name=\"C:\\Users\\mlvelasco\\PycharmProjects\\WebAXIS Room\\templates\" />\r\n    </key>\r\n  </component>\r\n  <component name=\"SharedIndexes\">\r\n    <attachedChunks>\r\n      <set>\r\n        <option value=\"bundled-js-predefined-d6986cc7102b-9c94529fcfe0-JavaScript-PY-252.26199.168\" />\r\n        <option value=\"bundled-python-sdk-b3d66beaba9a-c6efb3732140-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-252.26199.168\" />\r\n      </set>\r\n    </attachedChunks>\r\n  </component>\r\n  <component name=\"TaskManager\">\r\n    <task active=\"true\" id=\"Default\" summary=\"Default task\">\r\n      <changelist id=\"e38152d8-cf4c-4200-8245-858a548afff2\" name=\"Changes\" comment=\"\" />\r\n      <created>1762563995612</created>\r\n      <option name=\"number\" value=\"Default\" />\r\n      <option name=\"presentableId\" value=\"Default\" />\r\n      <updated>1762563995612</updated>\r\n      <workItem from=\"1762563996713\" duration=\"6263000\" />\r\n      <workItem from=\"1762610684125\" duration=\"9930000\" />\r\n      <workItem from=\"1762652964113\" duration=\"42236000\" />\r\n    </task>\r\n    <task id=\"LOCAL-00001\" summary=\"Room 11/09/2025\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1762653084027</created>\r\n      <option name=\"number\" value=\"00001\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00001\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1762653084027</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00002\" summary=\"Room 11/09/2025\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1762687548691</created>\r\n      <option name=\"number\" value=\"00002\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00002\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1762687548691</updated>\r\n    </task>\r\n    <option name=\"localTasksCounter\" value=\"3\" />\r\n    <servers />\r\n  </component>\r\n  <component name=\"TypeScriptGeneratedFilesManager\">\r\n    <option name=\"version\" value=\"3\" />\r\n  </component>\r\n  <component name=\"VcsManagerConfiguration\">\r\n    <MESSAGE value=\"Room 11/09/2025\" />\r\n    <option name=\"LAST_COMMIT_MESSAGE\" value=\"Room 11/09/2025\" />\r\n  </component>\r\n  <component name=\"XDebuggerManager\">\r\n    <breakpoint-manager>\r\n      <breakpoints>\r\n        <line-breakpoint enabled=\"true\" suspend=\"THREAD\" type=\"python-line\">\r\n          <url>file://$PROJECT_DIR$/app.py</url>\r\n          <line>439</line>\r\n          <option name=\"timeStamp\" value=\"4\" />\r\n        </line-breakpoint>\r\n        <line-breakpoint enabled=\"true\" suspend=\"THREAD\" type=\"python-line\">\r\n          <url>file://$PROJECT_DIR$/app.py</url>\r\n          <line>330</line>\r\n          <option name=\"timeStamp\" value=\"7\" />\r\n        </line-breakpoint>\r\n        <line-breakpoint enabled=\"true\" type=\"javascript\">\r\n          <url>file://$PROJECT_DIR$/templates/index.html</url>\r\n          <line>309</line>\r\n          <properties lambdaOrdinal=\"-1\" />\r\n          <option name=\"timeStamp\" value=\"16\" />\r\n        </line-breakpoint>\r\n      </breakpoints>\r\n    </breakpoint-manager>\r\n  </component>\r\n  <component name=\"com.intellij.coverage.CoverageDataManagerImpl\">\r\n    <SUITE FILE_PATH=\"coverage/WebAXIS_Room$app.coverage\" NAME=\"app Coverage Results\" MODIFIED=\"1762876383583\" SOURCE_PROVIDER=\"com.intellij.coverage.DefaultCoverageFileProvider\" RUNNER=\"coverage.py\" COVERAGE_BY_TEST_ENABLED=\"false\" COVERAGE_TRACING_ENABLED=\"false\" WORKING_DIRECTORY=\"$PROJECT_DIR$\" />\r\n  </component>\r\n</project>
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/workspace.xml b/.idea/workspace.xml
+--- a/.idea/workspace.xml	(revision 9b78987996035e4aa8264e964d58377b040b5d48)
++++ b/.idea/workspace.xml	(date 1763034278913)
+@@ -5,15 +5,7 @@
+   </component>
+   <component name="ChangeListManager">
+     <list default="true" id="e38152d8-cf4c-4200-8245-858a548afff2" name="Changes" comment="Room 11/09/2025">
+-      <change afterPath="$PROJECT_DIR$/templates/approvals.html" afterDir="false" />
+-      <change beforePath="$PROJECT_DIR$/.idea/WebAXIS Room.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/WebAXIS Room.iml" afterDir="false" />
+-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+-      <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
+-      <change beforePath="$PROJECT_DIR$/static/style.css" beforeDir="false" afterPath="$PROJECT_DIR$/static/style.css" afterDir="false" />
+-      <change beforePath="$PROJECT_DIR$/templates/base_dashboard.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/base_dashboard.html" afterDir="false" />
+-      <change beforePath="$PROJECT_DIR$/templates/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/index.html" afterDir="false" />
+-      <change beforePath="$PROJECT_DIR$/templates/room_maintenance.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/room_maintenance.html" afterDir="false" />
+     </list>
+     <option name="SHOW_DIALOG" value="false" />
+     <option name="HIGHLIGHT_CONFLICTS" value="true" />
+@@ -38,12 +30,12 @@
+     &quot;assignee&quot;: &quot;mrmlvelasco-hue&quot;
+   }
+ }</component>
+-  <component name="GithubPullRequestsUISettings"><![CDATA[{
+-  "selectedUrlAndAccountId": {
+-    "url": "https://github.com/mrmlvelasco-hue/WebAxis-Room.git",
+-    "accountId": "5cb6a370-6101-4134-8beb-5de7ec3dd091"
+-  }
+-}]]></component>
++  <component name="GithubPullRequestsUISettings">{
++  &quot;selectedUrlAndAccountId&quot;: {
++    &quot;url&quot;: &quot;https://github.com/mrmlvelasco-hue/WebAxis-Room.git&quot;,
++    &quot;accountId&quot;: &quot;5cb6a370-6101-4134-8beb-5de7ec3dd091&quot;
++  }
++}</component>
+   <component name="ProjectColorInfo">{
+   &quot;associatedIndex&quot;: 1
+ }</component>
+@@ -97,6 +89,8 @@
+       <workItem from="1762563996713" duration="6263000" />
+       <workItem from="1762610684125" duration="9930000" />
+       <workItem from="1762652964113" duration="42236000" />
++      <workItem from="1763034234312" duration="11000" />
++      <workItem from="1763034269929" duration="9000" />
+     </task>
+     <task id="LOCAL-00001" summary="Room 11/09/2025">
+       <option name="closed" value="true" />
+@@ -114,7 +108,15 @@
+       <option name="project" value="LOCAL" />
+       <updated>1762687548691</updated>
+     </task>
+-    <option name="localTasksCounter" value="3" />
++    <task id="LOCAL-00003" summary="Room 11/09/2025">
++      <option name="closed" value="true" />
++      <created>1762876570289</created>
++      <option name="number" value="00003" />
++      <option name="presentableId" value="LOCAL-00003" />
++      <option name="project" value="LOCAL" />
++      <updated>1762876570289</updated>
++    </task>
++    <option name="localTasksCounter" value="4" />
+     <servers />
+   </component>
+   <component name="TypeScriptGeneratedFilesManager">
+@@ -140,7 +142,6 @@
+         <line-breakpoint enabled="true" type="javascript">
+           <url>file://$PROJECT_DIR$/templates/index.html</url>
+           <line>309</line>
+-          <properties lambdaOrdinal="-1" />
+           <option name="timeStamp" value="16" />
+         </line-breakpoint>
+       </breakpoints>
