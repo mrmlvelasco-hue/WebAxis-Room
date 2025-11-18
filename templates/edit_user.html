@@ -18,14 +18,14 @@
         <label class="form-label">Email</label>
         <input type="email" name="email" class="form-control" value="{{ user.email }}" required>
       </div>
-      <div class="col-md-2">
+      <div class="mb-3">
         <label class="form-label">Role</label>
         <select name="role" class="form-select">
           <option value="user" {% if user.role == 'user' %}selected{% endif %}>User</option>
           <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>Admin</option>
         </select>
       </div>
-      <div class="col-md-1">
+      <div class="mb-3">
         <label class="form-label">Status</label>
         <select name="status" class="form-select">
           <option value="active" {% if user.status == 'active' %}selected{% endif %}>Active</option>
@@ -33,8 +33,8 @@
         </select>
       </div>
           <!-- Assigned Locations (multi-select) -->
-        <div class="col-md-1">
-        <label class="form-label">Assigned Locations</label>
+        <div class="mb-3">
+        <label class="form-label fw-bold">Assigned Locations</label>
          <select name="locations" class="form-select" multiple>
           {% for loc in locations %}
             <option value="{{ loc }}" {% if loc in user_locations %}selected{% endif %}>{{ loc }}</option>
@@ -43,14 +43,12 @@
       </div>
 
 
-        <!-- Approver Locations (checkboxes) -->
-        <label>Approver for Locations</label>
 
-        <div class="col-md-1">
+        <div class="mb-3">
         <label class="form-label">Approver for Locations</label>
          <div>
           {% for loc in locations %}
-            <div class="form-check form-check-inline">
+            <div class="form-check">
               <input class="form-check-input" type="checkbox" name="approver_locations" value="{{ loc }}"
                      {% if loc in approver_locations %}checked{% endif %}>
               <label class="form-check-label">{{ loc }}</label>

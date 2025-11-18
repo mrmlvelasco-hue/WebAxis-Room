@@ -334,6 +334,7 @@ def approvals():
         params.extend([s, s, s])
 
     sql += " ORDER BY rm.location, r.start_time"
+    print(sql)
     cur.execute(sql, params)
     rows = rows_to_dicts(cur)
 
@@ -365,84 +366,6 @@ def approvals():
         is_admin=is_national_admin
     )
 
-
-
-# @app.route('/approvals/<int:res_id>/approve', methods=['POST'])
-# @login_required
-# def approve_reservation(res_id):
-#     username = current_user.username
-#     # is_admin = (current_user.role.lower() == "admin")
-#     is_admin = (current_user.username.lower() == "admin")
-#
-#     conn = get_db_connection()
-#     cur = conn.cursor()
-#
-#     # Fetch reservation & room info
-#     cur.execute("""
-#         SELECT r.room_id, rm.location, r.status
-#         FROM reservations r
-#         JOIN rooms rm ON r.room_id = rm.id
-#         WHERE r.id = ?
-#     """, (res_id,))
-#     row = cur.fetchone()
-#
-#     if not row:
-#         conn.close()
-#         flash("Reservation not found.", "danger")
-#         return redirect(url_for('approvals'))
-#
-#     room_id, location, status = row
-#
-#     # Cannot approve cancelled/approved items
-#     if status != 'Pending':
-#         conn.close()
-#         flash("Reservation is not pending.", "warning")
-#         return redirect(url_for('approvals'))
-#
-#     # Admin override — can approve everything
-#     if is_admin:
-#         cur.execute("""
-#             UPDATE reservations
-#             SET status = 'Approved', approved_by = ?, approved_at = GETDATE()
-#             WHERE id = ?
-#         """, (username, res_id))
-#         conn.commit()
-#         conn.close()
-#         flash("✔ Reservation approved (Admin override).", "success")
-#         return redirect(url_for('approvals'))
-#
-#     # Check if user is location approver
-#     cur.execute("""
-#         SELECT COUNT(*) FROM group_approvers
-#         WHERE group_code = ? AND approver_username = ? AND is_active = 1
-#     """, (location, username))
-#     (is_location_approver,) = cur.fetchone()
-#
-#     # Check if user is assigned to the location
-#     cur.execute("""
-#         SELECT COUNT(*)
-#         FROM user_locations ul
-#         JOIN users u ON ul.user_id = u.id
-#         WHERE ul.location_name = ? AND u.username = ?
-#     """, (location, username))
-#     (is_assigned_to_location,) = cur.fetchone()
-#
-#     if not (is_location_approver and is_assigned_to_location):
-#         conn.close()
-#         flash("❌ You are not authorized to approve this reservation.", "danger")
-#         return redirect(url_for('approvals'))
-#
-#     # Authorized approver
-#     cur.execute("""
-#         UPDATE reservations
-#         SET status = 'Approved', approved_by = ?, approved_at = GETDATE()
-#         WHERE id = ?
-#     """, (username, res_id))
-#     conn.commit()
-#     conn.close()
-#
-#     flash("✔ Reservation approved successfully!", "success")
-#     return redirect(url_for('approvals'))
 
 
 @app.route('/reservation/<int:reservation_id>/<string:action>', methods=['GET'])
@@ -547,8 +470,6 @@ def deny_reservation(res_id):
 
     flash("❌ Reservation denied", "info")
     return redirect(url_for('approvals'))
-
-
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -716,16 +637,35 @@ def room_maintenance():
     cur = conn.cursor()
 
     # Load rooms
+    # cur.execute("""
+    #     SELECT id, name, location, group_code, capacity, is_combined, status,
+    #            approvals_required
+    #     FROM rooms
+    #     ORDER BY location, name
+    # """)
     cur.execute("""
         SELECT id, name, location, group_code, capacity, is_combined, status,
-               approvals_required
-        FROM rooms
-        ORDER BY location, name
-    """)
+            approvals_required
+            FROM rooms r WITH (NOLOCK)
+            WHERE  EXISTS (
+            SELECT 1
+            FROM dbo.user_locations ul WITH (NOLOCK)
+            JOIN dbo.users u WITH (NOLOCK) ON ul.user_id = u.id
+            WHERE u.username = ?
+            AND ul.location_name = r.location
+            )
+            ORDER BY location, name
+    """,current_user.username)
     rooms = rows_to_dicts(cur)
-
     # Load locations for dropdowns
-    cur.execute("SELECT DISTINCT location FROM rooms ORDER BY location")
+    cur.execute("""SELECT DISTINCT location FROM rooms r WHERE  EXISTS (
+            SELECT 1
+            FROM dbo.user_locations ul WITH (NOLOCK)
+            JOIN dbo.users u WITH (NOLOCK) ON ul.user_id = u.id
+            WHERE u.username = ?
+            AND ul.location_name = r.location
+            ) ORDER BY location""", current_user.username)
+
     locations = [row[0] for row in cur.fetchall()]
 
     # Try to load room_approvers if table exists, otherwise keep empty dict
@@ -2520,59 +2460,6 @@ def add_user():
     return redirect(url_for('user_maintenance'))
 
 
-# @app.route('/add_user', methods=['POST'])
-# @login_required
-# def add_user():
-#     if request.method == 'POST':
-#         print("🧩 Received Add User POST")
-#         print("Form data:", request.form)
-#
-#     if not current_user.is_admin():
-#         flash("Access denied: Admins only.")
-#         return redirect(url_for('main_menu'))
-#
-#     try:
-#         conn = get_db_connection()
-#         cursor = conn.cursor()
-#
-#         username = request.form['username'].strip()
-#         email = request.form.get('email')
-#         display_name = request.form.get('display_name')
-#         role = request.form.get('role', 'user')
-#         status = request.form.get('status', 'active')
-#
-#
-#         cursor.execute("SELECT COUNT(*) FROM dbo.users WHERE username = ?", (username,))
-#         (exists,) = cursor.fetchone() or (0,)
-#         if exists:
-#             flash(f"⚠️ User {username} already exists.")
-#         else:
-#             cursor.execute("""
-#                 INSERT INTO dbo.users (username, email, display_name, role, status, created_at, updated_at)
-#                 VALUES (?, ?, ?, ?, ?, GETDATE(), GETDATE())
-#             """, (username, email, display_name, role, status))
-#             conn.commit()
-#             flash(f"✅ User {username} added successfully.")
-#             log_audit("USER_ADDED", f"Added user {username} with role {role}")
-#
-#     except Exception as e:
-#         flash(f"Error adding user: {e}", "danger")
-#     finally:
-#         cursor.close()
-#         conn.close()
-#
-#     return redirect(url_for('user_maintenance'))
-
-
-# # 2. Save location mapping
-#         assign_user_locations(user_id, locations)
-# # 3. Read approver locations
-# approver_locs = request.form.getlist("approver_locations")
-# # 4. For each location selected, add user as approver
-# for loc in approver_locs:
-#    assign_location_approvers(loc, [username])   # Only assign THIS user
-
-# --- Delete User ---
 @app.route('/delete_user/<int:user_id>', methods=['POST', 'GET'])
 @login_required
 def delete_user(user_id):
@@ -2745,8 +2632,10 @@ def user_maintenance():
 @app.route('/menu')
 @login_required
 def main_menu():
+    # ---------------------------------------------------------
+    # 1. DB Status
+    # ---------------------------------------------------------
     db_status = "❌ Database Connection Failed"
-    ad_status = "⚠️ AD Test Credentials Missing"
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -2756,10 +2645,25 @@ def main_menu():
     except Exception as e:
         print("⚠️ DB check failed:", e)
 
+    # ---------------------------------------------------------
+    # 2. AD Status
+    # ---------------------------------------------------------
+    ad_status = "⚠️ AD Test Credentials Missing"
     try:
         if AD_SERVER and AD_TEST_USER and AD_TEST_PASS:
-            server = Server(AD_SERVER, port=AD_PORT, use_ssl=AD_USE_SSL, get_info=ALL, connect_timeout=3)
-            conn_ldap = Connection(server, user=AD_TEST_USER, password=AD_TEST_PASS, auto_bind=True)
+            server = Server(
+                AD_SERVER,
+                port=AD_PORT,
+                use_ssl=AD_USE_SSL,
+                get_info=ALL,
+                connect_timeout=3
+            )
+            conn_ldap = Connection(
+                server,
+                user=AD_TEST_USER,
+                password=AD_TEST_PASS,
+                auto_bind=True
+            )
             ad_status = "🔒 AD Connection OK"
             conn_ldap.unbind()
         else:
@@ -2768,46 +2672,114 @@ def main_menu():
         print("⚠️ AD connection test failed:", e)
         ad_status = "❌ AD Unreachable"
 
+    # ---------------------------------------------------------
+    # 3. Load Dashboard Stats (optimized)
+    # ---------------------------------------------------------
+    username = current_user.username
+
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM dbo.rooms WHERE status = 'Active'")
-        room_count = cursor.fetchone()[0]
-        cursor.execute("SELECT COUNT(*) FROM dbo.reservations WHERE status = 'Pending'")
-        pending_count = cursor.fetchone()[0]
-        cursor.execute("SELECT COUNT(*) FROM dbo.reservations WHERE status = 'Approved'")
-        approved_count = cursor.fetchone()[0]
-        cursor.execute("SELECT COUNT(*) FROM dbo.reservations WHERE status = 'Cancelled'")
-        cancelled_count = cursor.fetchone()[0]
-        # chart data for menu.html
+
+        # One optimized query for ALL COUNT metrics
         cursor.execute("""
-            SELECT CONVERT(VARCHAR(10), start_time, 120) AS date, status, COUNT(*) AS count
-            FROM dbo.reservations
-            WHERE start_time >= DATEADD(DAY, -6, CAST(GETDATE() AS date))
-            GROUP BY CONVERT(VARCHAR(10), start_time, 120), status
-            ORDER BY date ASC
-        """)
+            SELECT 
+                -- total active rooms user can see
+                (SELECT COUNT(*) FROM rooms r
+                     WHERE r.status='Active'
+                     AND EXISTS (
+                        SELECT 1 FROM user_locations ul
+                        JOIN users u ON ul.user_id = u.id
+                        WHERE u.username = ? AND ul.location_name = r.location
+                     )
+                ) AS room_count,
+
+                -- pending
+                (SELECT COUNT(*) FROM reservations rs
+                     JOIN rooms r ON r.id = rs.room_id
+                     WHERE rs.status='Pending' AND r.status='Active'
+                     AND EXISTS (
+                        SELECT 1 FROM user_locations ul
+                        JOIN users u ON ul.user_id = u.id
+                        WHERE u.username = ? AND ul.location_name = r.location
+                     )
+                ) AS pending_count,
+
+                -- approved
+                (SELECT COUNT(*) FROM reservations rs
+                     JOIN rooms r ON r.id = rs.room_id
+                     WHERE rs.status='Approved' AND r.status='Active'
+                     AND EXISTS (
+                        SELECT 1 FROM user_locations ul
+                        JOIN users u ON ul.user_id = u.id
+                        WHERE u.username = ? AND ul.location_name = r.location
+                     )
+                ) AS approved_count,
+
+                -- cancelled
+                (SELECT COUNT(*) FROM reservations rs
+                     JOIN rooms r ON r.id = rs.room_id
+                     WHERE rs.status='Cancelled' AND r.status='Active'
+                     AND EXISTS (
+                        SELECT 1 FROM user_locations ul
+                        JOIN users u ON ul.user_id = u.id
+                        WHERE u.username = ? AND ul.location_name = r.location
+                     )
+                ) AS cancelled_count
+        """, (username, username, username, username))
+
+        row = cursor.fetchone()
+        room_count, pending_count, approved_count, cancelled_count = row
+
+        # ---------------------------------------------------------
+        # Chart Query (Last 7 days, location-filtered)
+        # ---------------------------------------------------------
+        cursor.execute("""
+            SELECT 
+                CONVERT(VARCHAR(10), rs.start_time, 120) AS date,
+                rs.status,
+                COUNT(*) AS count
+            FROM reservations rs
+            JOIN rooms r ON r.id = rs.room_id
+            WHERE rs.start_time >= DATEADD(DAY, -6, CAST(GETDATE() AS date))
+            AND EXISTS (
+                SELECT 1 FROM user_locations ul
+                JOIN users u ON ul.user_id = u.id
+                WHERE u.username = ? AND ul.location_name = r.location
+            )
+            GROUP BY CONVERT(VARCHAR(10), rs.start_time, 120), rs.status
+            ORDER BY date
+        """, (username,))
+
         rows = cursor.fetchall()
         conn.close()
-        # map to date buckets
+
+        # ---------------------------------------------------------
+        # Build chart arrays
+        # ---------------------------------------------------------
         date_list = [(datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6, -1, -1)]
-        date_map = {d: {'Approved': 0, 'Pending': 0} for d in date_list}
-        for row in rows:
-            d, status, c = row
+        date_map = {d: {"Pending": 0, "Approved": 0} for d in date_list}
+
+        for d, status, cnt in rows:
             if d in date_map and status in date_map[d]:
-                date_map[d][status] = c
+                date_map[d][status] = cnt
+
         chart_labels = date_list
-        chart_pending = [date_map[d]['Pending'] for d in date_list]
-        chart_approved = [date_map[d]['Approved'] for d in date_list]
+        chart_pending = [date_map[d]["Pending"] for d in date_list]
+        chart_approved = [date_map[d]["Approved"] for d in date_list]
+
     except Exception as e:
-        print("⚠️ Error loading dashboard data:", e)
+        print("⚠️ Dashboard load error:", e)
         room_count = pending_count = approved_count = cancelled_count = 0
-        chart_labels = []
-        chart_pending = []
-        chart_approved = []
+        chart_labels = chart_pending = chart_approved = []
+
+    # ---------------------------------------------------------
+    # 4. Render
+    # ---------------------------------------------------------
     user_info = f"{current_user.display_name or current_user.username} ({current_user.role})"
+
     return render_template(
-        'menu.html',
+        "menu.html",
         room_count=room_count,
         pending_count=pending_count,
         approved_count=approved_count,
@@ -2819,6 +2791,7 @@ def main_menu():
         ad_status=ad_status,
         user_info=user_info
     )
+
 
 # if __name__ == '__main__':
 #     print("🧩 Initializing WebAXIS System...")
