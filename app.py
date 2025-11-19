@@ -1008,6 +1008,56 @@ def room_list():
             # fallback: simple text response
             return "Internal Server Error", 500
 
+@app.route('/reserve/<int:room_id>', methods=['GET', 'POST'])
+@login_required
+def reserve(room_id):
+    try:
+        conn = get_db_connection();
+        cur = conn.cursor()
+        # cur.execute("SELECT id, room_id, reserved_by, status, start_time, end_time FROM dbo.reservations WHERE id = ?",
+        #             (room_id,))
+        # row = cur.fetchone()
+        # if not row:
+        #     return jsonify({"success": False, "message": "Reservation not found."}), 404
+        # rid = row[1];
+        # reserved_by = row[2] or "";
+        # status = row[3] or "";
+        # start_time = row[4];
+        # end_time = row[5]
+
+        # get room group_code for approver checks
+        cur.execute("SELECT group_code FROM dbo.rooms WHERE id = ?", (room_id,))
+        room_row = cur.fetchone()
+        group_code = room_row[0] if room_row else None
+
+        # Authorization: admin OR initiator OR group approver
+        allowed = False
+        if getattr(current_user, 'role', '').lower() == 'admin':
+            allowed = True
+        elif group_code and is_user_group_admin(current_user.username, group_code):
+            allowed = True
+
+        if not allowed:
+            return jsonify({"success": False, "message": "Unauthorized to cancel this reservation."}), 403
+
+        # cur.execute("UPDATE dbo.reservations SET status = 'Cancelled', updated_at = GETDATE() WHERE id = ?", (room_id,))
+        # Cancel any auto-blocks tied to this booking (by reserved_by marker and exact start/end)
+        # auto_marker = f"[AUTO BLOCK] {reserved_by}"
+        cur.execute("""
+               UPDATE dbo.reservations
+               SET status = 'Cancelled', updated_at = GETDATE()
+               WHERE reserved_by LIKE ? AND start_time = ? AND end_time = ? AND status = 'Blocked'
+           """, (auto_marker + '%', start_time, end_time))
+        conn.commit()
+        log_audit("RESERVATION_CANCELLED", f"Reservation ID {res_id} cancelled by {current_user.username}")
+        return jsonify(
+            {"success": True, "room_id": rid, "res_id": res_id, "message": "Reservation cancelled successfully."})
+    except Exception as e:
+        print("⚠️ api_cancel_reservation error:", e)
+        return jsonify({"success": False, "message": f"System error: {e}"}), 500
+    finally:
+        conn.close()
+
 
 
 @app.route("/calendar_view")
@@ -1072,7 +1122,6 @@ def calendar_view():
         print("❌ ERROR in calendar_view:", e)
         return "Calendar Error", 500
 
-
 def get_room_by_id(conn, room_id):
     cursor = conn.cursor()
     cursor.execute("""
@@ -1091,7 +1140,6 @@ def get_room_by_id(conn, room_id):
             "is_combined": bool(row[4])
         }
     return None
-
 
 def get_linked_rooms(conn, group_code, exclude_id=None):
     cursor = conn.cursor()
@@ -1145,8 +1193,6 @@ def get_combined_group_rooms(room_id):
     cursor.close()
     conn.close()
     return rooms
-
-
 
 # @app.route('/reserve_post/<int:room_id>', methods=['POST'])
 # @login_required
@@ -1554,7 +1600,6 @@ def reserve_post(room_id):
             pass
 
         return jsonify(success=False, message=str(e)), 500
-
 
 @app.route('/api/cancel_reservation/<int:res_id>', methods=['POST'])
 @login_required

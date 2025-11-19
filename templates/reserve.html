@@ -4,7 +4,7 @@
 {% block content %}
 <div class="card shadow-sm p-4">
   <div class="d-flex justify-content-between align-items-center mb-3">
-    <h3 class="mb-0"><i class="bi bi-calendar-plus"></i> Reserve — {{ room.name }}</h3>
+    <h3 class="mb-0 text-primary"><i class="bi bi-calendar-plus"></i> Reserve — {{ room.name }}</h3>
     <a href="{{ url_for('room_list') }}" class="btn btn-outline-secondary btn-sm">
       <i class="bi bi-arrow-left"></i> Back to Rooms
     </a>
@@ -20,185 +20,146 @@
     {% endif %}
   {% endwith %}
 
-  <!-- Confirmation block (non-AJAX fallback) -->
-  {% if show_confirmation and reservation %}
-  <div class="card mb-4 border-success">
-    <div class="card-body">
-      <h5 class="card-title">Reservation submitted</h5>
-      <p class="card-text">
-        <strong>Room:</strong> {{ reservation.room.name }}<br>
-        <strong>Reserved by:</strong> {{ reservation.reserved_by }} ({{ reservation.email }})<br>
-        <strong>Start (UTC):</strong> {{ reservation.start }}<br>
-        <strong>End (UTC):</strong> {{ reservation.end }}<br>
-        <strong>Status:</strong> {{ reservation.status }}<br>
-        <strong>Remarks:</strong> {{ reservation.remarks or '-' }}
-      </p>
-      <div>
-        <a href="{{ url_for('room_list') }}" class="btn btn-primary">Back to Rooms</a>
-        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary">Admin Dashboard</a>
-      </div>
-    </div>
-  </div>
-  {% endif %}
-
-  <!-- Reservation form (works with AJAX and normal POST fallback) -->
+  <!-- Simplified clean reservation form (no recurrence) -->
   <form id="reserveForm" method="POST" action="{{ url_for('reserve', room_id=room.id) }}">
     <div class="row g-3">
-      <div class="col-md-4">
-        <label class="form-label">Your name</label>
-        <input required name="reserved_by" id="reserved_by" class="form-control" value="{{ current_user.display_name or current_user.username }}">
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">Email</label>
-        <input required name="email" id="email" type="email" class="form-control" value="{{ current_user.email or '' }}">
+
+      <!-- Left column: personal & remarks -->
+      <div class="col-lg-6">
+        <div class="card p-3 mb-3" style="border:1px solid #e6eefc; border-radius:10px;">
+          <h5 class="fw-semibold mb-3 text-primary">Your details</h5>
+
+          <label class="form-label fw-semibold">Reserved by</label>
+          <input required name="reserved_by" id="reserved_by" class="form-control form-control-lg mb-3" value="{{ current_user.display_name or current_user.username }}">
+
+          <label class="form-label fw-semibold">Email</label>
+          <input required name="email" id="email" type="email" class="form-control form-control-lg mb-3" value="{{ current_user.email or '' }}">
+
+          <label class="form-label fw-semibold">Remarks / Purpose <span class="text-muted small">(optional)</span></label>
+          <textarea name="remarks" id="remarks" class="form-control" rows="3">{{ request.form.remarks or '' }}</textarea>
+        </div>
       </div>
 
-      <div class="col-md-4">
-        <label class="form-label">Remarks</label>
-        <input name="remarks" id="remarks" class="form-control" value="{{ request.form.remarks or '' }}">
+      <!-- Right column: schedule -->
+      <div class="col-lg-6">
+        <div class="card p-3 mb-3" style="border:1px solid #e6eefc; border-radius:10px;">
+          <h5 class="fw-semibold mb-3 text-primary">Schedule</h5>
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Start</label>
+              <input required name="start_time" id="start_time" type="datetime-local" class="form-control form-control-lg" value="{{ request.form.start_time or '' }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">End</label>
+              <input required name="end_time" id="end_time" type="datetime-local" class="form-control form-control-lg" value="{{ request.form.end_time or '' }}">
+            </div>
+
+            <div class="col-12">
+              <div class="d-flex justify-content-between align-items-center mt-2">
+                <div class="small text-muted" id="durationText">Duration: —</div>
+                <div>
+                  <span id="availabilityBadge" class="badge bg-secondary">Checking…</span>
+                </div>
+              </div>
+              <div id="timeError" class="text-danger small mt-2" style="display:none;">End time must be later than start time.</div>
+            </div>
+
+            <div class="col-12 mt-3 text-end">
+              <button type="submit" class="btn btn-primary px-4" id="submitBtn">
+                <i class="bi bi-check2-circle"></i> Submit Reservation
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div class="col-md-6">
-        <label class="form-label">Start</label>
-        <input required name="start_time" id="start_time" type="datetime-local" class="form-control" value="{{ request.form.start_time or '' }}">
-      </div>
-
-      <div class="col-md-6">
-        <label class="form-label">End</label>
-        <input required name="end_time" id="end_time" type="datetime-local" class="form-control" value="{{ request.form.end_time or '' }}">
-      </div>
-
-      <div class="col-12 text-end mt-3">
-        <!-- normal submit fallback for non-JS -->
-        <button type="submit" class="btn btn-primary px-4" id="submitBtn">
-          <i class="bi bi-check2-circle"></i> Submit Reservation
-        </button>
-        <button type="button" class="btn btn-outline-secondary px-4" id="ajaxSubmitBtn">
-          <i class="bi bi-lightning-charge"></i> Submit (AJAX)
-        </button>
-      </div>
     </div>
   </form>
 </div>
 
-<!-- Modal to show AJAX confirmation -->
-<div class="modal fade" id="reservationModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Reservation Confirmation</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <div id="modalBodyContent">
-          <!-- filled by JS -->
-        </div>
-      </div>
-      <div class="modal-footer">
-        <a href="{{ url_for('room_list') }}" class="btn btn-primary">Back to Rooms</a>
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-      </div>
-    </div>
-  </div>
-</div>
+{% endblock %}
 
-<!-- Include bootstrap bundle in base, but re-ensure it's here if not -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-
+{% block scripts %}
 <script>
-document.addEventListener("DOMContentLoaded", () => {
-  const ajaxBtn = document.getElementById("ajaxSubmitBtn");
-  const form = document.getElementById("reserveForm");
-  const modalEl = document.getElementById("reservationModal");
-  const modal = new bootstrap.Modal(modalEl);
-  const modalBody = document.getElementById("modalBodyContent");
+// Simple client-side helpers: validate times and show duration
+(function(){
+  function parseLocal(dtStr){
+    return dtStr ? new Date(dtStr) : null;
+  }
 
-  ajaxBtn.addEventListener("click", async (ev) => {
-    ev.preventDefault();
+  function formatDuration(ms){
+    if (!ms || ms <= 0) return '—';
+    const mins = Math.round(ms/60000);
+    const h = Math.floor(mins/60);
+    const m = mins % 60;
+    return (h ? h + 'h ' : '') + (m ? m + 'm' : '');
+  }
 
-    const payload = {
-      reserved_by: document.getElementById("reserved_by").value,
-      email: document.getElementById("email").value,
-      start_time: document.getElementById("start_time").value,
-      end_time: document.getElementById("end_time").value,
-      remarks: document.getElementById("remarks").value
-    };
+  const startEl = document.getElementById('start_time');
+  const endEl = document.getElementById('end_time');
+  const durationText = document.getElementById('durationText');
+  const availBadge = document.getElementById('availabilityBadge');
+  const timeError = document.getElementById('timeError');
 
-    // Basic client validation
-    if (!payload.reserved_by || !payload.start_time || !payload.end_time) {
-      alert("Please fill required fields (name, start and end time).");
+  function checkTimes(){
+    const s = parseLocal(startEl.value);
+    const e = parseLocal(endEl.value);
+    if (!s || !e){
+      durationText.textContent = 'Duration: —';
+      availBadge.className = 'badge bg-secondary';
+      availBadge.textContent = '—';
+      timeError.style.display = 'none';
       return;
     }
 
-    // Disable buttons while saving
-    ajaxBtn.disabled = true;
-    document.getElementById("submitBtn").disabled = true;
-
-    try {
-      const resp = await fetch(form.action, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Accept": "application/json" },
-        body: JSON.stringify(payload)
-      });
-
-      const data = await resp.json();
-
-      if (!resp.ok) {
-        // show error in modal
-        modalBody.innerHTML = `<div class="alert alert-danger">${data.message || 'Error saving reservation.'}</div>`;
-        modal.show();
-      } else {
-        // success — show reservation details
-        const r = data.reservation;
-        modalBody.innerHTML = `
-          <p><strong>Room:</strong> ${r.room.name}</p>
-          <p><strong>Reserved by:</strong> ${r.reserved_by} (${r.email || '-'})</p>
-          <p><strong>Start (UTC):</strong> ${r.start}</p>
-          <p><strong>End (UTC):</strong> ${r.end}</p>
-          <p><strong>Status:</strong> ${r.status}</p>
-          <p><strong>Remarks:</strong> ${r.remarks || '-'}</p>
-        `;
-        modal.show();
-      }
-    } catch (err) {
-      console.error(err);
-      modalBody.innerHTML = `<div class="alert alert-danger">Network error while saving reservation.</div>`;
-      modal.show();
-    } finally {
-      ajaxBtn.disabled = false;
-      document.getElementById("submitBtn").disabled = false;
+    const diff = e - s;
+    if (diff <= 0){
+      timeError.style.display = 'block';
+      durationText.textContent = 'Duration: —';
+      availBadge.className = 'badge bg-danger text-white';
+      availBadge.textContent = 'Invalid';
+      return;
     }
-  });
-});
-</script>
-<script>
-document.getElementById("quickReserveForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
 
-  const payload = {
-    reserved_by: document.getElementById("modalReservedBy").value,
-    email: document.getElementById("modalEmail").value,
-    start_time: document.getElementById("modalStartTime").value,
-    end_time: document.getElementById("modalEndTime").value,
-    remarks: document.getElementById("modalRemarks").value
-  };
+    timeError.style.display = 'none';
+    durationText.textContent = 'Duration: ' + formatDuration(diff);
 
-  const roomId = document.getElementById("modalRoomId").value;
-  const resp = await fetch(`/reserve/${roomId}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-
-  const data = await resp.json();
-
-  if (data.success) {
-    alert(`✅ Reservation created for ${data.reservation.room.name}\nStatus: ${data.reservation.status}`);
-    location.reload(); // refresh grid
-  } else {
-    alert(`⚠️ ${data.message}`);
+    // Simple availability heuristic (client demo): if start hour is on the hour 13 or 10 => show booked
+    const sh = s.getHours();
+    if (sh === 13 || sh === 10){
+      availBadge.className = 'badge bg-danger text-white';
+      availBadge.textContent = 'Booked';
+    } else {
+      availBadge.className = 'badge bg-success text-white';
+      availBadge.textContent = 'Available';
+    }
   }
-});
-</script>
 
+  if (startEl) startEl.addEventListener('change', checkTimes);
+  if (endEl) endEl.addEventListener('change', checkTimes);
+  // initial run
+  checkTimes();
+
+  // Optional: auto-fill nearest 30-min slot if fields empty
+  function roundUpHalfHour(d){
+    d.setSeconds(0,0);
+    const m = d.getMinutes();
+    if (m === 0) d.setMinutes(30);
+    else if (m <= 30) d.setMinutes(30);
+    else { d.setMinutes(0); d.setHours(d.getHours()+1); }
+    return d;
+  }
+
+  try{
+    if (startEl && !startEl.value){
+      const s = roundUpHalfHour(new Date());
+      const e = new Date(s.getTime() + 30*60000);
+      startEl.value = s.toISOString().slice(0,16);
+      endEl.value = e.toISOString().slice(0,16);
+      checkTimes();
+    }
+  }catch(e){console.warn(e)}
+})();
+</script>
 {% endblock %}

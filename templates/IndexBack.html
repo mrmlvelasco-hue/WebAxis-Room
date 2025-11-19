@@ -4,115 +4,138 @@
 {% block content %}
 <div class="container-fluid mt-3">
   <div class="row">
+    <!-- LEFT SIDEBAR -->
+<div class="col-md-3 col-lg-2 border-end bg-light px-3 py-3 page-left-panel">
 
-    <!-- ===================== -->
-    <!-- LEFT SIDEBAR (CLEAN) -->
-    <!-- ===================== -->
-    <div class="col-md-3 col-lg-2 border-end bg-light px-3 py-3 page-left-panel shadow-sm" style="border-radius:12px;">
-      <h5 class="fw-bold text-primary mb-3">Meeting Room</h5>
+    <h5 class="fw-bold text-primary mb-3">Meeting Room</h5>
 
-      <div class="d-grid gap-2 mb-3">
-        <a href="{{ url_for('room_list') }}" class="btn btn-primary fw-semibold shadow-sm">
-          <i class="bi bi-grid-3x3-gap me-2"></i> Timeline View
+    <div class="d-grid gap-2 mb-3">
+        <a href="{{ url_for('room_list') }}" class="btn btn-primary fw-semibold">
+            <i class="bi bi-grid-3x3-gap me-2"></i> Timeline View
         </a>
-        <a href="#" id="sidebarCalendarBtn" class="btn btn-outline-primary fw-semibold shadow-sm">
-          <i class="bi bi-calendar3 me-2"></i> Calendar View
+        <a href="#" id="sidebarCalendarBtn" class="btn btn-outline-primary fw-semibold">
+            <i class="bi bi-calendar3 me-2"></i> Calendar View
         </a>
-      </div>
-
-      <!-- FILTERS -->
-      <div class="filter-panel mt-3 p-3 bg-white rounded shadow-sm">
-        <label class="form-label fw-bold">Filter by Location</label>
-        <select id="locationFilter" class="form-select mb-3">
-          <option value="all" {% if selected_location=='all' %}selected{% endif %}>All Locations</option>
-          {% for loc in allowed_locations %}
-            <option value="{{ loc }}" {% if selected_location==loc %}selected{% endif %}>{{ loc }}</option>
-          {% endfor %}
-        </select>
-
-        <label class="form-label fw-bold mt-2">Room</label>
-        <select id="roomFilter" class="form-select">
-          <option value="all">All Rooms</option>
-          {% for r in all_rooms %}
-            <option value="{{ r.name }}" {% if selected_room==r.name %}selected{% endif %}>{{ r.name }}</option>
-          {% endfor %}
-        </select>
-      </div>
-
-      <hr>
-
-      <h6 class="fw-bold small text-muted">Legend</h6>
-      <div class="small ms-1">
-        <div><span class="badge bg-success me-1">&nbsp;</span>Available</div>
-        <div><span class="badge bg-danger me-1">&nbsp;</span>Booked / Blocked</div>
-        <div><span class="badge bg-secondary me-1">&nbsp;</span>Past</div>
-        <div><span class="badge bg-warning me-1">&nbsp;</span>Pending</div>
-      </div>
     </div>
 
+    <!-- FILTER PANEL (correct Bootstrap structure) -->
+    <div class="filter-panel mt-3">
+        <div class="filter-box">
+            <button id="mobileFiltersBtn" class="btn btn-outline-primary d-md-none mb-2">
+                <i class="bi bi-funnel"></i> Filters
+            </button>
 
-    <!-- ==================== -->
-    <!-- RIGHT MAIN CONTENT -->
-    <!-- ==================== -->
+            <!-- LOCATION FILTER -->
+            <label class="form-label fw-bold">Filter by Location</label>
+            <select class="form-select"
+                    onchange="
+                        const date='{{ selected_date }}';
+                        window.location.href='?location=' + this.value + '&room={{ selected_room }}&date=' + date;
+                    ">
+                <option value="all" {% if selected_location=='all' %}selected{% endif %}>
+                    All Locations
+                </option>
+
+                {% for loc in allowed_locations %}
+                    <option value="{{ loc }}" {% if selected_location==loc %}selected{% endif %}>
+                        {{ loc }}
+                    </option>
+                {% endfor %}
+            </select>
+
+            <!-- ROOM FILTER -->
+            <label class="form-label fw-bold mt-3">Room</label>
+            <select class="form-select"
+                    onchange="
+                        const loc='{{ selected_location }}';
+                        const date='{{ selected_date }}';
+                        window.location.href='?location=' + loc + '&room=' + this.value + '&date=' + date;
+                    ">
+
+                <option value="all" {% if selected_room=='all' %}selected{% endif %}>All Rooms</option>
+
+                {% for loc in allowed_locations %}
+                    {% if selected_location == 'all' or selected_location == loc %}
+                        <optgroup label="{{ loc }}">
+                            {% for r in all_rooms %}
+                                {% if r.location == loc %}
+                                    <option value="{{ r.name }}"
+                                            {% if selected_room == r.name %}selected{% endif %}>
+                                        {{ r.name }}
+                                    </option>
+                                {% endif %}
+                            {% endfor %}
+                        </optgroup>
+                    {% endif %}
+                {% endfor %}
+            </select>
+
+        </div>
+    </div>
+
+    <hr>
+
+    <h6 class="fw-bold small text-muted">Reservation Status</h6>
+    <div class="small">
+        <div><span class="badge bg-success me-1">&nbsp;</span> Available</div>
+        <div><span class="badge bg-danger me-1">&nbsp;</span> Booked / Blocked</div>
+        <div><span class="badge bg-secondary me-1">&nbsp;</span> Past</div>
+        <div><span class="badge bg-warning me-1">&nbsp;</span> Pending</div>
+    </div>
+
+</div>
+
+
     <div class="col-md-9 col-lg-10">
-      <div class="card shadow-sm p-4 mb-4" style="border-radius:14px;">
-
-        <!-- HEADER BAR -->
+      <div class="card shadow-sm p-4 mb-4">
         <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap">
-          <h3 class="fw-bold mb-0 text-primary"><i class="bi bi-door-open me-2"></i> Shared Resources</h3>
-
-          <div class="d-flex align-items-center gap-2 mt-2 mt-md-0">
-            <button id="refreshButton" class="btn btn-outline-secondary btn-sm shadow-sm">
+          <div class="d-flex align-items-center">
+            <h3 class="fw-bold mb-0 text-primary me-3">
+              <i class="bi bi-door-open me-2"></i> Shared Resources
+            </h3>
+          </div>
+          <div class="d-flex align-items-center">
+            <button id="refreshButton" class="btn btn-outline-secondary btn-sm me-2">
               <i class="bi bi-arrow-clockwise"></i> Refresh
             </button>
-            <button id="calendarSyncBtn" class="btn btn-outline-primary btn-sm shadow-sm">
+            <button id="calendarSyncBtn" class="btn btn-outline-primary btn-sm me-2">
               <i class="bi bi-calendar-event"></i> Calendar View
             </button>
-            <input type="date" id="viewDate" class="form-control form-control-sm shadow-sm"
-                   value="{{ selected_date.strftime('%Y-%m-%d') if selected_date else '' }}" style="width:150px;">
+            <input type="date" id="viewDate" class="form-control form-control-sm"
+                   value="{{ selected_date.strftime('%Y-%m-%d') if selected_date else '' }}">
           </div>
         </div>
 
-
-        <!-- ========================= -->
-        <!-- CLEANER ROOM TIMELINE UI -->
-        <!-- ========================= -->
         <div class="slot-container mt-3">
           {% for room in rooms %}
-          <div class="room-row mb-4 room-card shadow-sm p-3" style="border-radius:14px;"
-               data-location="{{ room.location }}" data-room-id="{{ room.id }}">
-
-            <!-- ROOM HEADER -->
+          <div class="room-row mb-4 {% if focus_room and focus_room|int == room.id %}border border-primary{% endif %} room-card"
+               data-location="{{ (room.location or 'General')|trim }}" data-room-id="{{ room.id }}">
             <div class="room-header d-flex justify-content-between align-items-center p-3 rounded bg-white shadow-sm"
-                 data-roomid="{{ room.id }}" style="border-radius:10px;">
-
+                 data-roomid="{{ room.id }}">
               <div>
-                <h5 class="mb-0 fw-bold text-dark room-clickable" data-room-id="{{ room.id }}"
-                    style="cursor:pointer;">{{ room.name }}</h5>
-                <div class="small text-muted mt-1">{{ room.location }} — {{ room.capacity }} pax</div>
+                <div class="d-flex align-items-center">
+                  <h5 class="mb-0 me-3 room-clickable" data-room-id="{{ room.id }}">{{ room.name }}</h5>
+                  {% if room.location %}<span class="badge bg-secondary">{{ room.location }}</span>{% endif %}
+                </div>
+                <div class="small text-muted mt-1">Capacity: {{ room.capacity }}{% if room.description %} — {{ room.description }}{% endif %}</div>
               </div>
-
-              <button class="btn btn-outline-primary btn-sm reserve-btn shadow-sm"
-                data-room-id="{{ room.id }}" data-room-name="{{ room.name }}">
+              <button class="btn btn-outline-primary btn-sm reserve-btn"
+                      data-room-id="{{ room.id }}" data-room-name="{{ room.name }}">
                 <i class="bi bi-calendar-plus"></i> Reserve
               </button>
             </div>
 
-            <!-- TIMELINE GRID -->
-            <div class="timeline d-flex flex-nowrap overflow-auto border rounded bg-white p-3 mt-2 shadow-sm"
-                 data-room-id="{{ room.id }}" style="border-radius:10px;">
-              <div class="slot-grid d-flex align-items-center gap-2">
-
+            <div class="timeline d-flex flex-nowrap overflow-auto border rounded bg-transparent p-3 mt-2" data-room-id="{{ room.id }}">
+              <div class="slot-grid d-flex align-items-center">
                 {% for hour in range(start_hour, end_hour) %}
                   {% for minute in [0,30] %}
                     {% set time_label = "%02d:%02d"|format(hour, minute) %}
                     {% set slot = availability.get(room.id, {}).get(time_label, None) %}
-
-                    {% if slot %}
-                      {% set status = slot.status.lower() %}
-                      {% set by = slot.reserved_by %}
-                      {% set remarks = slot.remarks %}
-                      {% set res_id = slot.id %}
+                    {% if slot is not none %}
+                      {% set status = (slot.status if slot.status is defined else 'available') | lower %}
+                      {% set by = (slot.reserved_by if slot.reserved_by is defined else '') %}
+                      {% set remarks = (slot.remarks if slot.remarks is defined else '') %}
+                      {% set res_id = (slot.id if slot.id is defined else '') %}
                     {% else %}
                       {% set status = 'available' %}
                       {% set by = '' %}
@@ -120,31 +143,86 @@
                       {% set res_id = '' %}
                     {% endif %}
 
-                    <div class="slot-cell text-center p-2 shadow-sm"
+                    <div class="slot-cell d-flex flex-column justify-content-center align-items-center text-center m-1 p-2 rounded"
                          data-room-id="{{ room.id }}"
                          data-room-name="{{ room.name }}"
                          data-time="{{ time_label }}"
                          data-status="{{ status }}"
                          data-res-id="{{ res_id }}"
-                         style="border-radius:10px; min-width:75px;">
-                      <div class="slot-time small fw-bold text-dark">{{ time_label }}</div>
+                         title="{% if status == 'booked' %}Booked by {{ by }}{% elif status == 'pending' %}Pending — requested by {{ by }}{% elif status == 'blocked' %}Blocked{% else %}Available{% endif %}{% if remarks %} | Remarks: {{ remarks }}{% endif %}"
+                         style="min-width:72px; width:72px; box-shadow:0 2px 0 rgba(0,0,0,0.03);">
+                      <div class="slot-time small fw-bold">{{ time_label }}</div>
                       <div class="slot-duration small text-muted">30 min</div>
-                    </div>
 
+                      {% if status in ['booked','approved'] %}
+                        {% if current_user.is_admin() or by == (current_user.username or '') %}
+                          <button class="btn btn-sm btn-light cancel-btn position-absolute" style="right:10px; top:6px; width:18px; height:18px; padding:0;">
+                            <i class="bi bi-x-lg" style="font-size:0.6rem; color:#c12;"></i>
+                          </button>
+                        {% endif %}
+                      {% endif %}
+                    </div>
                   {% endfor %}
                 {% endfor %}
-
               </div>
             </div>
 
           </div>
           {% endfor %}
         </div>
-
       </div>
     </div>
-
   </div>
+    <!-- ===========================
+     MOBILE FILTER PANEL (INSERT HERE)
+     =========================== -->
+<div id="mobileFilterPanel" class="mobile-filter-panel d-md-none">
+    <div class="mobile-filter-header">
+        <span class="fw-semibold">Filters</span>
+        <button id="closeMobileFilter" class="btn-close"></button>
+    </div>
+
+    <div class="mobile-filter-body">
+
+        <!-- Location Filter -->
+        <label class="form-label fw-semibold">Location</label>
+        <select id="mobileLocationFilter" class="form-select mb-3">
+            <option value="all">All</option>
+            {% for loc in allowed_locations %}
+                <option value="{{ loc }}">{{ loc }}</option>
+            {% endfor %}
+        </select>
+
+        <!-- Room Filter -->
+        <label class="form-label fw-semibold">Room</label>
+        <select id="roomFilter" class="form-select mb-3">
+            <option value="all">All Rooms</option>
+            {% for r in all_rooms %}
+                <option value="{{ r.name }}" data-location="{{ r.location }}">{{ r.name }}</option>
+            {% endfor %}
+        </select>
+
+        <!-- Date -->
+        <label class="form-label fw-semibold">Date</label>
+        <input type="date" id="mobileDate" class="form-control mb-3"
+               value="{{ selected_date.strftime('%Y-%m-%d') if selected_date else '' }}">
+
+        <!-- Refresh -->
+        <button id="mobileRefresh" class="btn btn-primary w-100 mb-2">
+            <i class="bi bi-arrow-clockwise"></i> Refresh
+        </button>
+
+        <!-- Calendar View -->
+        <button id="mobileCalendar" class="btn btn-outline-primary w-100">
+            <i class="bi bi-calendar3"></i> Calendar View
+        </button>
+    </div>
+</div>
+
+<!-- Overlay -->
+<div id="mobileFilterOverlay" class="mobile-filter-overlay d-md-none"></div>
+<!-- =========================== -->
+
 </div>
 <!-- Updated New Reservation Modal (Option A Clean Corporate UI) -->
 <div class="modal fade" id="newReservationModal" tabindex="-1" aria-hidden="true">
@@ -282,15 +360,16 @@
   </div>
 </div>
 
+
+
 {% endblock %}
 
 {% block scripts %}
 <script>
 /* ------------------------------------------------------------------
-   Consolidated Timeline & UI Script
-   - Includes: timeline engine, drag-select, slot handlers, modal open/submit,
-     reserve button redirect fix, mobile filter handlers, approval/cancel flows
-   - This single block keeps behavior consistent and avoids handler ordering issues
+   Patched timeline JS
+   - relies on server variables:
+     rooms, availability, start_hour, end_hour, selected_date, focus_room
    ------------------------------------------------------------------ */
 
 let submitting = false;
@@ -311,9 +390,8 @@ function formatLocalDate(d){
 
 /* main on DOM ready */
 document.addEventListener('DOMContentLoaded', () => {
-  // Elements
   const modalEl = document.getElementById('newReservationModal');
-  const bsModal = modalEl ? new bootstrap.Modal(modalEl) : null;
+  const bsModal = new bootstrap.Modal(modalEl);
   const form = document.getElementById('reservationForm');
   const recType = document.getElementById('recurrenceType');
   const weeklyOptions = document.getElementById('weeklyOptions');
@@ -321,25 +399,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const locationFilter = document.getElementById('locationFilter');
   const viewDate = document.getElementById('viewDate');
 
-  // Reserve button handler (ensure placed before timeline handlers to avoid capture issues)
-  document.querySelectorAll('.reserve-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      e.preventDefault();
-      const roomId = btn.dataset.roomId;
-      // navigate to full reserve page
-      window.location.href = `/reserve/${roomId}`;
-    });
-  });
-
   // Persist date and location (keeps prior behavior)
-  if (viewDate && localStorage.getItem('selectedDate')) viewDate.value = localStorage.getItem('selectedDate');
-  if (viewDate) viewDate.addEventListener('change', () => {
+  if (localStorage.getItem('selectedDate')) viewDate.value = localStorage.getItem('selectedDate');
+  viewDate.addEventListener('change', () => {
     localStorage.setItem('selectedDate', viewDate.value);
+    // use query param for consistent refresh
     const loc = document.getElementById('locationFilter')?.value || 'all';
     window.location.href = `/rooms?date=${viewDate.value}&location=${loc}`;
   });
-
 
   // Location filter persistence + apply
   const savedFilter = localStorage.getItem('roomFilter') || '{{ selected_location if selected_location else "all" }}';
@@ -353,49 +420,20 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   applyFilter();
-  //if (locationFilter) locationFilter.addEventListener('change', () => { applyFilter(); });
-  locationFilter.addEventListener('change', () => {
-    applyFilter();
-    alert("rere");
-    const selectedDate = viewDate?.value || '';
-    const selectedLoc = locationFilter.value;
-
-    window.location.href = `/rooms?date=${selectedDate}&location=${selectedLoc}`;
-});
-
-const roomFilter = document.getElementById("roomFilter");
-
-if (roomFilter) {
-    // Set previously selected room from backend or localStorage
-    const savedRoom = "{{ selected_room or 'all' }}";
-    if (savedRoom && savedRoom !== "None") {
-        roomFilter.value = savedRoom;
-    }
-
-    roomFilter.addEventListener("change", () => {
-        const room = roomFilter.value;
-        const date = viewDate?.value || "";
-        const loc  = locationFilter?.value || "all";
-
-        // Refresh page with full parameters
-        window.location.href = `/rooms?date=${date}&location=${loc}&room=${room}`;
-    });
-}
-
+  if (locationFilter) locationFilter.addEventListener('change', () => { applyFilter(); });
 
   // hide recurrence UI where applicable
   if (recType){
     recType.addEventListener('change', () => {
-      if (weeklyOptions) weeklyOptions.style.display = recType.value === 'weekly' ? 'block' : 'none';
-      if (monthlyOptions) monthlyOptions.style.display = recType.value === 'monthly' ? 'block' : 'none';
+      weeklyOptions.style.display = recType.value === 'weekly' ? 'block' : 'none';
+      monthlyOptions.style.display = recType.value === 'monthly' ? 'block' : 'none';
     });
   }
   document.querySelectorAll("input[name='end_mode']").forEach(r => r.addEventListener('change', ()=>{
-    const endOnEl = document.getElementById('endOnDate');
-    const endAfterEl = document.getElementById('endAfterCount');
-    if (endOnEl) endOnEl.disabled = !document.getElementById('end_on').checked;
-    if (endAfterEl) endAfterEl.disabled = !document.getElementById('end_after').checked;
+    document.getElementById('endOnDate').disabled = !document.getElementById('end_on').checked;
+    document.getElementById('endAfterCount').disabled = !document.getElementById('end_after').checked;
   }));
+
 
   /* ---------- Coloring logic ---------- */
   function updatePastSlots(){
@@ -409,6 +447,7 @@ if (roomFilter) {
       cell.style.pointerEvents = '';
 
       if (status === 'booked' || status === 'approved' || status === 'blocked') {
+        // treat 'blocked' same as unavailable (danger)
         cell.classList.add('bg-danger','text-white');
         cell.style.pointerEvents = (status === 'blocked') ? 'none' : 'auto';
         return;
@@ -483,6 +522,10 @@ if (roomFilter) {
         cells.forEach(c => c.classList.remove('selected'));
         cell.classList.add('selected');
         ev.preventDefault();
+      });
+
+      container.addEventListener('pointerenter', (ev) => {
+        // pointerenter used at cell-level below
       });
 
       container.addEventListener('pointermove', (ev) => {
@@ -647,7 +690,6 @@ if (roomFilter) {
 
   /* open reserve modal helper */
   function openReserve(roomId, roomName, startTime, endTime){
-    if (!form || !bsModal) return;
     document.getElementById('modalRoomId').value = roomId;
     document.getElementById('modalRoomName').textContent = roomName;
     document.getElementById('modalStartTime').value = startTime;
@@ -657,89 +699,87 @@ if (roomFilter) {
   }
 
   /* submit reservation (recurrence aware) */
-  if (form) {
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      if (submitting) return;
-      const start = document.getElementById('modalStartTime').value;
-      const end = document.getElementById('modalEndTime').value;
-      if (!start || !end) {
-        Swal.fire('Invalid','Start and end time required.','error');
-        return;
-      }
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (submitting) return;
+    const start = document.getElementById('modalStartTime').value;
+    const end = document.getElementById('modalEndTime').value;
+    if (!start || !end) {
+      Swal.fire('Invalid','Start and end time required.','error');
+      return;
+    }
 
-      // weekly mismatch check
-      if (recType?.value === 'weekly') {
-        const weekdays = [];
-        document.querySelectorAll('.wkday').forEach(cb => { if (cb.checked) weekdays.push(cb.value); });
-        const startDate = new Date(start);
-        const wk = getJsWeekday(startDate);
-        if (weekdays.length > 0 && !weekdays.includes(wk)) {
-          let nextMatch = new Date(startDate);
-          for (let i=1;i<=14;i++){
-            let d = new Date(startDate);
-            d.setDate(d.getDate()+i);
-            if (weekdays.includes(getJsWeekday(d))){ nextMatch = d; break; }
-          }
-          const wrongDay = startDate.toLocaleDateString(undefined, { weekday:'long', year:'numeric', month:'long', day:'numeric' });
-          const nextLabel = nextMatch.toLocaleString();
-          const r = await Swal.fire({
-            icon: "warning",
-            title: "Start date mismatch",
-            html: `Your start date is <b>${wrongDay}</b><br>Recurrence days: <b>${weekdays.join(", ")}</b><br><br>Next matching date:<br><b>${nextLabel}</b>`,
-            showCancelButton: true,
-            showDenyButton: true,
-            confirmButtonText: "Adjust automatically",
-            denyButtonText: "I'll fix manually"
-          });
-          if (r.isConfirmed) {
+    // weekly mismatch check (same logic used in calendar)
+    if (recType?.value === 'weekly') {
+      const weekdays = [];
+      document.querySelectorAll('.wkday').forEach(cb => { if (cb.checked) weekdays.push(cb.value); });
+      const startDate = new Date(start);
+      const wk = getJsWeekday(startDate);
+      if (weekdays.length > 0 && !weekdays.includes(wk)) {
+        // compute next match and prompt (same UX)
+        let nextMatch = new Date(startDate);
+        for (let i=1;i<=14;i++){
+          let d = new Date(startDate);
+          d.setDate(d.getDate()+i);
+          if (weekdays.includes(getJsWeekday(d))){ nextMatch = d; break; }
+        }
+        const wrongDay = startDate.toLocaleDateString(undefined, { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+        const nextLabel = nextMatch.toLocaleString();
+        return Swal.fire({
+          icon: "warning",
+          title: "Start date mismatch",
+          html: `Your start date is <b>${wrongDay}</b><br>Recurrence days: <b>${weekdays.join(", ")}</b><br><br>Next matching date:<br><b>${nextLabel}</b>`,
+          showCancelButton: true,
+          showDenyButton: true,
+          confirmButtonText: "Adjust automatically",
+          denyButtonText: "I'll fix manually"
+        }).then(result => {
+          if (result.isConfirmed) {
             const duration = new Date(end) - new Date(start);
             const newStart = new Date(nextMatch);
             const newEnd = new Date(newStart.getTime() + duration);
             document.getElementById('modalStartTime').value = newStart.toISOString().slice(0,16);
             document.getElementById('modalEndTime').value = newEnd.toISOString().slice(0,16);
             // fall through to submit
-          } else {
-            return; // user chose to fix manually
           }
-        }
-      }
-
-      // submit payload
-      submitting = true;
-      const payload = Object.fromEntries(new FormData(form));
-      const weekdaysArr = [];
-      document.querySelectorAll('.wkday').forEach(cb => { if (cb.checked) weekdaysArr.push(cb.value); });
-      payload.weekdays = weekdaysArr.join(',');
-      try {
-        const roomId = payload.room_id || document.getElementById('modalRoomId').value;
-        const resp = await fetch(`/reserve_post/${roomId}`, {
-          method: "POST",
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
         });
-        const data = await resp.json();
-        if (data.success) {
-          const created = data.created_count || 0;
-          let html = `<b>${created}</b> reservations created.`;
-          if (data.skipped && data.skipped.length) {
-            html += `<br><b>${data.skipped.length}</b> skipped:<ul>`;
-            data.skipped.forEach(s => html += `<li>${s}</li>`);
-            html += `</ul>`;
-          }
-          Swal.fire({ icon: 'success', title: 'Reservation Submitted', html, confirmButtonColor: "#0047AB" })
-            .then(() => window.location.reload());
-        } else {
-          Swal.fire({ icon: 'error', title: 'Reservation Failed', text: data.message || 'Unknown error', confirmButtonColor: "#0047AB" });
-        }
-      } catch (err) {
-        console.error('Reservation submit error', err);
-        Swal.fire({ icon:'error', title: 'System Error', text: 'There was a problem submitting your reservation. Please try again.' });
-      } finally {
-        submitting = false;
       }
-    });
-  }
+    }
+
+    // submit payload
+    submitting = true;
+    const payload = Object.fromEntries(new FormData(form));
+    const weekdaysArr = [];
+    document.querySelectorAll('.wkday').forEach(cb => { if (cb.checked) weekdaysArr.push(cb.value); });
+    payload.weekdays = weekdaysArr.join(',');
+    try {
+      const roomId = payload.room_id || document.getElementById('modalRoomId').value;
+      const resp = await fetch(`/reserve_post/${roomId}`, {
+        method: "POST",
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json();
+      if (data.success) {
+        const created = data.created_count || 0;
+        let html = `<b>${created}</b> reservations created.`;
+        if (data.skipped && data.skipped.length) {
+          html += `<br><b>${data.skipped.length}</b> skipped:<ul>`;
+          data.skipped.forEach(s => html += `<li>${s}</li>`);
+          html += `</ul>`;
+        }
+        Swal.fire({ icon: 'success', title: 'Reservation Submitted', html, confirmButtonColor: "#0047AB" })
+          .then(() => window.location.reload());
+      } else {
+        Swal.fire({ icon: 'error', title: 'Reservation Failed', text: data.message || 'Unknown error', confirmButtonColor: "#0047AB" });
+      }
+    } catch (err) {
+      console.error('Reservation submit error', err);
+      Swal.fire({ icon:'error', title: 'System Error', text: 'There was a problem submitting your reservation. Please try again.' });
+    } finally {
+      submitting = false;
+    }
+  });
 
   // initial attach + UI restore
   updatePastSlots();
@@ -747,8 +787,7 @@ if (roomFilter) {
   attachSlotHandlers();
 
   // refresh handler (preserve selected date & location)
-  const refreshBtn = document.getElementById('refreshButton');
-  if (refreshBtn) refreshBtn.addEventListener('click', () => {
+  document.getElementById('refreshButton').addEventListener('click', () => {
     const selected = document.getElementById('viewDate').value || '';
     const loc = document.getElementById('locationFilter')?.value || 'all';
     window.location.href = `/rooms?date=${selected}&location=${loc}`;
@@ -783,9 +822,8 @@ if (roomFilter) {
   })();
 
 });
-</script>
 
-<!-- small helper: auto-scroll to selected room (keeps prior behavior) -->
+</script>
 <script>
 document.addEventListener("DOMContentLoaded", function() {
     const selectedRoom = "{{ selected_room }}";
@@ -798,8 +836,6 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 });
 </script>
-
-<!-- mobile filter panel handlers & gesture -->
 <script>
 document.addEventListener("DOMContentLoaded", () => {
 
@@ -807,8 +843,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const overlay = document.getElementById("mobileFilterOverlay");
     const openBtn = document.getElementById("mobileFiltersBtn");
     const closeBtn = document.getElementById("closeMobileFilter");
-
-    if (!panel || !overlay || !openBtn) return;
 
     // open panel
     openBtn.addEventListener("click", () => {
@@ -833,112 +867,133 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Sync on open
     openBtn.addEventListener("click", () => {
-        if (mobileLoc && desktopLoc) mobileLoc.value = desktopLoc.value;
+        mobileLoc.value = desktopLoc.value;
     });
 
     // Sync back on change
-    if (mobileLoc && desktopLoc) mobileLoc.addEventListener("change", () => {
+    mobileLoc.addEventListener("change", () => {
         desktopLoc.value = mobileLoc.value;
         desktopLoc.dispatchEvent(new Event("change"));
     });
 
     // Date sync
-    const deskDate = document.getElementById('viewDate');
-    const mobDate = document.getElementById('mobileDate');
+    const deskDate = document.getElementById("viewDate");
+    const mobDate = document.getElementById("mobileDate");
 
-    if (mobDate && deskDate) mobDate.addEventListener('change', () => {
+    mobDate.addEventListener("change", () => {
         deskDate.value = mobDate.value;
-        deskDate.dispatchEvent(new Event('change'));
+        deskDate.dispatchEvent(new Event("change"));
     });
 
-    // Refresh (safe guard: element may be named differently)
-    const mobRefresh = document.getElementById('mobileRefresh');
-    if (mobRefresh) mobRefresh.addEventListener('click', () => {
-        const refBtn = document.getElementById('refreshButton');
-        if (refBtn) refBtn.click();
+    // Refresh
+    document.getElementById("mobileRefresh").addEventListener("click", () => {
+        document.getElementById("refreshBtn").click();
     });
 
     // Calendar jump
-    const mobCal = document.getElementById('mobileCalendar');
-    if (mobCal) mobCal.addEventListener('click', () => {
-        const calBtn = document.getElementById('calendarSyncBtn');
-        if (calBtn) calBtn.click();
+    document.getElementById("mobileCalendar").addEventListener("click", () => {
+        document.getElementById("calendarSyncBtn").click();
     });
-
-    // Swipe gestures
-    let touchStartX = 0; let touchEndX = 0; let touchStartY = 0;
-    function isMobile() { return window.innerWidth <= 992; }
-    document.addEventListener('touchstart', (e) => { if (!isMobile()) return; touchStartX = e.changedTouches[0].screenX; touchStartY = e.changedTouches[0].screenY; }, { passive: true });
-    document.addEventListener('touchend', (e) => {
-        if (!isMobile()) return; touchEndX = e.changedTouches[0].screenX; const diffX = touchEndX - touchStartX; const diffY = Math.abs(e.changedTouches[0].screenY - touchStartY);
-        if (diffY > 50) return;
-        if (diffX > 80 && touchStartX < 40 && !panel.classList.contains('open')) { panel.classList.add('open'); overlay.classList.add('active'); }
-        if (diffX < -80 && panel.classList.contains('open')) { panel.classList.remove('open'); overlay.classList.remove('active'); }
-    }, { passive: true });
 
 });
 </script>
+<script>
+// ===============================
+// MOBILE SWIPE GESTURE FOR FILTER PANEL
+// ===============================
+document.addEventListener("DOMContentLoaded", () => {
+
+    const panel = document.getElementById("mobileFilterPanel");
+    const overlay = document.getElementById("mobileFilterOverlay");
+
+    let touchStartX = 0;
+    let touchEndX = 0;
+    let touchStartY = 0;
+
+    function openPanel() {
+        panel.classList.add("open");
+        overlay.classList.add("active");
+    }
+
+    function closePanel() {
+        panel.classList.remove("open");
+        overlay.classList.remove("active");
+    }
+
+    // detect device width
+    function isMobile() {
+        return window.innerWidth <= 992;
+    }
+
+    // START touch
+    document.addEventListener("touchstart", (e) => {
+        if (!isMobile()) return;
+
+        touchStartX = e.changedTouches[0].screenX;
+        touchStartY = e.changedTouches[0].screenY;
+    }, { passive: true });
+
+    // END touch
+    document.addEventListener("touchend", (e) => {
+        if (!isMobile()) return;
+
+        touchEndX = e.changedTouches[0].screenX;
+        const diffX = touchEndX - touchStartX;
+        const diffY = Math.abs(e.changedTouches[0].screenY - touchStartY);
+
+        // ignore vertical scroll
+        if (diffY > 50) return;
+
+        // SWIPE RIGHT → OPEN PANEL
+        if (diffX > 80 && touchStartX < 40 && !panel.classList.contains("open")) {
+            openPanel();
+        }
+
+        // SWIPE LEFT → CLOSE PANEL
+        if (diffX < -80 && panel.classList.contains("open")) {
+            closePanel();
+        }
+
+    }, { passive: true });
+
+});
+
+
+
+</script>
 
 <style>
-/* ===============================
-   UI Improvements — Option B
-   =============================== */
+/* Visual polish (kept consistent with server CSS) */
+.border-end { border-right: 1px solid #dee2e6 !important; }
+.room-card { border-radius: 12px; overflow: hidden; }
+.room-header { cursor: default; }
+.room-header h5 { font-size: 1.05rem; }
+.timeline { scroll-behavior: smooth; user-select: none; min-height: 84px; align-items: center; }
 
-/* Room Cards */
-.room-card {
-  background:#ffffff;
-  border:1px solid #e8ecf3;
-  transition:0.2s ease;
-}
-.room-card:hover{
-  transform: translateY(-3px);
-  box-shadow:0 8px 20px rgba(0,0,0,0.08) !important;
-}
+.slot-grid { display:flex; gap:0.5rem; align-items:center; }
+.slot-cell { font-size: 0.82rem; font-weight: 600; border-radius: 10px; min-width:72px; width:72px; height:56px; position:relative; transition: transform .12s ease; }
+.slot-cell .slot-time { line-height:1; }
+.slot-cell .slot-duration { font-size:0.68rem; }
+.slot-cell:hover { transform: translateY(-3px); box-shadow: 0 6px 14px rgba(0,0,0,0.06); cursor: pointer; }
+.slot-cell.selected { border: 2px solid #0047AB !important; background-color: #cfe8ff !important; transform: scale(1.04); }
+.slot-cell.bg-success { background-color: #0b8a44 !important; color:white !important; }
+.slot-cell.bg-danger { background-color: #d23a3a !important; color:white !important; }
+.slot-cell.bg-warning { background-color: #ffc107 !important; color:#222 !important; }
+.slot-cell.bg-secondary { background-color: #9fa6ad !important; color:white !important; opacity:0.86; }
+.cancel-btn { border: none; background: rgba(255,255,255,0.95); border-radius: 50%; width:18px; height:18px; padding:0; display:flex; align-items:center; justify-content:center; }
 
-/* Room Header */
-.room-header{
-  background:#ffffff !important;
-  border:1px solid #e4e8f0;
-}
-
-/* Slot Grid */
-.slot-cell{
-  background:#f4f7fb;
-  border:1px solid #dce3ef;
-  transition:0.15s;
-}
-.slot-cell:hover{
-  transform:scale(1.05);
-  background:#eaf2ff;
-}
-.slot-cell.selected{
-  background:#cfe1ff !important;
-  border:2px solid #0047ab !important;
-  transform:scale(1.07);
+@media (max-width: 1024px) {
+  .slot-cell { min-width:56px; width:56px; height:48px; }
+  .slot-grid { gap:0.4rem; }
+  .room-header h5 { font-size: 1rem; }
 }
 
-/* Colors for statuses */
-.slot-cell[data-status="available"]{
-  background:#e8f9ef;
-  color:#0b8a44;
-}
-.slot-cell[data-status="booked"],
-.slot-cell[data-status="approved"]{
-  background:#ffdddd;
-  color:#a80000;
-}
-.slot-cell[data-status="pending"]{
-  background:#fff3cd;
-  color:#856404;
-}
-.slot-cell.bg-secondary{
-  opacity:0.7;
-}
-
-/* Mobile */
 @media (max-width:768px){
-  .slot-cell{ min-width:55px !important; }
+  .page-left-panel{display:none !important;}
+  .slot-grid{display:grid !important; grid-template-columns: repeat(auto-fit, minmax(48px,1fr)); gap:0.35rem; align-items:stretch; width:100%;}
+  .slot-cell{min-width:48px;width:100%;height:42px;font-size:0.75rem;padding:6px 4px;}
+  .room-header .badge{display:none;}
+  .slot-container{padding:0 8px;}
 }
 </style>
-
 {% endblock %}
