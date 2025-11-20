@@ -1605,24 +1605,45 @@ def reserve_post(room_id):
 @login_required
 def api_cancel_reservation(res_id):
     try:
+        conn = get_db_connection()
+        cur = conn.cursor()
 
-        conn = get_db_connection(); cur = conn.cursor()
-        cur.execute("SELECT id, room_id, reserved_by, status, start_time, end_time FROM dbo.reservations WHERE id = ?", (res_id,))
+        # FIXED SQL WITH JOIN + NOLOCK + CORRECT QUOTING
+        cur.execute("""
+            SELECT 
+                r.id,
+                r.room_id,
+                u.username AS reserved_by,
+                r.status,
+                r.start_time,
+                r.end_time
+            FROM dbo.reservations r WITH (NOLOCK)
+            JOIN dbo.users u WITH (NOLOCK)
+                ON r.reserved_by = u.display_name
+            WHERE r.id = ?
+        """, (res_id,))
+
         row = cur.fetchone()
+
         if not row:
             return jsonify({"success": False, "message": "Reservation not found."}), 404
-        rid = row[1]; reserved_by = row[2] or ""; status = row[3] or ""; start_time = row[4]; end_time = row[5]
 
-        # get room group_code for approver checks
+        rid         = row[1]
+        reserved_by = row[2] or ""
+        status      = row[3] or ""
+        start_time  = row[4]
+        end_time    = row[5]
+
+        # Get room group_code
         cur.execute("SELECT group_code FROM dbo.rooms WHERE id = ?", (rid,))
         room_row = cur.fetchone()
         group_code = room_row[0] if room_row else None
 
-        # Authorization: admin OR initiator OR group approver
+        # Authorization: admin OR initiator OR location approver
         allowed = False
-        if getattr(current_user, 'role', '').lower() == 'admin':
+        if (current_user.role or "").lower() == "admin":
             allowed = True
-        elif current_user.username.lower() == (reserved_by or "").lower():
+        elif current_user.username.lower() == reserved_by.lower():
             allowed = True
         elif group_code and is_user_group_admin(current_user.username, group_code):
             allowed = True
@@ -1630,25 +1651,48 @@ def api_cancel_reservation(res_id):
         if not allowed:
             return jsonify({"success": False, "message": "Unauthorized to cancel this reservation."}), 403
 
+        # Already cancelled
         if status == "Cancelled":
             return jsonify({"success": False, "message": "Reservation already cancelled."}), 400
 
-        cur.execute("UPDATE dbo.reservations SET status = 'Cancelled', updated_at = GETDATE() WHERE id = ?", (res_id,))
-        # Cancel any auto-blocks tied to this booking (by reserved_by marker and exact start/end)
+        # Cancel main reservation
+        cur.execute("""
+            UPDATE dbo.reservations
+            SET status = 'Cancelled', updated_at = GETDATE()
+            WHERE id = ?
+        """, (res_id,))
+
+        # Cancel auto-blocks
         auto_marker = f"[AUTO BLOCK] {reserved_by}"
         cur.execute("""
             UPDATE dbo.reservations
             SET status = 'Cancelled', updated_at = GETDATE()
-            WHERE reserved_by LIKE ? AND start_time = ? AND end_time = ? AND status = 'Blocked'
-        """, (auto_marker + '%', start_time, end_time))
+            WHERE reserved_by LIKE ? 
+              AND start_time = ?
+              AND end_time = ?
+              AND status = 'Blocked'
+        """, (auto_marker + "%", start_time, end_time))
+
         conn.commit()
-        log_audit("RESERVATION_CANCELLED", f"Reservation ID {res_id} cancelled by {current_user.username}")
-        return jsonify({"success": True, "room_id": rid, "res_id": res_id, "message": "Reservation cancelled successfully."})
+
+        log_audit("RESERVATION_CANCELLED",
+                  f"Reservation ID {res_id} cancelled by {current_user.username}")
+
+        return jsonify({
+            "success": True,
+            "room_id": rid,
+            "res_id": res_id,
+            "message": "Reservation cancelled successfully."
+        })
+
     except Exception as e:
         print("⚠️ api_cancel_reservation error:", e)
         return jsonify({"success": False, "message": f"System error: {e}"}), 500
+
     finally:
         conn.close()
+
+
 
 @app.route('/api/booked_slots')
 @login_required
