@@ -1664,14 +1664,35 @@ def api_cancel_reservation(res_id):
 
         # Cancel auto-blocks
         auto_marker = f"[AUTO BLOCK] {reserved_by}"
+        # UPDATE dbo.reservations
+        #     SET status = 'Cancelled', updated_at = GETDATE()
+        #     WHERE reserved_by LIKE ?
+        #       AND start_time = ?
+        #       AND end_time = ?
+        #       AND status = 'Blocked'
+
         cur.execute("""
-            UPDATE dbo.reservations
-            SET status = 'Cancelled', updated_at = GETDATE()
-            WHERE reserved_by LIKE ? 
-              AND start_time = ?
-              AND end_time = ?
-              AND status = 'Blocked'
-        """, (auto_marker + "%", start_time, end_time))
+            UPDATE crev
+                SET crev.status = 'Cancelled',
+                    crev.updated_at = GETDATE()
+                FROM 
+                    reservations AS rev (NOLOCK)
+                    JOIN rooms AS r (NOLOCK) 
+                        ON rev.room_id = r.id
+                    LEFT JOIN rooms AS comr (NOLOCK)
+                        ON r.group_code = comr.group_code
+                       AND comr.is_combined <> 1
+                    JOIN reservations AS crev (NOLOCK)
+                        ON comr.id = crev.room_id
+                       AND crev.start_time = rev.start_time
+                       AND crev.end_time   = rev.end_time
+                WHERE
+                    rev.id = ?
+                    AND r.is_combined = 1
+                    AND crev.reserved_by LIKE '%' + rev.reserved_by + '%'
+                    AND crev.status = 'Blocked';
+
+        """, (res_id))
 
         conn.commit()
 

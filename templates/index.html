@@ -551,42 +551,64 @@ const loggedUser = {
       });
 
       container.addEventListener('pointerup', (ev) => {
-        if (!isDragging || !dragStart) return;
-        isDragging = false;
-        const startIndex = cells.indexOf(dragStart);
-        const endIndex = cells.indexOf(dragEnd || dragStart);
-        const [min, max] = [Math.min(startIndex, endIndex), Math.max(startIndex, endIndex)];
-        const selected = cells.slice(min, max+1);
+    if (!isDragging || !dragStart) return;
+    isDragging = false;
+    const startIndex = cells.indexOf(dragStart);
+    const endIndex = cells.indexOf(dragEnd || dragStart);
+    const [min, max] = [Math.min(startIndex, endIndex), Math.max(startIndex, endIndex)];
+    const selected = cells.slice(min, max+1);
 
-        const invalid = selected.some(c => {
-          const st = (c.dataset.status||'available').toLowerCase();
-          return ['booked','pending','blocked'].includes(st) || c.classList.contains('bg-secondary');
+    const invalid = selected.some(c => {
+        const st = (c.dataset.status||'available').toLowerCase();
+        return ['booked', 'pending', 'blocked'].includes(st) || c.classList.contains('bg-secondary');
+    });
+    //'approved'
+    if (invalid) {
+        Swal.fire({
+            icon: 'warning',
+            title: '⚠ Slot Not Available',
+            text: 'This range includes booked, pending, or blocked slots.',
+            confirmButtonColor: '#0047AB'
         });
-
-        if (invalid) {
-          Swal.fire('⚠ Slot Not Available', 'This range includes booked, pending, or blocked slots.', 'warning');
-          selected.forEach(s => s.classList.remove('selected'));
-          return;
-        }
-
-        // compute start/end from first/last selected
-        const dateValue = viewDate?.value || '{{ selected_date.strftime("%Y-%m-%d") if selected_date else "" }}';
-        const start = selected[0].dataset.time;
-        const end = selected[selected.length-1].dataset.time;
-        let startDate = new Date(`${dateValue}T${start}:00`);
-        let endDate = new Date(`${dateValue}T${end}:00`); endDate.setMinutes(endDate.getMinutes()+30);
-
-        openReserve(selected[0].dataset.roomId, selected[0].dataset.roomName, formatLocalDate(startDate), formatLocalDate(endDate)
-           ,  loggedUser.name,
-         loggedUser.email
-        );
         selected.forEach(s => s.classList.remove('selected'));
-      });
+        return;
+    }
+
+    // Prevent opening modal if clicking on non-available slot
+    const firstStatus = selected[0].dataset.status.toLowerCase();
+    if (['booked', 'pending', 'blocked', 'approved'].includes(firstStatus)) {
+        selected.forEach(s => s.classList.remove('selected'));
+        return;
+    }
+
+    // compute start/end from first/last selected
+    const dateValue = viewDate?.value || '{{ selected_date.strftime("%Y-%m-%d") if selected_date else "" }}';
+    const start = selected[0].dataset.time;
+    const end = selected[selected.length-1].dataset.time;
+    let startDate = new Date(`${dateValue}T${start}:00`);
+    let endDate = new Date(`${dateValue}T${end}:00`);
+    endDate.setMinutes(endDate.getMinutes()+30);
+
+    openReserve(
+        selected[0].dataset.roomId,
+        selected[0].dataset.roomName,
+        formatLocalDate(startDate),
+        formatLocalDate(endDate),
+        loggedUser.name,
+        loggedUser.email
+    );
+    selected.forEach(s => s.classList.remove('selected'));
+});
 
       // CLICK HANDLER – handles booked, pending, blocked, approved, available
         container.addEventListener('click', (ev) => {
         const cell = ev.target.closest('.slot-cell');
         if (!cell) return;
+
+        // Check if clicking the cancel button inside the cell
+        if (ev.target.closest('.cancel-btn')) {
+            return; // Let the cancel button handler deal with it
+        }
 
         const status = (cell.dataset.status || "available").toLowerCase();
 
@@ -597,28 +619,75 @@ const loggedUser = {
             showSlotDetails(cell);
             return;
         }
+        // AVAILABLE → NEW RESERVATION (only if not grey/past)
+        if (cell.classList.contains('bg-secondary')) {
+            // Past slot, do nothing
+            return;
+        }
 
         // AVAILABLE → NEW RESERVATION
-        const dateValue = viewDate?.value || '';
-        const [h, m] = cell.dataset.time.split(':');
-        const startDate = new Date(`${dateValue}T${h}:${m}:00`);
-        const endDate = new Date(startDate);
-        endDate.setMinutes(endDate.getMinutes() + 30);
+        if (status === 'available') {
+                const dateValue = viewDate?.value || '';
+                const [h, m] = cell.dataset.time.split(':');
+                const startDate = new Date(`${dateValue}T${h}:${m}:00`);
+                const endDate = new Date(startDate);
+                endDate.setMinutes(endDate.getMinutes() + 30);
 
-        openReserve(
-            cell.dataset.roomId,
-            cell.dataset.roomName,
-            formatLocalDate(startDate),
-            formatLocalDate(endDate),
-            loggedUser.name,
-            loggedUser.email
-        );
-    });
+                openReserve(
+                    cell.dataset.roomId,
+                    cell.dataset.roomName,
+                    formatLocalDate(startDate),
+                    formatLocalDate(endDate),
+                    loggedUser.name,
+                    loggedUser.email
+                );
+        }
+    },true);
 
 
     });
   }
+// Add this after attachSlotHandlers(); (around line 570)
 
+/* ---------- Reserve Button Handler ---------- */
+document.querySelectorAll('.reserve-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        const roomId = btn.dataset.roomId;
+        const roomName = btn.dataset.roomName;
+
+        // Get the selected date from the date picker
+        const dateValue = viewDate?.value || '{{ selected_date.strftime("%Y-%m-%d") if selected_date else "" }}';
+
+        // Set default time to next available hour (or current time + 1 hour)
+        const now = new Date();
+        const selectedDate = new Date(dateValue);
+
+        let startDate;
+        if (selectedDate.toDateString() === now.toDateString()) {
+            // If today, start from next hour
+            startDate = new Date(now);
+            startDate.setHours(now.getHours() + 1, 0, 0, 0);
+        } else {
+            // If future date, start from 8:00 AM
+            startDate = new Date(`${dateValue}T08:00:00`);
+        }
+
+        const endDate = new Date(startDate);
+        endDate.setMinutes(endDate.getMinutes() + 30); // Default 30-minute duration
+
+        // Open the reservation modal
+        openReserve(
+            roomId,
+            roomName,
+            formatLocalDate(startDate),
+            formatLocalDate(endDate)
+        );
+    });
+});
  /* ========================= UPDATED showSlotDetails with Modern UI ========================= */
 async function showSlotDetails(cell) {
    const roomId = cell.dataset.roomId;
@@ -1238,19 +1307,38 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // Sync filters
-    const desktopLoc = document.getElementById("locationFilter");
+    //const desktopLoc = document.getElementById("locationFilter");
+    //const mobileLoc = document.getElementById("mobileLocationFilter");
+
+    const desktopLoc = document.querySelector('.filter-panel select:first-of-type'); // Location filter
     const mobileLoc = document.getElementById("mobileLocationFilter");
+    const desktopRoom = document.querySelector('.filter-panel select:last-of-type'); // Room filter
+    const mobileRoom = document.getElementById("roomFilter");
+
+    // Sync on open
+    //openBtn.addEventListener("click", () => {
+    //    mobileLoc.value = desktopLoc.value;
+    //});
 
     // Sync on open
     openBtn.addEventListener("click", () => {
-        mobileLoc.value = desktopLoc.value;
+        if (desktopLoc) mobileLoc.value = desktopLoc.value;
+        if (desktopRoom) mobileRoom.value = desktopRoom.value;
     });
 
-    // Sync back on change
+    // Sync location back on change
     mobileLoc.addEventListener("change", () => {
-        desktopLoc.value = mobileLoc.value;
-        desktopLoc.dispatchEvent(new Event("change"));
+        const loc = mobileLoc.value;
+        const date = document.getElementById('viewDate').value;
+        const room = mobileRoom.value;
+        window.location.href = `?location=${loc}&room=${room}&date=${date}`;
     });
+    // Sync back on change
+    //mobileLoc.addEventListener("change", () => {
+    //    desktopLoc.value = mobileLoc.value;
+    //    desktopLoc.dispatchEvent(new Event("change"));
+    //});
+
 
     // Date sync
     const deskDate = document.getElementById("viewDate");
@@ -1262,9 +1350,14 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // Refresh
-    document.getElementById("mobileRefresh").addEventListener("click", () => {
-        document.getElementById("refreshBtn").click();
-    });
+    //document.getElementById("mobileRefresh").addEventListener("click", () => {
+    //    document.getElementById("refreshBtn").click();
+    //});
+
+    // NEW (CORRECT):
+document.getElementById("mobileRefresh").addEventListener("click", () => {
+    document.getElementById("refreshButton").click();
+});
 
     // Calendar jump
     document.getElementById("mobileCalendar").addEventListener("click", () => {
@@ -1274,6 +1367,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 </script>
 <script>
+
 // ===============================
 // MOBILE SWIPE GESTURE FOR FILTER PANEL
 // ===============================
@@ -1370,6 +1464,79 @@ document.addEventListener("DOMContentLoaded", () => {
   .slot-cell{min-width:48px;width:100%;height:42px;font-size:0.75rem;padding:6px 4px;}
   .room-header .badge{display:none;}
   .slot-container{padding:0 8px;}
+}
+
+
+    /* ========================================
+   MOBILE FILTER PANEL STYLES (CRITICAL)
+   ======================================== */
+.mobile-filter-panel {
+    position: fixed;
+    left: -320px;
+    top: 0;
+    width: 300px;
+    height: 100vh;
+    background: #ffffff;
+    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.15);
+    transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 1050;
+    overflow-y: auto;
+}
+
+.mobile-filter-panel.open {
+    left: 0;
+}
+
+.mobile-filter-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    background: linear-gradient(135deg, #0047AB 0%, #0056d2 100%);
+    color: white;
+    font-size: 1.1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.mobile-filter-body {
+    padding: 20px;
+}
+
+.mobile-filter-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+    z-index: 1040;
+}
+
+.mobile-filter-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Mobile filter button positioning */
+#mobileFiltersBtn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    border-radius: 50px;
+    padding: 12px 24px;
+}
+
+@media (min-width: 768px) {
+    .mobile-filter-panel,
+    .mobile-filter-overlay,
+    #mobileFiltersBtn {
+        display: none !important;
+    }
 }
 </style>
 {% endblock %}
