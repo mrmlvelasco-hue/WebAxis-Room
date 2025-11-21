@@ -307,4 +307,41 @@ document.addEventListener("DOMContentLoaded", function () {
 
 {% block scripts %}{% endblock %}
 </body>
+<style>
+    /* ============================
+   DARK MODE
+============================= */
+body.dark-mode {
+  background-color: #121212 !important;
+  color: #ddd;
+}
+
+body.dark-mode .sidebar {
+  background-color: #0c0c0c !important;
+}
+
+body.dark-mode .topbar {
+  background-color: #111 !important;
+  border-bottom: 1px solid #333;
+}
+
+body.dark-mode .content-area {
+  background-color: #181818 !important;
+}
+
+body.dark-mode .card {
+  background-color: #202020;
+  color: #e2e2e2;
+}
+
+body.dark-mode .table {
+  background-color: #181818;
+  color: #eee;
+}
+
+body.dark-mode .table th {
+  background-color: #1f1f1f;
+}
+
+</style>
 </html>
