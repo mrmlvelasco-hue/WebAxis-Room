@@ -27,8 +27,12 @@
      ======================== -->
 <div class="sidebar">
     <div class="sidebar-header">
-        <i class="bi bi-building"></i> WebAXIS
+    <div class="sidebar-logo">
+        <i class="bi bi-building"></i>
+        <span class="logo-text">WebAXIS</span>
     </div>
+</div>
+
 
     <!-- Mobile-only menu button (inside sidebar) -->
     <button class="btn btn-outline-light d-md-none position-absolute top-0 start-0 m-2" id="menu-toggle">
@@ -74,15 +78,17 @@
             </a>
         </li>
 
-        <li>
-  <a href="{{ url_for('approvals') }}" class="nav-link">
-    <i class="bi bi-clipboard-check"></i>
-    Approvals
-    {% if pending_count and pending_count > 0 %}
-      <span class="badge bg-danger ms-1">{{ pending_count }}</span>
-    {% endif %}
+      <li>
+  <a href="{{ url_for('approvals') }}" class="nav-link {% if request.endpoint == 'approvals' %}active{% endif %}">
+      <i class="bi bi-clipboard-check me-2"></i>
+      <span class="link-text">Approvals</span>
+
+      {% if pending_count and pending_count > 0 %}
+        <span class="badge bg-danger ms-1">{{ pending_count }}</span>
+      {% endif %}
   </a>
 </li>
+
 
         {% endif %}
 
@@ -165,6 +171,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const sidebar = document.querySelector(".sidebar");
     const content = document.querySelector(".content-area");
     const toggleBtn = document.getElementById("toggleSidebar");
+    const menuToggle = document.getElementById("menu-toggle"); // Mobile button inside sidebar
 
     // Create overlay for mobile
     const overlay = document.createElement("div");
@@ -181,14 +188,17 @@ document.addEventListener("DOMContentLoaded", function () {
     `;
     document.body.appendChild(overlay);
 
-    if (!sidebar || !toggleBtn) return;
+    if (!sidebar) return;
 
-    toggleBtn.addEventListener("click", () => {
+    // Function to toggle sidebar
+    function toggleSidebarMenu() {
 
         /* DESKTOP ≥992px -> collapse/expand */
         if (window.innerWidth >= 992) {
             sidebar.classList.toggle("collapsed");
             content.classList.toggle("shifted");
+            const topbar = document.querySelector(".topbar");
+            if (topbar) topbar.classList.toggle("shifted");
             return;
         }
 
@@ -202,12 +212,33 @@ document.addEventListener("DOMContentLoaded", function () {
             sidebar.classList.add("open");
             overlay.style.display = "block";
         }
-    });
+    }
+
+    // Handle both toggle buttons
+    if (toggleBtn) {
+        toggleBtn.addEventListener("click", toggleSidebarMenu);
+    }
+
+    if (menuToggle) {
+
+        menuToggle.addEventListener("click", toggleSidebarMenu);
+    }
 
     /* Close sidebar when tapping outside (mobile only) */
     overlay.addEventListener("click", () => {
         sidebar.classList.remove("open");
         overlay.style.display = "none";
+    });
+
+    /* Close sidebar when clicking any nav link on mobile */
+    const navLinks = sidebar.querySelectorAll('.nav-link');
+    navLinks.forEach(link => {
+        link.addEventListener('click', () => {
+            if (window.innerWidth < 992) {
+                sidebar.classList.remove("open");
+                overlay.style.display = "none";
+            }
+        });
     });
 
 });

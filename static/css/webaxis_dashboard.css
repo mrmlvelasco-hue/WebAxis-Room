@@ -1,65 +1,150 @@
 /* =======================================================
-   WebAXIS RoomSys — Unified Dashboard + Timeline Styles
-   FINAL VERSION — Includes Modern Timeline (Option B)
+   WebAXIS RoomSys — Complete Dashboard CSS
+   FINAL VERSION with All Fixes Applied
    ======================================================= */
 
 /* -------------------------------------------------------
-   BASE
+   BASE STYLES
 ------------------------------------------------------- */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
 body {
-    font-family: "Segoe UI", sans-serif;
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
     background-color: #f9f9fb;
     color: #333;
     margin: 0;
     overflow-x: hidden;
-    transition: background-color .35s ease, color .35s ease;
+    transition: background-color 0.35s ease, color 0.35s ease;
 }
 
 /* -------------------------------------------------------
-   SIDEBAR (Desktop)
+   SIDEBAR - FIXED WITH HIGH CONTRAST
 ------------------------------------------------------- */
 .sidebar {
     position: fixed;
     top: 0;
     left: 0;
-    width: 230px;
+    width: 250px;
     height: 100vh;
-    background-color: #212529;
+    background: linear-gradient(180deg, #0047AB 0%, #003380 100%);
     color: #fff;
-    z-index: 3001 !important;
-    transition: width .3s ease, left .3s ease;
+    z-index: 2100 !important;
+    overflow-y: auto;
+    overflow-x: hidden;
+    transition: all 0.3s ease-in-out;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
 }
 
 .sidebar-header {
-    padding: 1rem;
+    padding: 1.25rem 1rem;
     font-weight: 700;
-    font-size: 1.1rem;
+    font-size: 1.3rem;
     text-align: center;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(0, 0, 0, 0.15);
+    color: #ffffff !important;
+}
+
+.sidebar-header i {
+    margin-right: 10px;
+    font-size: 1.8rem;
+    color: #ffffff !important;
+}
+
+/* -------------------------------------------------------
+   SIDEBAR NAVIGATION - HIGH CONTRAST (FIXED)
+------------------------------------------------------- */
+.sidebar .nav {
+    padding: 15px 0;
 }
 
 .sidebar .nav-link {
-    padding: 10px 20px;
+    color: #ffffff !important;
+    padding: 14px 20px;
+    margin: 6px 10px;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    font-size: 0.95rem;
     font-weight: 500;
-    color: #adb5bd;
-    display: block;
-    transition: .3s;
+    text-decoration: none;
+    opacity: 0.95;
 }
 
 .sidebar .nav-link:hover {
-    background: rgba(13,110,253,0.15);
-    color: #0d6efd !important;
+    background: rgba(255, 255, 255, 0.2);
+    color: #ffffff !important;
+    opacity: 1;
+    transform: translateX(5px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .sidebar .nav-link.active {
-    background-color: #0d6efd !important;
-    color: #fff !important;
-    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.3) !important;
+    color: #ffffff !important;
+    font-weight: 600;
+    opacity: 1;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+    border-left: 4px solid #ffffff;
+    padding-left: 16px;
 }
 
-/* collapsed */
-.sidebar.collapsed { width: 70px; }
-.sidebar.collapsed .link-text { display: none; }
+.sidebar .nav-link i {
+    font-size: 1.3rem;
+    width: 28px;
+    margin-right: 12px;
+    color: #ffffff !important;
+}
+
+.sidebar .link-text {
+    color: #ffffff !important;
+    font-weight: 500;
+}
+
+/* Badge styling */
+.sidebar .badge {
+    margin-left: auto;
+    font-size: 0.7rem;
+    font-weight: 600;
+    background: #ff4444 !important;
+    color: #ffffff !important;
+    padding: 0.25rem 0.5rem;
+    border-radius: 12px;
+}
+
+/* -------------------------------------------------------
+   SIDEBAR - COLLAPSED STATE
+------------------------------------------------------- */
+.sidebar.collapsed {
+    width: 70px;
+}
+
+.sidebar.collapsed .sidebar-header {
+    padding: 20px 10px;
+    font-size: 1.2rem;
+}
+
+.sidebar.collapsed .link-text {
+    display: none;
+}
+
+.sidebar.collapsed .nav-link {
+    justify-content: center;
+    padding: 12px;
+}
+
+.sidebar.collapsed .nav-link i {
+    margin-right: 0 !important;
+}
+
+.sidebar.collapsed .badge {
+    display: none;
+}
 
 /* -------------------------------------------------------
    TOPBAR
@@ -67,54 +152,69 @@ body {
 .topbar {
     position: fixed;
     top: 0;
-    left: 230px;
+    left: 250px;
     right: 0;
-    height: 56px;
+    height: 60px;
     background: #fff;
     border-bottom: 1px solid #dee2e6;
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 0 1.5rem;
-    z-index: 900;
-    transition: left .3s;
+    z-index: 1000 !important;
+    transition: left 0.3s ease-in-out;
+}
+
+.topbar.shifted {
+    left: 70px;
 }
 
 #toggleSidebar {
     background: transparent;
-    border: none;
+    border: 1px solid #dee2e6;
     font-size: 1.25rem;
     cursor: pointer;
+    padding: 5px 10px;
+    border-radius: 6px;
+    transition: 0.2s ease;
+}
+
+#toggleSidebar:hover {
+    background: #f8f9fa;
 }
 
 /* -------------------------------------------------------
    CONTENT AREA
 ------------------------------------------------------- */
 .content-area {
-    margin-left: 230px;
+    position: relative;
+    margin-left: 250px;
+    margin-top: 60px;
     padding: 2rem;
-    min-height: 100vh;
-    transition: margin-left .3s ease;
+    min-height: calc(100vh - 60px);
+    transition: margin-left 0.3s ease-in-out;
+    z-index: 1 !important;
+    background: #f9f9fb;
+}
+
+.content-area.shifted {
+    margin-left: 70px;
 }
 
 /* -------------------------------------------------------
-   MOBILE SIDEBAR
+   FOOTER
 ------------------------------------------------------- */
-@media (max-width: 992px) {
-    .sidebar { left: -260px; width: 260px; }
-    .sidebar.open { left: 0; }
+.footer {
+    margin-left: 250px;
+    background: #f8f9fa;
+    border-top: 1px solid #e0e0e0;
+    transition: margin-left 0.3s ease-in-out;
+    padding: 1rem;
+    text-align: center;
+}
 
-    .topbar {
-        left: 0 !important;
-        width: 100%;
-        padding: 0 12px !important;
-    }
-
-    .content-area {
-        margin-left: 0 !important;
-        padding: 1rem;
-        padding-top: 85px !important;
-    }
+.footer.shifted {
+    margin-left: 70px;
 }
 
 /* -------------------------------------------------------
@@ -123,32 +223,39 @@ body {
 .card {
     border-radius: 12px;
     border: none;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-    transition: .2s ease;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    background: #fff;
 }
 
 .card:hover {
-    box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
     transform: translateY(-3px);
 }
 
+.table {
+    margin-bottom: 0;
+}
+
 /* -------------------------------------------------------
-   ROOM FILTER DROPDOWN IN TIMELINE (missing earlier)
+   ROOM FILTER DROPDOWN
 ------------------------------------------------------- */
 #locationFilter {
     min-width: 180px;
     border-radius: 8px;
-    padding: 6px 10px;
+    padding: 6px 12px;
+    border: 1px solid #dee2e6;
 }
 
 /* -------------------------------------------------------
-   TIMELINE — MODERN STYLE (OPTION B)
+   TIMELINE — SLOT GRID
 ------------------------------------------------------- */
 .slot-grid {
     display: flex;
     gap: 0.5rem;
     align-items: center;
     margin-top: 0.4rem;
+    flex-wrap: wrap;
 }
 
 .slot-cell {
@@ -162,46 +269,204 @@ body {
     display: flex;
     flex-direction: column;
     justify-content: center;
+    align-items: center;
     background: #f0f0f0;
-    transition: .15s ease;
+    transition: all 0.15s ease;
+    cursor: pointer;
+    border: 2px solid transparent;
 }
 
 .slot-cell:hover {
-    cursor: pointer;
     transform: translateY(-4px);
-    box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
 }
 
-/* Colors */
-.slot-cell.bg-success { background:#0b8a44 !important; color:white; }
-.slot-cell.bg-danger  { background:#d23a3a !important; color:white; }
-.slot-cell.bg-warning { background:#ffc107 !important; color:#222; }
-.slot-cell.bg-secondary { background:#9fa6ad !important; color:white; opacity:.85; }
+/* Slot Colors */
+.slot-cell.bg-success {
+    background: #0b8a44 !important;
+    color: white;
+}
 
-/* Drag selected */
+.slot-cell.bg-danger {
+    background: #d23a3a !important;
+    color: white;
+}
+
+.slot-cell.bg-warning {
+    background: #ffc107 !important;
+    color: #222;
+}
+
+.slot-cell.bg-secondary {
+    background: #9fa6ad !important;
+    color: white;
+    opacity: 0.85;
+}
+
+/* Selected State */
 .slot-cell.selected {
     border: 2px solid #0047AB !important;
     background: #d7e9ff !important;
+    color: #0047AB;
     transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(0, 71, 171, 0.3);
 }
 
-/* Cancel button */
+/* Cancel Button */
 .cancel-btn {
     border: none;
-    background: rgba(255,255,255,0.9);
+    background: rgba(255, 255, 255, 0.9);
     border-radius: 50%;
-    width: 18px; height: 18px;
-    position: absolute; top: 6px; right: 6px;
-    display: flex; align-items: center; justify-content: center;
+    width: 18px;
+    height: 18px;
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     transition: 0.2s ease;
+    cursor: pointer;
+    font-size: 10px;
+    color: #333;
 }
-.cancel-btn:hover { transform: scale(1.1); }
+
+.cancel-btn:hover {
+    transform: scale(1.15);
+    background: #fff;
+}
 
 /* -------------------------------------------------------
-   MOBILE TIMELINE ENHANCEMENT
+   MOBILE FILTER PANEL
+------------------------------------------------------- */
+.mobile-filter-panel {
+    position: fixed;
+    top: 0;
+    right: -300px;
+    width: 260px;
+    height: 100vh;
+    background: #ffffff;
+    box-shadow: -4px 0px 15px rgba(0, 0, 0, 0.15);
+    z-index: 2110;
+    padding: 15px;
+    transition: right 0.3s ease;
+    overflow-y: auto;
+}
+
+.mobile-filter-panel.open {
+    right: 0;
+}
+
+.mobile-filter-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e1e1e1;
+    margin-bottom: 15px;
+}
+
+.mobile-filter-body {
+    margin-top: 15px;
+}
+
+/* Mobile Filter Overlay */
+.mobile-filter-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    display: none;
+    z-index: 2105;
+    pointer-events: none;
+}
+
+.mobile-filter-overlay.active {
+    display: block;
+    pointer-events: auto;
+}
+
+/* -------------------------------------------------------
+   SIDEBAR OVERLAY (Mobile)
+------------------------------------------------------- */
+#sidebar-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: none;
+    z-index: 2050 !important;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+#sidebar-overlay.show {
+    display: block;
+    opacity: 1;
+}
+
+/* -------------------------------------------------------
+   MOBILE RESPONSIVE (< 992px)
+------------------------------------------------------- */
+@media (max-width: 991.98px) {
+    /* Hide sidebar by default */
+    .sidebar {
+        left: -250px;
+        width: 250px;
+    }
+
+    /* Show sidebar when open */
+    .sidebar.open {
+        left: 0;
+        box-shadow: 4px 0 20px rgba(0, 0, 0, 0.4);
+    }
+
+    /* Adjust topbar */
+    .topbar {
+        left: 0;
+        right: 0;
+        width: 100%;
+        padding: 0 12px;
+    }
+
+    /* Adjust content area */
+    .content-area {
+        margin-left: 0;
+        padding: 1rem;
+        padding-top: 80px;
+    }
+
+    /* Adjust footer */
+    .footer {
+        margin-left: 0;
+    }
+
+    /* Mobile menu toggle button inside sidebar */
+    #menu-toggle {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        z-index: 2001;
+        background: rgba(255, 255, 255, 0.2) !important;
+        border: 1px solid rgba(255, 255, 255, 0.3) !important;
+        color: #ffffff !important;
+    }
+
+    #menu-toggle:hover {
+        background: rgba(255, 255, 255, 0.3) !important;
+    }
+
+    /* Prevent body scroll when sidebar is open */
+    body.sidebar-open {
+        overflow: hidden;
+    }
+}
+
+/* -------------------------------------------------------
+   MOBILE TIMELINE (< 576px)
 ------------------------------------------------------- */
 @media (max-width: 576px) {
-
     .slot-grid {
         display: grid !important;
         grid-template-columns: repeat(auto-fit, minmax(52px, 1fr));
@@ -220,52 +485,50 @@ body {
         overflow-x: hidden !important;
         padding: 0.5rem !important;
     }
+
+    .topbar {
+        padding: 0 10px;
+    }
+
+    .content-area {
+        padding: 0.75rem;
+    }
+
+    .sidebar-header {
+        font-size: 1.2rem;
+        padding: 15px 10px;
+    }
 }
 
 /* -------------------------------------------------------
-   MOBILE FILTER DRAWER
+   PULL TO REFRESH INDICATOR
 ------------------------------------------------------- */
-.mobile-filter-panel {
+#ptr-indicator {
     position: fixed;
-    top: 0;
-    right: -300px;
-    width: 260px;
-    height: 100vh;
-    background: #ffffff;
-    box-shadow: -4px 0px 15px rgba(0,0,0,0.15);
-    z-index: 3000;
-    padding: 15px;
-    transition: right .3s ease;
-}
-
-.mobile-filter-panel.open { right: 0; }
-
-.mobile-filter-header {
+    top: -60px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 50px;
+    height: 50px;
+    background: #0047AB;
+    color: white;
+    border-radius: 50%;
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding-bottom: 10px;
-    border-bottom: 1px solid #e1e1e1;
+    justify-content: center;
+    font-size: 24px;
+    z-index: 9999;
+    opacity: 0;
+    transition: all 0.3s ease;
 }
 
-.mobile-filter-body {
-    margin-top: 15px;
+#ptr-indicator.active {
+    animation: spin 0.6s linear;
 }
 
-/* Overlay (fixed z-index issue) */
-.mobile-filter-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.35);
-    display: none;
-    pointer-events: none;
-    z-index: 100; /* BELOW SIDEBAR */
-}
-
-.mobile-filter-overlay.active {
-    display: block;
-    pointer-events: auto;
-    z-index: 2500;
+@keyframes spin {
+    0% { transform: translateX(-50%) rotate(0deg); }
+    100% { transform: translateX(-50%) rotate(360deg); }
 }
 
 /* -------------------------------------------------------
@@ -274,8 +537,152 @@ body {
 .modal-backdrop.show {
     opacity: 0.65 !important;
     background-color: #000 !important;
-    z-index: 1500 !important;
+    z-index: 3000 !important;
+}
+.modal {
+    z-index: 3100 !important;
+}
+.swal2-container {
+    z-index: 5000 !important;
 }
 
-.modal { z-index: 1600 !important; }
-.swal2-container { z-index: 2000 !important; }
+/* -------------------------------------------------------
+   SCROLLBAR STYLING
+------------------------------------------------------- */
+.sidebar::-webkit-scrollbar {
+    width: 6px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.4);
+    border-radius: 3px;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.6);
+}
+
+/* -------------------------------------------------------
+   DARK MODE
+------------------------------------------------------- */
+body.dark-mode {
+    background-color: #121212 !important;
+    color: #ddd;
+}
+
+body.dark-mode .sidebar {
+    background: linear-gradient(180deg, #001f3f 0%, #000b1a 100%);
+    border-right: 1px solid #333;
+}
+
+body.dark-mode .topbar {
+    background-color: #1a1a1a !important;
+    border-bottom: 1px solid #333;
+    color: #ddd;
+}
+
+body.dark-mode .content-area {
+    background-color: #181818 !important;
+}
+
+body.dark-mode .card {
+    background-color: #202020;
+    color: #e2e2e2;
+    border: 1px solid #333;
+}
+
+body.dark-mode .table {
+    background-color: #1a1a1a;
+    color: #eee;
+}
+
+body.dark-mode .table th {
+    background-color: #252525;
+    border-color: #333;
+}
+
+body.dark-mode .table td {
+    border-color: #333;
+}
+
+body.dark-mode .footer {
+    background-color: #1a1a1a;
+    border-top: 1px solid #333;
+    color: #ddd;
+}
+
+body.dark-mode .btn-outline-secondary {
+    border-color: #555;
+    color: #ddd;
+}
+
+body.dark-mode .btn-outline-secondary:hover {
+    background-color: #333;
+    border-color: #666;
+}
+
+body.dark-mode .slot-cell {
+    background: #2a2a2a;
+    color: #ddd;
+}
+
+body.dark-mode .mobile-filter-panel {
+    background: #1a1a1a;
+    color: #ddd;
+}
+
+/* -------------------------------------------------------
+   UTILITY CLASSES
+------------------------------------------------------- */
+.text-primary-custom {
+    color: #0047AB;
+}
+
+.bg-primary-custom {
+    background-color: #0047AB;
+}
+
+/* -------------------------------------------------------
+   PRINT STYLES
+------------------------------------------------------- */
+@media print {
+    .sidebar,
+    .topbar,
+    .footer,
+    #toggleSidebar {
+        display: none !important;
+    }
+
+    .content-area {
+        margin-left: 0 !important;
+        margin-top: 0 !important;
+    }
+}
+
+/* Fix stacking context so modals render above everything */
+.content-area {
+    z-index: auto !important;
+}
+
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 70px;
+    user-select: none;
+}
+
+.sidebar-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.sidebar.collapsed .sidebar-logo .logo-text {
+    display: none; /* hide only the text, not the whole header */
+}
+
