@@ -597,7 +597,7 @@ def login():
         user = None
         ad_ok = False
         if AD_SERVER:
-            ad_ok = True
+             ad_ok = True
             # ad_ok = authenticate_ldap(username, password)
         if ad_ok:
             conn = get_db_connection(); cursor = conn.cursor()

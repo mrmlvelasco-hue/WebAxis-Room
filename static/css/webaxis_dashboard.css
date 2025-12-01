@@ -686,3 +686,18 @@ body.dark-mode .mobile-filter-panel {
     display: none; /* hide only the text, not the whole header */
 }
 
+html.sidebar-collapsed .sidebar {
+    width: 70px !important;
+}
+
+html.sidebar-collapsed .content-area {
+    margin-left: 70px !important;
+}
+
+html.sidebar-collapsed .topbar {
+    left: 70px !important;
+}
+
+html.sidebar-collapsed .footer {
+    margin-left: 70px !important;
+}
