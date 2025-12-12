@@ -701,3 +701,48 @@ html.sidebar-collapsed .topbar {
 html.sidebar-collapsed .footer {
     margin-left: 70px !important;
 }
+
+
+:root {
+  --sidebar-w: 250px;
+}
+
+html.sidebar-collapsed {
+  --sidebar-w: 70px;
+}
+
+/* Sidebar uses the variable */
+.sidebar {
+  width: var(--sidebar-w);
+  transition: width 0.3s ease-in-out; /* limit transition to width */
+}
+
+/* Topbar/content/footer align to the same variable */
+.topbar {
+  left: var(--sidebar-w);
+  transition: left 0.3s ease-in-out;
+}
+
+.content-area,
+.footer {
+  margin-left: var(--sidebar-w);
+  transition: margin-left 0.3s ease-in-out;
+}
+
+/* Hide only what needs to be hidden in collapsed mode */
+html.sidebar-collapsed .link-text,
+html.sidebar-collapsed .badge {
+  display: none;
+}
+html.sidebar-collapsed .nav-link {
+  justify-content: center;
+  padding: 12px;
+}
+html.sidebar-collapsed .nav-link i {
+  margin-right: 0 !important;
+}
+
+/* Make the clickable area stable in both states */
+.sidebar .nav-link {
+  width: 100%;
+}

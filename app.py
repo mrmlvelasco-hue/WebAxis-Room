@@ -144,7 +144,7 @@ def get_approvers_for_location(location_name):
         cur = conn.cursor()
         cur.execute("""
             SELECT approver_username
-            FROM dbo.group_approvers
+            FROM dbo.group_approvers (NOLOCK) 
             WHERE group_code = ? AND is_active = 1
         """, (location_name,))
         rows = cur.fetchall()
@@ -411,7 +411,7 @@ def deny_reservation(res_id):
 
     cur.execute("""
         SELECT r.room_id, rm.location, r.status
-        FROM reservations r
+        FROM reservations r (NOLOCK)
         JOIN rooms rm ON r.room_id = rm.id
         WHERE r.id = ?
     """, (res_id,))
@@ -1869,8 +1869,8 @@ def export_excel():
                CONVERT(VARCHAR(19), r.end_time, 120) AS EndTime,
                ISNULL(r.remarks,'') AS Remarks,
                r.status AS Status
-        FROM dbo.reservations r
-        INNER JOIN dbo.rooms rm ON rm.id = r.room_id
+        FROM dbo.reservations r (NOLOCK)
+        INNER JOIN dbo.rooms rm (NOLOCK) ON rm.id = r.room_id
         WHERE r.start_time >= ? AND r.end_time < ?
     """
     params = [start_date, end_date]
