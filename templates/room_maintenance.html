@@ -89,7 +89,7 @@
           <td>{{ r.location or '—' }}</td>
           <td>{{ r.group_code or '—' }}</td>
           <td>{{ r.capacity or 0 }}</td>
-          <td>{{ r.group_approver or '—' }}</td>
+          <td>{{ r.approvals_required or '—' }}</td>
           <td>{{ 'Yes' if r.is_combined else 'No' }}</td>
           <td>{{ r.status }}</td>
 
@@ -208,12 +208,11 @@
             <label class="form-label fw-semibold">Capacity</label>
             <input name="capacity" type="number" value="{{ r.capacity }}" class="form-control form-control-sm">
           </div>
-
           <div class="col-md-6">
             <label class="form-label fw-semibold">Approval Required</label>
             <select name="approvals_required" class="form-select form-select-sm">
               <option value="auto" {% if r.approvals_required == 'auto' %}selected{% endif %}>Auto</option>
-              <option value="yes" {% if r.approvals_required == 'yes' %}selected{% endif %}>Yes</option>
+              <option value="true" {% if r.approvals_required == 'yes' %}selected{% endif %}>Yes</option>
               <option value="no" {% if r.approvals_required == 'no' %}selected{% endif %}>No</option>
             </select>
           </div>

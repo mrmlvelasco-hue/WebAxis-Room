@@ -645,7 +645,11 @@ def room_maintenance():
     # """)
     cur.execute("""
         SELECT id, name, location, group_code, capacity, is_combined, status,
-            approvals_required
+            CASE
+            WHEN r.approvals_required IS NULL THEN 'auto'
+            WHEN r.approvals_required = 1 THEN 'yes'
+            ELSE 'no'
+          END AS approvals_required
             FROM rooms r WITH (NOLOCK)
             WHERE  EXISTS (
             SELECT 1
@@ -727,12 +731,21 @@ def edit_room(id):
     group_code = request.form.get('group_code') or None
     capacity = int(request.form.get('capacity') or 0)
     is_combined = 1 if request.form.get('is_combined') else 0
+    approvals_raw = (request.form.get('approvals_required') or 'auto').lower().strip()
+
+    # If approvals_required column is BIT/NULL (recommended):
+    approvals_required = None
+    if approvals_raw == "true":
+        approvals_required = 1
+    elif approvals_raw == "no":
+        approvals_required = 0
+    # else "auto" -> NULL
     conn = get_db_connection(); cur = conn.cursor()
     cur.execute("""
         UPDATE dbo.rooms
-        SET name=?, location=?, group_code=?, capacity=?, is_combined=?
+        SET name=?, location=?, group_code=?, capacity=?, is_combined=?, approvals_required=?
         WHERE id=?
-    """, (name, location, group_code, capacity, is_combined, id))
+    """, (name, location, group_code, capacity, is_combined,approvals_required, id))
     conn.commit(); conn.close()
     flash("✅ Room updated successfully.", "success")
     return redirect(url_for('room_maintenance'))
