@@ -649,7 +649,7 @@ def room_maintenance():
             WHEN r.approvals_required IS NULL THEN 'auto'
             WHEN r.approvals_required = 1 THEN 'yes'
             ELSE 'no'
-          END AS approvals_required
+          END AS approvals_required, features
             FROM rooms r WITH (NOLOCK)
             WHERE  EXISTS (
             SELECT 1
@@ -709,9 +709,10 @@ def add_room():
     capacity = int(request.form.get('capacity') or 0)
     approver = request.form.get('approver') or None
     is_combined = 1 if request.form.get('is_combined') else 0
+    features = request.form.get('features') or None
     conn = get_db_connection(); cur = conn.cursor()
-    cur.execute("INSERT INTO dbo.rooms (name, location, capacity, group_code, description, status, is_combined) VALUES (?, ?, ?, ?, ?, 'Active', ?)",
-                (name, group_code or name, capacity, group_code, '', is_combined))
+    cur.execute("INSERT INTO dbo.rooms (name, location, capacity, group_code, description, status, is_combined,features) VALUES (?, ?, ?, ?, ?, 'Active', ?,?)",
+                (name, group_code or name, capacity, group_code, '', is_combined,features))
     conn.commit()
     if approver and group_code:
         cur.execute("INSERT INTO dbo.group_approvers (group_code, approver_username, is_primary) VALUES (?, ?, 1)", (group_code, approver))
@@ -732,7 +733,8 @@ def edit_room(id):
     capacity = int(request.form.get('capacity') or 0)
     is_combined = 1 if request.form.get('is_combined') else 0
     approvals_raw = (request.form.get('approvals_required') or 'auto').lower().strip()
-
+    features = request.form.get('features') or None
+    status = request.form.get('status') or None
     # If approvals_required column is BIT/NULL (recommended):
     approvals_required = None
     if approvals_raw == "true":
@@ -743,9 +745,9 @@ def edit_room(id):
     conn = get_db_connection(); cur = conn.cursor()
     cur.execute("""
         UPDATE dbo.rooms
-        SET name=?, location=?, group_code=?, capacity=?, is_combined=?, approvals_required=?
+        SET name=?, location=?, group_code=?, capacity=?, is_combined=?, approvals_required=?, features=?,status=?
         WHERE id=?
-    """, (name, location, group_code, capacity, is_combined,approvals_required, id))
+    """, (name, location, group_code, capacity, is_combined,approvals_required, features,status,id))
     conn.commit(); conn.close()
     flash("✅ Room updated successfully.", "success")
     return redirect(url_for('room_maintenance'))

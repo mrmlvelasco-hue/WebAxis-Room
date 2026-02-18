@@ -2,117 +2,157 @@
 {% block title %}Room Maintenance | WebAXIS{% endblock %}
 
 {% block content %}
+<style>
+  /* Custom Styles for Polish */
+  .filter-card {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 12px;
+  }
+  .table thead th {
+    background-color: #f1f4f9;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05rem;
+    color: #555;
+    border-top: none;
+  }
+  .sortable { cursor: pointer; transition: background 0.2s; }
+  .sortable:hover { background-color: #e2e6ea !important; }
+  .feature-tag {
+    font-size: 0.8rem;
+    background: #e9ecef;
+    padding: 2px 8px;
+    border-radius: 4px;
+    display: inline-block;
+    margin: 1px;
+  }
+</style>
+
 <div class="container-fluid py-4">
 
-  <!-- HEADER -->
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h3 class="fw-bold text-primary">
-      <i class="bi bi-building-gear me-2"></i> Room Maintenance
-    </h3>
-    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addRoomModal">
-      <i class="bi bi-plus-lg"></i> Add Room
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h3 class="fw-bold text-dark mb-0">Room Maintenance</h3>
+      <p class="text-muted small mb-0">Manage physical spaces, capacities, and approval workflows.</p>
+    </div>
+    <button class="btn btn-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#addRoomModal">
+      <i class="bi bi-plus-lg me-1"></i> Add New Room
     </button>
   </div>
 
-  <!-- ADVANCED FILTER BAR -->
-  <div class="card p-3 shadow-sm mb-3">
+  <div class="card filter-card p-3 shadow-sm mb-4">
     <div class="row g-3 align-items-end">
-
-      <!-- Search -->
       <div class="col-md-4">
-        <label class="form-label fw-semibold small">Search</label>
-        <input id="searchFilter" type="text" class="form-control form-control-sm"
-               placeholder="Room name, group code, approver...">
+        <label class="form-label fw-bold small text-uppercase">Search</label>
+        <div class="input-group input-group-sm">
+          <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+          <input id="searchFilter" type="text" class="form-control" placeholder="Room name, group, features...">
+        </div>
       </div>
 
-      <!-- Location -->
-      <div class="col-md-3">
-        <label class="form-label fw-semibold small">Location</label>
+      <div class="col-md-2">
+        <label class="form-label fw-bold small text-uppercase">Location</label>
         <select id="locationFilter" class="form-select form-select-sm">
-          <option value="all">All</option>
+          <option value="all">All Locations</option>
           {% for loc in rooms|map(attribute='location')|unique %}
             <option value="{{ loc }}">{{ loc }}</option>
           {% endfor %}
         </select>
       </div>
 
-      <!-- Status -->
       <div class="col-md-2">
-        <label class="form-label fw-semibold small">Status</label>
+        <label class="form-label fw-bold small text-uppercase">Status</label>
         <select id="statusFilter" class="form-select form-select-sm">
-          <option value="all">All</option>
+          <option value="all">All Status</option>
           <option value="Active">Active</option>
           <option value="Inactive">Inactive</option>
         </select>
       </div>
 
-      <!-- Combined -->
       <div class="col-md-2">
-        <label class="form-label fw-semibold small">Combined</label>
+        <label class="form-label fw-bold small text-uppercase">Combined</label>
         <select id="combinedFilter" class="form-select form-select-sm">
-          <option value="all">All</option>
-          <option value="Yes">Yes</option>
-          <option value="No">No</option>
+          <option value="all">Any Type</option>
+          <option value="Yes">Combined</option>
+          <option value="No">Single</option>
         </select>
       </div>
 
-      <!-- Reset -->
-      <div class="col-md-1 text-end">
-        <button id="filterResetBtn" class="btn btn-secondary btn-sm w-100">Reset</button>
+      <div class="col-md-2">
+        <button id="filterResetBtn" class="btn btn-outline-secondary btn-sm w-100">
+          <i class="bi bi-arrow-counterclockwise"></i> Reset Filters
+        </button>
       </div>
-
     </div>
   </div>
 
-  <!-- ROOM TABLE -->
-  <div class="table-responsive shadow-sm">
-    <table class="table table-sm table-striped align-middle" id="roomTable">
-      <thead class="table-light">
-        <tr>
-          <th data-col="0" class="sortable">ID ⬍</th>
-          <th data-col="1" class="sortable">Name ⬍</th>
-          <th data-col="2" class="sortable">Location ⬍</th>
-          <th data-col="3" class="sortable">Group Code ⬍</th>
-          <th data-col="4" class="sortable">Capacity ⬍</th>
-          <th data-col="5" class="sortable">Approver ⬍</th>
-          <th data-col="6" class="sortable">Combined ⬍</th>
-          <th data-col="7" class="sortable">Status ⬍</th>
-          <th class="text-end">Actions</th>
-        </tr>
-      </thead>
+  <div class="card shadow-sm border-0">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0" id="roomTable">
+        <thead>
+          <tr>
+            <th data-col="0" class="sortable px-3">ID <i class="bi bi-arrow-down-up ms-1 small opacity-50"></i></th>
+            <th data-col="1" class="sortable">Name</th>
+            <th data-col="2" class="sortable">Location</th>
+            <th data-col="3" class="sortable">Group</th>
+            <th data-col="4" class="sortable">Cap.</th>
+            <th data-col="5">Features</th>
+            <th data-col="7" class="sortable text-center">Combined</th>
+            <th data-col="8" class="sortable text-center">Status</th>
+            <th class="text-end px-3">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rooms %}
+          <tr>
+            <td class="px-3"><span class="text-muted fw-medium">#{{ r.id }}</span></td>
+            <td><span class="fw-bold text-dark">{{ r.name }}</span></td>
+            <td><i class="bi bi-geo-alt me-1 text-muted"></i>{{ r.location or '—' }}</td>
+            <td><code>{{ r.group_code or '—' }}</code></td>
+            <td><span class="badge bg-light text-dark border">{{ r.capacity or 0 }}</span></td>
+            <td>
+              <div style="max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
+                   title="{{ r.features }}">
+                {{ r.features or '—' }}
+              </div>
+            </td>
+            <td class="text-center">
+              {% if r.is_combined %}
+                <span class="badge rounded-pill bg-info-subtle text-info border border-info">Yes</span>
+              {% else %}
+                <span class="badge rounded-pill bg-light text-muted border">No</span>
+              {% endif %}
+            </td>
+            <td class="text-center">
+              {% if r.status == 'Active' %}
+                <span class="badge bg-success-subtle text-success border border-success">Active</span>
+              {% else %}
+                <span class="badge bg-danger-subtle text-danger border border-danger">Inactive</span>
+              {% endif %}
+            </td>
+            <td class="text-end px-3">
+              <div class="btn-group">
+                <button class="btn btn-white btn-sm border" data-bs-toggle="modal" data-bs-target="#editModal{{ r.id }}">
+                  <i class="bi bi-pencil"></i>
+                </button>
+                <a href="{{ url_for('deactivate_room', id=r.id) }}" class="btn btn-white btn-sm border text-danger">
+                  <i class="bi bi-trash"></i>
+                </a>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
 
-      <tbody>
-        {% for r in rooms %}
-        <tr>
-          <td>{{ r.id }}</td>
-          <td>{{ r.name }}</td>
-          <td>{{ r.location or '—' }}</td>
-          <td>{{ r.group_code or '—' }}</td>
-          <td>{{ r.capacity or 0 }}</td>
-          <td>{{ r.approvals_required or '—' }}</td>
-          <td>{{ 'Yes' if r.is_combined else 'No' }}</td>
-          <td>{{ r.status }}</td>
-
-          <td class="text-end">
-            <button class="btn btn-outline-primary btn-sm"
-                    data-bs-toggle="modal" data-bs-target="#editModal{{ r.id }}">
-              Edit
-            </button>
-            <a href="{{ url_for('deactivate_room', id=r.id) }}"
-               class="btn btn-outline-danger btn-sm">
-              Deactivate
-            </a>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-
-    </table>
+      <div id="noResults" class="text-center py-5 d-none">
+        <i class="bi bi-search display-4 text-muted"></i>
+        <p class="mt-2 text-muted">No rooms match your current filters.</p>
+      </div>
+    </div>
   </div>
-
 </div>
-
-
 <!-- ADD ROOM MODAL -->
 <div class="modal fade" id="addRoomModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered modal-md">
@@ -144,6 +184,17 @@
             <label class="form-label fw-semibold">Capacity</label>
             <input name="capacity" type="number" class="form-control form-control-sm">
           </div>
+          <div class="col-12">
+              <label class="form-label fw-semibold">Features</label>
+              <textarea name="features"
+                        class="form-control form-control-sm"
+                        rows="3"
+                        placeholder="Example:
+            • Projector
+            • 65-inch TV
+            • HDMI Port
+            • Whiteboard"></textarea>
+            </div>
 
           <div class="col-md-6">
             <label class="form-label fw-semibold">Approval Required</label>
@@ -208,6 +259,15 @@
             <label class="form-label fw-semibold">Capacity</label>
             <input name="capacity" type="number" value="{{ r.capacity }}" class="form-control form-control-sm">
           </div>
+          <div class="col-12">
+          <label class="form-label fw-semibold">Features</label>
+          <textarea name="features"
+                    class="form-control form-control-sm"
+                    rows="3"
+                    placeholder="Room features...">{{ r.features }}</textarea>
+        </div>
+
+
           <div class="col-md-6">
             <label class="form-label fw-semibold">Approval Required</label>
             <select name="approvals_required" class="form-select form-select-sm">
@@ -246,58 +306,53 @@
 </div>
 {% endfor %}
 
-
 {% endblock %}
-
 
 {% block scripts %}
 <script>
-// =========================
-// ADVANCED FILTERS
-// =========================
 document.addEventListener("DOMContentLoaded", () => {
-
   const searchInput = document.getElementById("searchFilter");
   const locationFilter = document.getElementById("locationFilter");
   const statusFilter = document.getElementById("statusFilter");
   const combinedFilter = document.getElementById("combinedFilter");
   const resetBtn = document.getElementById("filterResetBtn");
   const rows = document.querySelectorAll("#roomTable tbody tr");
+  const noResults = document.getElementById("noResults");
 
   function applyFilters() {
     const searchVal = searchInput.value.toLowerCase();
     const locVal = locationFilter.value.toLowerCase();
     const statusVal = statusFilter.value.toLowerCase();
     const combinedVal = combinedFilter.value.toLowerCase();
+    let visibleCount = 0;
 
     rows.forEach(row => {
       const cols = row.querySelectorAll("td");
-
-      const name = (cols[1]?.innerText || "").toLowerCase();
-      const location = (cols[2]?.innerText || "").toLowerCase();
-      const groupCode = (cols[3]?.innerText || "").toLowerCase();
-      const approver = (cols[5]?.innerText || "").toLowerCase();
-      const combined = (cols[6]?.innerText || "").toLowerCase();
-      const status = (cols[7]?.innerText || "").toLowerCase();
+      const name = cols[1].innerText.toLowerCase();
+      const loc = cols[2].innerText.toLowerCase();
+      const group = cols[3].innerText.toLowerCase();
+      const features = cols[5].innerText.toLowerCase();
+      const combined = cols[6].innerText.toLowerCase(); // 'Yes' or 'No'
+      const status = cols[7].innerText.toLowerCase();
 
       let show = true;
 
-      if (searchVal) {
-        const text = name + groupCode + approver;
-        if (!text.includes(searchVal)) show = false;
-      }
-      if (locVal !== "all" && location !== locVal) show = false;
+      if (searchVal && !`${name} ${group} ${features}`.includes(searchVal)) show = false;
+      if (locVal !== "all" && !loc.includes(locVal)) show = false;
       if (statusVal !== "all" && status !== statusVal) show = false;
       if (combinedVal !== "all" && combined !== combinedVal) show = false;
 
       row.style.display = show ? "" : "none";
+      if(show) visibleCount++;
     });
+
+    noResults.classList.toggle("d-none", visibleCount > 0);
   }
 
-  searchInput.addEventListener("input", applyFilters);
-  locationFilter.addEventListener("change", applyFilters);
-  statusFilter.addEventListener("change", applyFilters);
-  combinedFilter.addEventListener("change", applyFilters);
+  // Event Listeners
+  [searchInput, locationFilter, statusFilter, combinedFilter].forEach(el => {
+    el.addEventListener(el.tagName === 'INPUT' ? 'input' : 'change', applyFilters);
+  });
 
   resetBtn.addEventListener("click", () => {
     searchInput.value = "";
@@ -305,34 +360,6 @@ document.addEventListener("DOMContentLoaded", () => {
     statusFilter.value = "all";
     combinedFilter.value = "all";
     applyFilters();
-  });
-
-});
-
-// =========================
-// COLUMN SORTING
-// =========================
-document.querySelectorAll(".sortable").forEach(header => {
-  header.addEventListener("click", () => {
-    const table = document.getElementById("roomTable");
-    const tbody = table.querySelector("tbody");
-    const colIndex = header.getAttribute("data-col");
-    const rows = Array.from(tbody.querySelectorAll("tr"));
-
-    const asc = header.classList.toggle("asc");
-
-    rows.sort((a, b) => {
-      const A = a.children[colIndex].innerText.toLowerCase();
-      const B = b.children[colIndex].innerText.toLowerCase();
-
-      if (!isNaN(A) && !isNaN(B)) {
-        return asc ? A - B : B - A;
-      }
-
-      return asc ? A.localeCompare(B) : B.localeCompare(A);
-    });
-
-    rows.forEach(r => tbody.appendChild(r));
   });
 });
 </script>
