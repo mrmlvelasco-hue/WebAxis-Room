@@ -7,7 +7,7 @@
 
 <!-- Bootstrap CSS -->
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
-<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css" rel="stylesheet" />
 
 <!-- FullCalendar -->
 <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet">
@@ -170,79 +170,116 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const sidebar = document.querySelector(".sidebar");
     const content = document.querySelector(".content-area");
+    const topbar = document.querySelector(".topbar");
     const toggleBtn = document.getElementById("toggleSidebar");
-    const menuToggle = document.getElementById("menu-toggle"); // Mobile button inside sidebar
+    const menuToggle = document.getElementById("menu-toggle");
 
-    // Create overlay for mobile
+    /* ===============================
+       OVERLAY (Mobile Backdrop)
+    =============================== */
     const overlay = document.createElement("div");
     overlay.id = "sidebar-overlay";
     overlay.style.cssText = `
         position: fixed;
-        top:0;
-        left:0;
-        width:100%;
-        height:100%;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
         background: rgba(0,0,0,0.45);
-        display:none;
-        z-index:1500;
+        display: none;
+        z-index: 1500;
     `;
     document.body.appendChild(overlay);
 
-    if (!sidebar) return;
+    /* =====================================================
+       🔧 LOAD SIDEBAR STATE FROM LOCAL STORAGE
+       ===================================================== */
+    const savedState = localStorage.getItem("sidebarState");
 
-    // Function to toggle sidebar
+    if (window.innerWidth >= 992) {
+        // Desktop behavior — restore state
+        if (savedState === "collapsed") {
+            sidebar.classList.add("collapsed");
+            content.classList.add("shifted");
+            if (topbar) topbar.classList.add("shifted");
+        } else {
+            sidebar.classList.remove("collapsed");
+            content.classList.remove("shifted");
+            if (topbar) topbar.classList.remove("shifted");
+        }
+
+    } else {
+        // Mobile always starts closed
+        sidebar.classList.remove("open");
+        overlay.style.display = "none";
+        document.body.classList.remove("sidebar-open");
+    }
+
+    /* ============================
+       MAIN TOGGLE FUNCTION
+    ============================ */
     function toggleSidebarMenu() {
 
-        /* DESKTOP ≥992px -> collapse/expand */
+        /* ---------- DESKTOP MODE ---------- */
         if (window.innerWidth >= 992) {
-            sidebar.classList.toggle("collapsed");
+
+            const isCollapsed = sidebar.classList.toggle("collapsed");
             content.classList.toggle("shifted");
-            const topbar = document.querySelector(".topbar");
             if (topbar) topbar.classList.toggle("shifted");
+
+            // 💾 Save the state
+            localStorage.setItem("sidebarState", isCollapsed ? "collapsed" : "expanded");
+
             return;
         }
 
-        /* MOBILE <992px -> slide in/out */
+        /* ---------- MOBILE MODE ---------- */
         const isOpen = sidebar.classList.contains("open");
 
         if (isOpen) {
             sidebar.classList.remove("open");
             overlay.style.display = "none";
+            document.body.classList.remove("sidebar-open");
         } else {
             sidebar.classList.add("open");
             overlay.style.display = "block";
+            document.body.classList.add("sidebar-open");
         }
     }
 
-    // Handle both toggle buttons
-    if (toggleBtn) {
-        toggleBtn.addEventListener("click", toggleSidebarMenu);
-    }
+    /* ================================
+       BUTTON EVENT LISTENERS
+    ================================ */
+    if (toggleBtn) toggleBtn.addEventListener("click", toggleSidebarMenu);
+    if (menuToggle) menuToggle.addEventListener("click", toggleSidebarMenu);
 
-    if (menuToggle) {
-
-        menuToggle.addEventListener("click", toggleSidebarMenu);
-    }
-
-    /* Close sidebar when tapping outside (mobile only) */
+    /* ================================
+       MOBILE CLOSE ON OVERLAY
+    ================================ */
     overlay.addEventListener("click", () => {
         sidebar.classList.remove("open");
         overlay.style.display = "none";
+        document.body.classList.remove("sidebar-open");
     });
 
-    /* Close sidebar when clicking any nav link on mobile */
+    /* ==============================================
+       CLOSE SIDEBAR ON MOBILE WHEN NAV-LINK CLICKED
+    =============================================== */
     const navLinks = sidebar.querySelectorAll('.nav-link');
     navLinks.forEach(link => {
         link.addEventListener('click', () => {
             if (window.innerWidth < 992) {
                 sidebar.classList.remove("open");
                 overlay.style.display = "none";
+                document.body.classList.remove("sidebar-open");
             }
         });
     });
 
 });
 </script>
+
+
 
 
 <!-- ========================

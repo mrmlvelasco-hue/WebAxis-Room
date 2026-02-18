@@ -144,7 +144,7 @@ def get_approvers_for_location(location_name):
         cur = conn.cursor()
         cur.execute("""
             SELECT approver_username
-            FROM dbo.group_approvers
+            FROM dbo.group_approvers (NOLOCK) 
             WHERE group_code = ? AND is_active = 1
         """, (location_name,))
         rows = cur.fetchall()
@@ -411,7 +411,7 @@ def deny_reservation(res_id):
 
     cur.execute("""
         SELECT r.room_id, rm.location, r.status
-        FROM reservations r
+        FROM reservations r (NOLOCK)
         JOIN rooms rm ON r.room_id = rm.id
         WHERE r.id = ?
     """, (res_id,))
@@ -597,7 +597,7 @@ def login():
         user = None
         ad_ok = False
         if AD_SERVER:
-            ad_ok = True
+             ad_ok = True
             # ad_ok = authenticate_ldap(username, password)
         if ad_ok:
             conn = get_db_connection(); cursor = conn.cursor()
@@ -645,7 +645,11 @@ def room_maintenance():
     # """)
     cur.execute("""
         SELECT id, name, location, group_code, capacity, is_combined, status,
-            approvals_required
+            CASE
+            WHEN r.approvals_required IS NULL THEN 'auto'
+            WHEN r.approvals_required = 1 THEN 'yes'
+            ELSE 'no'
+          END AS approvals_required
             FROM rooms r WITH (NOLOCK)
             WHERE  EXISTS (
             SELECT 1
@@ -727,12 +731,21 @@ def edit_room(id):
     group_code = request.form.get('group_code') or None
     capacity = int(request.form.get('capacity') or 0)
     is_combined = 1 if request.form.get('is_combined') else 0
+    approvals_raw = (request.form.get('approvals_required') or 'auto').lower().strip()
+
+    # If approvals_required column is BIT/NULL (recommended):
+    approvals_required = None
+    if approvals_raw == "true":
+        approvals_required = 1
+    elif approvals_raw == "no":
+        approvals_required = 0
+    # else "auto" -> NULL
     conn = get_db_connection(); cur = conn.cursor()
     cur.execute("""
         UPDATE dbo.rooms
-        SET name=?, location=?, group_code=?, capacity=?, is_combined=?
+        SET name=?, location=?, group_code=?, capacity=?, is_combined=?, approvals_required=?
         WHERE id=?
-    """, (name, location, group_code, capacity, is_combined, id))
+    """, (name, location, group_code, capacity, is_combined,approvals_required, id))
     conn.commit(); conn.close()
     flash("✅ Room updated successfully.", "success")
     return redirect(url_for('room_maintenance'))
@@ -1869,8 +1882,8 @@ def export_excel():
                CONVERT(VARCHAR(19), r.end_time, 120) AS EndTime,
                ISNULL(r.remarks,'') AS Remarks,
                r.status AS Status
-        FROM dbo.reservations r
-        INNER JOIN dbo.rooms rm ON rm.id = r.room_id
+        FROM dbo.reservations r (NOLOCK)
+        INNER JOIN dbo.rooms rm (NOLOCK) ON rm.id = r.room_id
         WHERE r.start_time >= ? AND r.end_time < ?
     """
     params = [start_date, end_date]

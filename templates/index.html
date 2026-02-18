@@ -281,137 +281,147 @@
      NEW RESERVATION MODAL
      ===================================================== -->
 <div class="modal fade" id="newReservationModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered modal-lg">
-    <form id="reservationForm">
-      <div class="modal-content border-0 shadow-lg" style="border-radius:14px;">
-
-        <!-- HEADER -->
-        <div class="modal-header" style="background:#ffffff; border-bottom:1px solid #e5e9f2;">
-          <h5 class="modal-title fw-bold text-primary">New Reservation</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-
-        <!-- BODY -->
-        <div class="modal-body">
-
-          <!-- ROOM INFO -->
-          <div class="mb-3 p-3 rounded bg-light">
-            <label class="form-label fw-semibold text-secondary">Room</label>
-            <div id="modalRoomName" class="fw-bold text-dark fs-5"></div>
-            <input type="hidden" id="modalRoomId" name="room_id">
-          </div>
-
-          <!-- SCHEDULE -->
-          <div class="p-3 rounded mb-3 bg-light">
-            <h6 class="fw-bold text-primary mb-3">Schedule</h6>
-            <div class="row g-3">
-              <div class="col-md-6">
-                <label class="form-label fw-semibold">Start</label>
-                <input id="modalStartTime" name="start_time" type="datetime-local" class="form-control" required>
-              </div>
-              <div class="col-md-6">
-                <label class="form-label fw-semibold">End</label>
-                <input id="modalEndTime" name="end_time" type="datetime-local" class="form-control" required>
-              </div>
-            </div>
-          </div>
-
-          <!-- PERSONAL INFO -->
-          <div class="p-3 rounded mb-3 bg-light">
-            <h6 class="fw-bold text-primary mb-3">Your Details</h6>
-            <label class="form-label fw-semibold">Reserved By</label>
-            <input id="modalReservedBy" name="reserved_by" class="form-control mb-3" required>
-
-            <label class="form-label fw-semibold">Email</label>
-            <input id="modalEmail" name="email" type="email" class="form-control mb-3">
-
-            <label class="form-label fw-semibold">Remarks</label>
-            <textarea id="modalRemarks" name="remarks" class="form-control" rows="2"></textarea>
-          </div>
-
-          <!-- RECURRENCE -->
-          <div class="p-3 rounded mb-2 bg-light">
-            <h6 class="fw-bold text-primary">Repeat</h6>
-
-            <select id="recurrenceType" name="recurrence_type" class="form-select mb-3">
-              <option value="none">No repeat</option>
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-            </select>
-
-            <!-- WEEKLY OPTIONS -->
-            <div id="weeklyOptions" class="mb-3" style="display:none;">
-              <label class="form-label small fw-semibold">Repeat on:</label>
-              <div class="d-flex flex-wrap gap-2 mb-2">
-                <label class="form-check"><input class="form-check-input wkday" value="MO" type="checkbox"> Mon</label>
-                <label class="form-check"><input class="form-check-input wkday" value="TU" type="checkbox"> Tue</label>
-                <label class="form-check"><input class="form-check-input wkday" value="WE" type="checkbox"> Wed</label>
-                <label class="form-check"><input class="form-check-input wkday" value="TH" type="checkbox"> Thu</label>
-                <label class="form-check"><input class="form-check-input wkday" value="FR" type="checkbox"> Fri</label>
-                <label class="form-check"><input class="form-check-input wkday" value="SA" type="checkbox"> Sat</label>
-                <label class="form-check"><input class="form-check-input wkday" value="SU" type="checkbox"> Sun</label>
-              </div>
-              <div class="row g-2">
-                <div class="col-auto">
-                  <label class="form-label small">Every</label>
-                  <input id="weeklyInterval" name="weekly_interval" type="number" min="1" value="1" class="form-control form-control-sm" style="width:90px;">
-                </div>
-                <div class="col-auto d-flex align-items-end">weeks</div>
-              </div>
-            </div>
-
-            <!-- MONTHLY OPTIONS -->
-            <div id="monthlyOptions" style="display:none;">
-              <label class="form-label small fw-semibold">Monthly pattern:</label>
-              <div class="form-check">
-                <input class="form-check-input" type="radio" name="monthly_mode" value="date" checked>
-                <label class="form-check-label">Same date each month (e.g., 15th)</label>
-              </div>
-              <div class="form-check">
-                <input class="form-check-input" type="radio" name="monthly_mode" value="weekday">
-                <label class="form-check-label">Same weekday each month (e.g., 3rd Monday)</label>
-              </div>
-              <div class="row g-2 mt-2">
-                <div class="col-auto">
-                  <label class="form-label small">Every</label>
-                  <input id="monthlyInterval" name="monthly_interval" type="number" min="1" value="1" class="form-control form-control-sm" style="width:90px;">
-                </div>
-                <div class="col-auto d-flex align-items-end">months</div>
-              </div>
-            </div>
-
-            <!-- END CONDITIONS -->
-            <h6 class="fw-bold mt-3">Ends</h6>
-            <div class="form-check">
-              <input class="form-check-input" type="radio" name="end_mode" id="end_never" value="never" checked>
-              <label class="form-check-label">Never (max 1 year)</label>
-            </div>
-            <div class="form-check mt-1">
-              <input class="form-check-input" type="radio" name="end_mode" id="end_on" value="on">
-              <label class="form-check-label">On date</label>
-              <input id="endOnDate" name="end_on_date" type="date" class="form-control form-control-sm mt-1" disabled>
-            </div>
-            <div class="form-check mt-1">
-              <input class="form-check-input" type="radio" name="end_mode" id="end_after" value="after">
-              <label class="form-check-label">After</label>
-              <input id="endAfterCount" name="end_after_count" type="number" min="1" value="10" class="form-control form-control-sm d-inline-block ms-2" style="width:100px;" disabled>
-              <span class="small">occurrences</span>
-            </div>
-            <small class="text-muted d-block mt-2">Conflicted dates will be skipped but shown in summary.</small>
-          </div>
-
-        </div>
-
-        <!-- FOOTER -->
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-primary fw-semibold" id="reserveSubmitBtn">Submit Reservation</button>
-        </div>
-
-      </div>
-    </form>
-  </div>
+<div class="modal-dialog modal-dialog-centered modal-lg modal-fullscreen-sm-down">
+<form id="reservationForm">
+<div class="modal-content border-0 shadow-lg" style="border-radius:14px;">
+<!-- HEADER -->
+<div class="modal-header px-3 py-2">
+<h5 class="modal-title fw-bold text-primary">New Reservation</h5>
+<button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+<!-- BODY -->
+<div class="modal-body px-3">
+<!-- ROOM INFO -->
+<div class="mb-3 p-3 rounded bg-light">
+<label class="form-label fw-semibold text-secondary small">Room</label>
+<div id="modalRoomName" class="fw-bold text-dark fs-5 mb-1"></div>
+<input type="hidden" id="modalRoomId" name="room_id">
+</div>
+<!-- SCHEDULE -->
+<div class="p-3 rounded mb-3 bg-light">
+<h6 class="fw-bold text-primary mb-3">Schedule</h6>
+<div class="row g-3">
+<div class="col-12 col-md-6">
+<label class="form-label fw-semibold small">Start</label>
+<input id="modalStartTime" name="start_time" type="datetime-local"
+                                      class="form-control form-control-lg" required>
+</div>
+<div class="col-12 col-md-6">
+<label class="form-label fw-semibold small">End</label>
+<input id="modalEndTime" name="end_time" type="datetime-local"
+                                      class="form-control form-control-lg" required>
+</div>
+</div>
+</div>
+<!-- PERSONAL INFO -->
+<div class="p-3 rounded mb-3 bg-light">
+<h6 class="fw-bold text-primary mb-3">Your Details</h6>
+<label class="form-label fw-semibold small">Reserved By</label>
+<input id="modalReservedBy" name="reserved_by" class="form-control form-control-lg mb-3" required>
+<label class="form-label fw-semibold small">Email</label>
+<input id="modalEmail" name="email" type="email"
+                              class="form-control form-control-lg mb-3">
+<label class="form-label fw-semibold small">Remarks</label>
+<textarea id="modalRemarks" name="remarks"
+                                 class="form-control form-control-lg" rows="2"></textarea>
+</div>
+<!-- RECURRENCE -->
+<div class="p-3 rounded mb-2 bg-light">
+<h6 class="fw-bold text-primary mb-3">Repeat</h6>
+<select id="recurrenceType" name="recurrence_type"
+                               class="form-select form-select-lg mb-3">
+<option value="none">No repeat</option>
+<option value="daily">Daily</option>
+<option value="weekly">Weekly</option>
+<option value="monthly">Monthly</option>
+</select>
+<!-- WEEKLY OPTIONS -->
+<div id="weeklyOptions" class="mb-3" style="display:none;">
+<label class="form-label small fw-semibold">Repeat on:</label>
+<div class="d-flex flex-wrap gap-2 mb-2">
+<label class="form-check small">
+<input class="form-check-input wkday" value="MO" type="checkbox"> Mon
+</label>
+<label class="form-check small">
+<input class="form-check-input wkday" value="TU" type="checkbox"> Tue
+</label>
+<label class="form-check small">
+<input class="form-check-input wkday" value="WE" type="checkbox"> Wed
+</label>
+<label class="form-check small">
+<input class="form-check-input wkday" value="TH" type="checkbox"> Thu
+</label>
+<label class="form-check small">
+<input class="form-check-input wkday" value="FR" type="checkbox"> Fri
+</label>
+<label class="form-check small">
+<input class="form-check-input wkday" value="SA" type="checkbox"> Sat
+</label>
+<label class="form-check small">
+<input class="form-check-input wkday" value="SU" type="checkbox"> Sun
+</label>
+</div>
+<div class="row g-2">
+<div class="col-auto">
+<label class="form-label small">Every</label>
+<input id="weeklyInterval" name="weekly_interval"
+                                          type="number" min="1" value="1"
+                                          class="form-control form-control-sm" style="width:90px;">
+</div>
+<div class="col-auto d-flex align-items-end small">weeks</div>
+</div>
+</div>
+<!-- MONTHLY OPTIONS -->
+<div id="monthlyOptions" style="display:none;">
+<label class="form-label small fw-semibold">Monthly pattern:</label>
+<div class="form-check small">
+<input class="form-check-input" type="radio" name="monthly_mode" value="date" checked>
+<label class="form-check-label">Same date each month (e.g., 15th)</label>
+</div>
+<div class="form-check small mt-1">
+<input class="form-check-input" type="radio" name="monthly_mode" value="weekday">
+<label class="form-check-label">Same weekday each month (e.g., 3rd Monday)</label>
+</div>
+<div class="row g-2 mt-2">
+<div class="col-auto">
+<label class="form-label small">Every</label>
+<input id="monthlyInterval" name="monthly_interval" type="number"
+                                          min="1" value="1"
+                                          class="form-control form-control-sm" style="width:90px;">
+</div>
+<div class="col-auto d-flex align-items-end small">months</div>
+</div>
+</div>
+<!-- END CONDITIONS -->
+<h6 class="fw-bold mt-3">Ends</h6>
+<div class="form-check small">
+<input class="form-check-input" type="radio" name="end_mode" id="end_never" value="never" checked>
+<label class="form-check-label">Never (max 1 year)</label>
+</div>
+<div class="form-check mt-2 small">
+<input class="form-check-input" type="radio" name="end_mode" id="end_on" value="on">
+<label class="form-check-label">On date</label>
+<input id="endOnDate" name="end_on_date" type="date"
+                                  class="form-control form-control-sm mt-1" disabled>
+</div>
+<div class="form-check mt-2 small">
+<input class="form-check-input" type="radio" name="end_mode" id="end_after" value="after">
+<label class="form-check-label">After</label>
+<input id="endAfterCount" name="end_after_count" type="number" min="1" value="10"
+                                  class="form-control form-control-sm d-inline-block ms-2" style="width:100px;" disabled>
+<span class="small">occurrences</span>
+</div>
+<small class="text-muted d-block mt-2">Conflicted dates will be skipped but shown in summary.</small>
+</div>
+</div>
+<!-- FOOTER -->
+<div class="modal-footer px-3 py-2">
+<button type="button" class="btn btn-secondary px-3" data-bs-dismiss="modal">Cancel</button>
+<button type="submit" class="btn btn-primary fw-semibold px-3" id="reserveSubmitBtn">Submit</button>
+</div>
+</div>
+</form>
+</div>
 </div>
 
 {% endblock %}
@@ -2006,6 +2016,66 @@ body.dark-mode .form-select {
   }
 }
 
-
+/* ======================================
+  🔥 COMPLETE DARK MODE FIX – Reservation Modal
+  ====================================== */
+.dark-mode #newReservationModal .modal-content {
+   background-color: #1e1e1e !important;
+   color: #f1f1f1 !important;
+}
+/* Header */
+.dark-mode #newReservationModal .modal-header {
+   background-color: #242424 !important;
+   border-bottom-color: #333 !important;
+}
+.dark-mode #newReservationModal .modal-title {
+   color: #ffffff !important;
+}
+/* Labels */
+.dark-mode #newReservationModal .form-label,
+.dark-mode #newReservationModal label,
+.dark-mode #newReservationModal .form-check-label {
+   color: #e5e5e5 !important;
+}
+/* Section Titles (Schedule, Your Details, Repeat, Ends) */
+.dark-mode #newReservationModal h6 {
+   color: #66aaff !important;
+}
+/* Room Title */
+.dark-mode #newReservationModal #modalRoomName {
+   color: #ffffff !important;
+}
+/* Inputs / Selects */
+.dark-mode #newReservationModal .form-control,
+.dark-mode #newReservationModal .form-select {
+   background-color: #2b2b2b !important;
+   color: #ffffff !important;
+   border-color: #555 !important;
+}
+.dark-mode #newReservationModal .form-control:disabled,
+.dark-mode #newReservationModal .form-select:disabled {
+   background-color: #3a3a3a !important;
+   color: #aaaaaa !important;
+}
+/* Placeholder text */
+.dark-mode #newReservationModal .form-control::placeholder {
+   color: #bfbfbf !important;
+}
+/* Panels (Schedule, Your Details, Repeat) */
+.dark-mode #newReservationModal .bg-light {
+   background-color: #2a2a2a !important;
+}
+/* Checkboxes */
+.dark-mode #newReservationModal .form-check-input {
+   background-color: #444 !important;
+   border-color: #777 !important;
+}
+.dark-mode #newReservationModal .form-check-input:checked {
+   background-color: #0d6efd !important;
+}
+/* Footer */
+.dark-mode #newReservationModal .modal-footer {
+   border-top-color: #333 !important;
+}
 </style>
 {% endblock %}
