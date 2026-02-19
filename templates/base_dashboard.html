@@ -53,6 +53,13 @@
                 <span class="link-text">Rooms</span>
             </a>
         </li>
+        <li>
+                <a href="{{ url_for('reserve_v2') }}"
+                   class="nav-link {% if request.endpoint == 'reserve_v2' %}active{% endif %}">
+                    <i class="bi bi-calendar-plus me-2"></i>
+                    <span class="link-text">Reserve Room</span>
+                </a>
+            </li>
 
         {% if current_user.is_admin() %}
         <li>

@@ -1,0 +1,358 @@
+{% extends "base_dashboard.html" %}
+{% block title %}Reserve Room | WebAXIS{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm p-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0"><i class="bi bi-calendar-plus"></i> Reserve Room</h3>
+    <a href="{{ url_for('room_list') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left"></i> Back to Rooms
+    </a>
+  </div>
+
+  <div class="row g-3">
+    <!-- Left: Room selection / Schedule -->
+    <div class="col-lg-7">
+      <div class="card border-0 shadow-sm">
+        <div class="card-body">
+          <h6 class="fw-semibold mb-3">Room Details</h6>
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Location Name</label>
+              <select id="locationSelect" class="form-select form-select-sm" required>
+                <option value="" selected disabled>Select location...</option>
+                {% for loc in locations %}
+                  <option value="{{ loc|e }}">{{ loc }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Room Name</label>
+              <select id="roomSelect" class="form-select form-select-sm" required disabled>
+                <option value="" selected disabled>Select room...</option>
+              </select>
+              <div class="form-text">Room list updates based on the selected location.</div>
+            </div>
+
+            <div class="col-12">
+              <label class="form-label fw-semibold">Room Features</label>
+              <textarea id="featuresBox" class="form-control form-control-sm" rows="4" readonly
+                        placeholder="Select a room to view its features..."></textarea>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Start</label>
+              <input id="start_time" name="start_time" type="datetime-local" class="form-control form-control-sm" required>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">End</label>
+              <input id="end_time" name="end_time" type="datetime-local" class="form-control form-control-sm" required>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="card border-0 shadow-sm mt-3">
+        <div class="card-body">
+          <h6 class="fw-semibold mb-3">Purpose</h6>
+
+          <!-- IMPORTANT: this form posts to existing reserve endpoint once room is selected -->
+          <form id="reserveV2Form" method="POST" action="#">
+            <div class="row g-3">
+              <div class="col-12">
+                <label class="form-label fw-semibold">Purpose / Remarks</label>
+                <textarea name="remarks" id="remarks" class="form-control form-control-sm" rows="3" placeholder="Enter purpose..."></textarea>
+              </div>
+
+              <!-- Hidden fields to reuse existing backend input names -->
+              <input type="hidden" name="reserved_by" id="reserved_by_hidden" value="{{ current_user.display_name or current_user.username }}">
+              <input type="hidden" name="email" id="email_hidden" value="{{ current_user.email or '' }}">
+
+              <div class="col-12 d-flex justify-content-end gap-2 mt-2">
+                <button type="submit" class="btn btn-primary px-4" id="submitBtn" disabled>
+                  <i class="bi bi-check2-circle"></i> Submit Reservation
+                </button>
+
+                <!-- Calendar View (defaults to TODAY; filtered by selected Location and optional Room) -->
+                <a href="#" class="btn btn-outline-primary px-4" id="viewCalendarBtn" style="display:none;">
+                  <i class="bi bi-calendar3"></i> View Calendar
+                </a>
+              </div>
+            </div>
+          </form>
+
+          <div class="small text-muted mt-2">
+            Note: This page uses the same reservation saving logic as your existing Rooms module.
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Right: User info / Repeat -->
+    <div class="col-lg-5">
+      <div class="card border-0 shadow-sm">
+        <div class="card-body">
+          <h6 class="fw-semibold mb-3">Your Details</h6>
+
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label fw-semibold">Reserved By</label>
+              <input class="form-control form-control-sm" value="{{ current_user.display_name or current_user.username }}" readonly>
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">Email</label>
+              <input class="form-control form-control-sm" value="{{ current_user.email or '' }}" readonly>
+            </div>
+          </div>
+
+          <hr class="my-4">
+
+          <h6 class="fw-semibold mb-3">Repeat</h6>
+          <!-- UI only for now (backend can ignore these fields if not implemented) -->
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label fw-semibold">Repeat</label>
+              <select class="form-select form-select-sm" name="repeat_rule" id="repeat_rule">
+                <option value="none" selected>No repeat</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
+
+            <div class="col-12" id="weeklyOptions" style="display:none;">
+              <label class="form-label fw-semibold">Repeat on</label>
+              <div class="d-flex flex-wrap gap-2">
+                <div class="form-check"><input class="form-check-input" type="checkbox" value="MO" id="dowMO"><label class="form-check-label" for="dowMO">Mon</label></div>
+                <div class="form-check"><input class="form-check-input" type="checkbox" value="TU" id="dowTU"><label class="form-check-label" for="dowTU">Tue</label></div>
+                <div class="form-check"><input class="form-check-input" type="checkbox" value="WE" id="dowWE"><label class="form-check-label" for="dowWE">Wed</label></div>
+                <div class="form-check"><input class="form-check-input" type="checkbox" value="TH" id="dowTH"><label class="form-check-label" for="dowTH">Thu</label></div>
+                <div class="form-check"><input class="form-check-input" type="checkbox" value="FR" id="dowFR"><label class="form-check-label" for="dowFR">Fri</label></div>
+                <div class="form-check"><input class="form-check-input" type="checkbox" value="SA" id="dowSA"><label class="form-check-label" for="dowSA">Sat</label></div>
+                <div class="form-check"><input class="form-check-input" type="checkbox" value="SU" id="dowSU"><label class="form-check-label" for="dowSU">Sun</label></div>
+              </div>
+              <div class="form-text">(Optional) Used only if weekly repeat is implemented on backend.</div>
+            </div>
+
+            <div class="col-12">
+              <label class="form-label fw-semibold">Ends</label>
+              <div class="d-flex flex-column gap-2">
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="repeat_ends" id="endsNever" value="never" checked>
+                  <label class="form-check-label" for="endsNever">Never</label>
+                </div>
+
+                <div class="form-check d-flex align-items-center gap-2">
+                  <input class="form-check-input" type="radio" name="repeat_ends" id="endsOn" value="on">
+                  <label class="form-check-label" for="endsOn" style="min-width: 48px;">On</label>
+                  <input type="date" class="form-control form-control-sm" id="endsOnDate" style="max-width: 200px;" disabled>
+                </div>
+
+                <div class="form-check d-flex align-items-center gap-2">
+                  <input class="form-check-input" type="radio" name="repeat_ends" id="endsAfter" value="after">
+                  <label class="form-check-label" for="endsAfter" style="min-width: 48px;">After</label>
+                  <input type="number" min="1" class="form-control form-control-sm" id="endsAfterCount" style="max-width: 120px;" disabled>
+                  <span class="text-muted">occurrences</span>
+                </div>
+              </div>
+              <div class="form-text">Repeat options are UI-ready; backend integration can be added later.</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Rooms data from server
+  const ROOMS = {{ rooms_json | safe }};
+
+  const locationSelect = document.getElementById('locationSelect');
+  const roomSelect = document.getElementById('roomSelect');
+  const featuresBox = document.getElementById('featuresBox');
+  const form = document.getElementById('reserveV2Form');
+  const submitBtn = document.getElementById('submitBtn');
+  const viewCalendarBtn = document.getElementById('viewCalendarBtn');
+
+  let selectedLocation = null;
+  let selectedRoomName = null;
+
+  const startInput = document.getElementById('start_time');
+  const endInput = document.getElementById('end_time');
+
+  // repeat UI
+  const repeatRule = document.getElementById('repeat_rule');
+  const weeklyOptions = document.getElementById('weeklyOptions');
+  const endsNever = document.getElementById('endsNever');
+  const endsOn = document.getElementById('endsOn');
+  const endsAfter = document.getElementById('endsAfter');
+  const endsOnDate = document.getElementById('endsOnDate');
+  const endsAfterCount = document.getElementById('endsAfterCount');
+
+  function resetRoomSelect() {
+    roomSelect.innerHTML = '<option value="" selected disabled>Select room...</option>';
+    roomSelect.disabled = true;
+    featuresBox.value = '';
+    form.action = '#';
+    submitBtn.disabled = true;
+
+    selectedRoomName = null;
+    updateCalendarLink();
+  }
+
+  function todayStr() {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  function updateCalendarLink() {
+    if (!viewCalendarBtn) return;
+    if (!selectedLocation) {
+      viewCalendarBtn.style.display = 'none';
+      viewCalendarBtn.href = '#';
+      return;
+    }
+
+    const params = new URLSearchParams();
+    params.set('location', selectedLocation);
+    params.set('date', todayStr());
+    if (selectedRoomName) params.set('room', selectedRoomName);
+
+    viewCalendarBtn.href = `/calendar_view_v2?${params.toString()}`;
+    viewCalendarBtn.style.display = '';
+  }
+
+  function populateRoomsForLocation(loc) {
+    const filtered = ROOMS.filter(r => (r.location || 'General') === loc);
+    roomSelect.innerHTML = '<option value="" selected disabled>Select room...</option>';
+
+    filtered.forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = String(r.id);
+      opt.textContent = r.name;
+      opt.dataset.features = r.features || '';
+      roomSelect.appendChild(opt);
+    });
+
+    roomSelect.disabled = filtered.length === 0;
+    featuresBox.value = '';
+    form.action = '#';
+    submitBtn.disabled = true;
+  }
+
+  locationSelect.addEventListener('change', () => {
+    const loc = locationSelect.value;
+    if (!loc) {
+      resetRoomSelect();
+      return;
+    }
+    selectedLocation = loc;
+    selectedRoomName = null;
+    populateRoomsForLocation(loc);
+    // show calendar as soon as location is selected (defaults to today)
+    updateCalendarLink();
+  });
+
+  roomSelect.addEventListener('change', () => {
+    const roomId = roomSelect.value;
+    if (!roomId) {
+      featuresBox.value = '';
+      form.action = '#';
+      submitBtn.disabled = true;
+      selectedRoomName = null;
+      updateCalendarLink();
+      return;
+    }
+
+    const selected = roomSelect.options[roomSelect.selectedIndex];
+    featuresBox.value = selected.dataset.features || '';
+
+    selectedRoomName = selected.textContent || null;
+    updateCalendarLink();
+
+    // Reuse existing saving endpoint used by your current module
+    form.action = `/reserve_post/${roomId}`;
+
+    // enable submit only when required fields exist
+    submitBtn.disabled = false;
+  });
+
+  // Basic validation: ensure start <= end
+  function validateTimes() {
+    if (!startInput.value || !endInput.value) return;
+    if (endInput.value < startInput.value) {
+      endInput.setCustomValidity('End must be after start');
+    } else {
+      endInput.setCustomValidity('');
+    }
+  }
+
+  startInput.addEventListener('change', validateTimes);
+  endInput.addEventListener('change', validateTimes);
+
+  // Repeat UI toggles
+  repeatRule.addEventListener('change', () => {
+    weeklyOptions.style.display = (repeatRule.value === 'weekly') ? '' : 'none';
+  });
+
+  function syncEndsInputs() {
+    endsOnDate.disabled = !endsOn.checked;
+    endsAfterCount.disabled = !endsAfter.checked;
+  }
+  endsNever.addEventListener('change', syncEndsInputs);
+  endsOn.addEventListener('change', syncEndsInputs);
+  endsAfter.addEventListener('change', syncEndsInputs);
+  syncEndsInputs();
+
+  // On submit: copy start/end values into the form as required field names (already correct)
+  form.addEventListener('submit', (e) => {
+    // Ensure a room is selected
+    if (!roomSelect.value) {
+      e.preventDefault();
+      alert('Please select a location and room.');
+      return;
+    }
+    // Ensure times exist
+    if (!startInput.value || !endInput.value) {
+      e.preventDefault();
+      alert('Please provide start and end date/time.');
+      return;
+    }
+
+    // Inject start/end fields into form on submit (so backend receives them)
+    // They are outside the <form> in the layout, so we add hidden inputs at submit time.
+    const existingStart = form.querySelector('input[name="start_time"]');
+    const existingEnd = form.querySelector('input[name="end_time"]');
+
+    if (existingStart) existingStart.remove();
+    if (existingEnd) existingEnd.remove();
+
+    const hStart = document.createElement('input');
+    hStart.type = 'hidden';
+    hStart.name = 'start_time';
+    hStart.value = startInput.value;
+
+    const hEnd = document.createElement('input');
+    hEnd.type = 'hidden';
+    hEnd.name = 'end_time';
+    hEnd.value = endInput.value;
+
+    form.appendChild(hStart);
+    form.appendChild(hEnd);
+  });
+</script>
+{% endblock %}

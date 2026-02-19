@@ -1023,6 +1023,43 @@ def room_list():
             # fallback: simple text response
             return "Internal Server Error", 500
 
+
+@app.route('/reserve_v2', methods=['GET'])
+@login_required
+def reserve_v2():
+    import json
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT id, name, location, ISNULL(features,'') AS features
+        FROM dbo.rooms
+        WHERE status = 'Active'
+        ORDER BY location, name
+    """)
+    rows = cur.fetchall()
+    conn.close()
+
+    rooms = []
+    locations_set = set()
+
+    for r in rows:
+        rooms.append({
+            "id": int(r.id),
+            "name": r.name,
+            "location": r.location or "General",
+            "features": r.features or ""
+        })
+        locations_set.add(r.location or "General")
+
+    return render_template(
+        "reserve_v2.html",
+        locations=sorted(locations_set),
+        rooms_json=json.dumps(rooms)
+    )
+
+
 @app.route('/reserve/<int:room_id>', methods=['GET', 'POST'])
 @login_required
 def reserve(room_id):
@@ -1073,6 +1110,87 @@ def reserve(room_id):
     finally:
         conn.close()
 
+@app.route('/calendar_view_v2', methods=['GET'])
+@login_required
+def calendar_view_v2():
+    """Day view grid (Excel-like) with 30-min slots.
+
+    Accepts query params:
+      - location: location filter (default: all)
+      - room: room name filter (optional)
+      - date: YYYY-MM-DD (default: today)
+    """
+    from datetime import datetime
+
+    # date
+    date_str = request.args.get("date")
+    try:
+        selected_date = datetime.strptime(date_str, "%Y-%m-%d").date() if date_str else datetime.now().date()
+    except Exception:
+        selected_date = datetime.now().date()
+
+    location_filter = (request.args.get("location") or "all").strip()
+    room_filter = (request.args.get("room") or "all").strip()
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    # locations for dropdown
+    cur.execute("""
+        SELECT DISTINCT ISNULL(NULLIF(LTRIM(RTRIM(location)), ''), 'General') AS location
+        FROM dbo.rooms
+        WHERE status='Active'
+        ORDER BY ISNULL(NULLIF(LTRIM(RTRIM(location)), ''), 'General')
+    """)
+    locations = [str(r[0]) for r in cur.fetchall()]
+
+    # rooms list
+    sql = """
+        SELECT id, name, capacity,
+               ISNULL(NULLIF(LTRIM(RTRIM(location)), ''), 'General') AS location,
+               ISNULL(features,'') AS features
+        FROM dbo.rooms
+        WHERE status='Active'
+    """
+    params = []
+    if location_filter.lower() != 'all':
+        sql += " AND LOWER(LTRIM(RTRIM(location))) = LOWER(?)"
+        params.append(location_filter)
+    if room_filter and room_filter.lower() != 'all':
+        sql += " AND LOWER(LTRIM(RTRIM(name))) = LOWER(?)"
+        params.append(room_filter)
+    sql += " ORDER BY location, name"
+
+    cur.execute(sql, params)
+    rows = cur.fetchall()
+    conn.close()
+
+    rooms = []
+    for r in rows:
+        rooms.append({
+            "id": int(r.id),
+            "name": str(r.name),
+            "capacity": int(r.capacity) if r.capacity is not None else 0,
+            "location": str(r.location) if r.location else "General",
+            "features": str(r.features) if r.features else ""
+        })
+
+    # 30-minute slots 06:00 to 20:00 (like Excel mock)
+    time_slots = []
+    for h in range(6, 21):
+        time_slots.append(f"{h:02d}:00")
+        if h != 20:
+            time_slots.append(f"{h:02d}:30")
+
+    return render_template(
+        'calendar_view_v2.html',
+        selected_date=selected_date,
+        location_filter=location_filter,
+        room_filter=room_filter,
+        locations=locations,
+        rooms=rooms,
+        time_slots=time_slots,
+    )
 
 
 @app.route("/calendar_view")
