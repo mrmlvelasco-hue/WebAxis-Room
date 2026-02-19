@@ -1182,8 +1182,10 @@ def calendar_view_v2():
         if h != 20:
             time_slots.append(f"{h:02d}:30")
 
+    embed = (request.args.get("embed") or "").strip() == "1"
+
     return render_template(
-        'calendar_view_v2.html',
+        "calendar_view_v2_embed.html" if embed else "calendar_view_v2.html",
         selected_date=selected_date,
         location_filter=location_filter,
         room_filter=room_filter,
@@ -1191,6 +1193,84 @@ def calendar_view_v2():
         rooms=rooms,
         time_slots=time_slots,
     )
+
+@app.route("/api/reservations_v2_day")
+@login_required
+def api_reservations_v2_day():
+    """
+    For calendar_view_v2 Excel-style grid (30-min slots).
+    Params:
+      - date=YYYY-MM-DD
+      - location=all|<location>
+      - room=all|<room name>
+    """
+    from datetime import datetime, timedelta, time as dt_time
+
+    date_str = (request.args.get("date") or "").strip()
+    location_filter = (request.args.get("location") or "all").strip()
+    room_filter = (request.args.get("room") or "all").strip()
+
+    try:
+        d = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except:
+        return jsonify([])
+
+    day_start = datetime.combine(d, dt_time.min)          # 00:00
+    day_end = day_start + timedelta(days=1)               # next day 00:00
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    sql = """
+        SELECT
+            r.id AS reservation_id,
+            r.room_id,
+            rm.name AS room_name,
+            ISNULL(NULLIF(LTRIM(RTRIM(rm.location)), ''), 'General') AS location,
+            r.start_time,
+            r.end_time,
+            r.reserved_by,
+            ISNULL(r.remarks,'') AS remarks,
+            r.status
+        FROM dbo.reservations r
+        INNER JOIN dbo.rooms rm ON rm.id = r.room_id
+        WHERE rm.status='Active'
+          AND r.status IN ('Approved','Pending','Blocked')
+          -- ✅ overlap logic (shows full duration)
+          AND r.start_time < ? AND r.end_time > ?
+    """
+    params = [day_end, day_start]
+
+    if location_filter.lower() != "all":
+        sql += " AND LOWER(LTRIM(RTRIM(rm.location))) = LOWER(?)"
+        params.append(location_filter)
+
+    if room_filter.lower() != "all":
+        sql += " AND LOWER(LTRIM(RTRIM(rm.name))) = LOWER(?)"
+        params.append(room_filter)
+
+    sql += " ORDER BY rm.location, rm.name, r.start_time"
+
+    cur.execute(sql, params)
+    rows = cur.fetchall()
+    conn.close()
+
+    events = []
+    for row in rows:
+        events.append({
+            "id": int(row.reservation_id),   # ✅ unique reservation id
+            "room_id": int(row.room_id),
+            "room": str(row.room_name),
+            "location": str(row.location),
+            "start": row.start_time.isoformat(),
+            "end": row.end_time.isoformat(),
+            "reserved_by": str(row.reserved_by),
+            "remarks": str(row.remarks),
+            "status": str(row.status),
+        })
+
+    return jsonify(events)
+
 
 
 @app.route("/calendar_view")

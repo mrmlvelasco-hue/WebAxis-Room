@@ -1,0 +1,277 @@
+{% extends "base_dashboard.html" %}
+{% block title %}Room Calendar V2 | WebAXIS{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-3">
+
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div class="d-flex align-items-center gap-2">
+      <h5 class="mb-0 fw-bold text-primary">
+        <i class="bi bi-calendar3"></i> Room Calendar (Excel View)
+      </h5>
+      <span class="badge bg-light text-dark border">Date: {{ selected_date }}</span>
+    </div>
+
+    <form class="d-flex align-items-center gap-2" method="GET" action="{{ url_for('calendar_view_v2') }}">
+      <input type="date" name="date" value="{{ selected_date }}" class="form-control form-control-sm" />
+
+      <select name="location" class="form-select form-select-sm" onchange="this.form.submit()">
+        <option value="all" {% if location_filter=='all' %}selected{% endif %}>All Locations</option>
+        {% for loc in locations %}
+          <option value="{{ loc }}" {% if location_filter==loc %}selected{% endif %}>{{ loc }}</option>
+        {% endfor %}
+      </select>
+
+      <select name="room" class="form-select form-select-sm" onchange="this.form.submit()">
+        <option value="all" {% if room_filter=='all' %}selected{% endif %}>All Rooms</option>
+        {% for r in rooms %}
+          <option value="{{ r.name }}" {% if room_filter==r.name %}selected{% endif %}>{{ r.name }}</option>
+        {% endfor %}
+      </select>
+
+      <button type="submit" class="btn btn-sm btn-primary">
+        <i class="bi bi-funnel"></i> Apply
+      </button>
+    </form>
+  </div>
+
+  <div class="cal-grid-wrap card shadow-sm">
+    <!-- IMPORTANT: this is the ONLY horizontal scroll parent -->
+    <div class="cal-grid-scroll">
+      <table class="table table-sm table-bordered align-middle mb-0 cal-grid-table">
+        <thead>
+          <tr>
+            <th class="cal-col-room">Room</th>
+            <th class="cal-col-features">Features</th>
+            <th class="cal-col-cap text-center">Cap</th>
+            {% for t in time_slots %}
+              <th class="cal-time-head text-center">{{ t }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+
+        <tbody>
+          {% for r in rooms %}
+          <tr data-room-id="{{ r.id }}">
+            <td class="cal-col-room fw-semibold text-dark">{{ r.name }}</td>
+            <td class="cal-col-features text-muted small">{{ r.features }}</td>
+            <td class="cal-col-cap text-center">{{ r.capacity }}</td>
+            {% for t in time_slots %}
+              <td class="cal-slot-cell" data-slot-index="{{ loop.index0 }}" data-time="{{ t }}"></td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const GRID_START_MIN = 6 * 60;
+  const GRID_END_MIN   = 20 * 60;
+  const SLOT_MINUTES   = 30;
+
+  function toMinutes(dtStr) {
+    const d = new Date(dtStr);
+    return d.getHours() * 60 + d.getMinutes();
+  }
+
+  function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+  function clearGrid() {
+    document.querySelectorAll(".cal-slot-cell").forEach(td => {
+      td.classList.remove("cal-booked", "cal-booked-start", "cal-booked-end");
+      td.title = "";
+      td.innerHTML = "";
+    });
+  }
+
+  function paintReservation(ev) {
+    const row = document.querySelector(`tr[data-room-id="${ev.room_id}"]`);
+    if (!row) return;
+
+    let startMin = toMinutes(ev.start);
+    let endMin   = toMinutes(ev.end);
+
+    // skip bad data
+    if (endMin <= startMin) return;
+
+    // clip to visible grid time range
+    startMin = clamp(startMin, GRID_START_MIN, GRID_END_MIN);
+    endMin   = clamp(endMin, GRID_START_MIN, GRID_END_MIN);
+
+    const startIdx = Math.floor((startMin - GRID_START_MIN) / SLOT_MINUTES);
+    const endIdx   = Math.ceil((endMin - GRID_START_MIN) / SLOT_MINUTES);
+
+    for (let i = startIdx; i < endIdx; i++) {
+      const cell = row.querySelector(`td.cal-slot-cell[data-slot-index="${i}"]`);
+      if (!cell) continue;
+
+      cell.classList.add("cal-booked");
+      cell.innerHTML = ""; // ✅ do not show name
+
+      if (i === startIdx) {
+        cell.classList.add("cal-booked-start");
+        cell.title = `${ev.room}\nStatus: ${ev.status}\nTime: ${ev.start} - ${ev.end}\nNotes: ${ev.remarks || "N/A"}`;
+      }
+      if (i === endIdx - 1) {
+        cell.classList.add("cal-booked-end");
+      }
+    }
+  }
+
+  async function loadAndPaint() {
+    clearGrid();
+
+    const date = "{{ selected_date }}";
+    const location = "{{ location_filter }}";
+    const room = "{{ room_filter }}";
+
+    const url = `/api/reservations_v2_day?date=${encodeURIComponent(date)}&location=${encodeURIComponent(location)}&room=${encodeURIComponent(room)}`;
+
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+      (data || []).forEach(paintReservation);
+    } catch (e) {
+      console.error("Error loading calendar:", e);
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", loadAndPaint);
+</script>
+
+<style>
+  /* ============================
+     V2 ONLY - prevent artifacts
+     (removes accidental <<<<<<)
+     ============================ */
+  .cal-grid-wrap *::before,
+  .cal-grid-wrap *::after {
+    content: none !important;
+  }
+
+  .cal-grid-wrap {
+    border-radius: 10px;
+    border: 1px solid #dee2e6;
+    overflow: hidden;
+    background: #fff;
+  }
+
+  /* ✅ only scroll parent */
+  .cal-grid-scroll {
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: 75vh;
+    position: relative;
+  }
+
+  /* Sticky + tables works best with separate borders */
+  .cal-grid-table {
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+  }
+
+  /* Compact + no letter wrap */
+  .cal-grid-table th,
+  .cal-grid-table td {
+    white-space: nowrap !important;
+    font-size: 12px;
+    padding: 6px 8px !important;
+    border: 1px solid #e9ecef;
+    background-clip: padding-box;
+  }
+
+  /* Sticky header */
+  .cal-grid-table thead th {
+    position: sticky;
+    top: 0;
+    background: #f8fafc;
+    z-index: 10;
+  }
+
+  /* Time columns fixed width */
+  .cal-time-head,
+  .cal-slot-cell {
+    min-width: 70px;
+    width: 70px;
+    text-align: center;
+  }
+
+  /* ============================
+     Freeze first 3 columns
+     Apply to BOTH th + td
+     ============================ */
+  .cal-col-room,
+  .cal-col-features,
+  .cal-col-cap {
+    position: sticky !important;
+    background: #fff !important;
+    z-index: 6;
+  }
+
+  /* widths (adjust if needed) */
+  .cal-col-room {
+    left: 0;
+    min-width: 220px;
+    width: 220px;
+    z-index: 8;
+  }
+
+  .cal-col-features {
+    left: 220px;
+    min-width: 380px;
+    width: 380px;
+    z-index: 7;
+  }
+
+  .cal-col-cap {
+    left: 600px; /* 220 + 380 */
+    min-width: 70px;
+    width: 70px;
+    text-align: center;
+    z-index: 7;
+
+    /* ✅ freeze line after Cap */
+    border-right: 2px solid #c9d1db !important;
+    box-shadow: 3px 0 0 rgba(0,0,0,0.06);
+  }
+
+  /* Corner cells must be above everything */
+  .cal-grid-table thead th.cal-col-room,
+  .cal-grid-table thead th.cal-col-features,
+  .cal-grid-table thead th.cal-col-cap {
+    background: #f8fafc !important;
+    z-index: 20;
+  }
+
+  /* Booked block: solid green, no text */
+  .cal-slot-cell.cal-booked {
+    background-color: #0aa88f !important;
+    border-left-color: transparent !important;
+    border-right-color: transparent !important;
+  }
+
+  /* Make booked range look like one merged block */
+  .cal-slot-cell.cal-booked-start {
+    border-left: 1px solid #088f7a !important;
+    border-top-left-radius: 4px;
+    border-bottom-left-radius: 4px;
+  }
+  .cal-slot-cell.cal-booked-end {
+    border-right: 1px solid #088f7a !important;
+    border-top-right-radius: 4px;
+    border-bottom-right-radius: 4px;
+  }
+
+  /* Hover (only empty slots) */
+  .cal-slot-cell:hover:not(.cal-booked) {
+    background-color: #f1f4f9;
+    cursor: pointer;
+  }
+</style>
+{% endblock %}

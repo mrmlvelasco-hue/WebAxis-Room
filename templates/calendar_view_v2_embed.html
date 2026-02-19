@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- keep bootstrap for table look (use your actual static paths) -->
+  <link href="{{ url_for('static', filename='bootstrap.min.css') }}" rel="stylesheet">
+</head>
+
+<body class="p-0 m-0 bg-white">
+
+  <!-- OPTIONAL: small header line -->
+  <div class="px-2 py-2 border-bottom small text-muted">
+    Room Availability (Excel View) — {{ selected_date }}
+  </div>
+
+  <!-- GRID ONLY -->
+  <div class="p-2">
+    <div class="cal-grid-wrap">
+      <div class="cal-grid-scroll">
+        <table class="table table-sm table-bordered align-middle mb-0 cal-grid-table">
+          <thead>
+            <tr>
+              <th class="cal-col-room">Room</th>
+              <th class="cal-col-features">Features</th>
+              <th class="cal-col-cap text-center">Cap</th>
+              {% for t in time_slots %}
+                <th class="cal-time-head text-center">{{ t }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rooms %}
+            <tr data-room-id="{{ r.id }}">
+              <td class="cal-col-room fw-semibold">{{ r.name }}</td>
+              <td class="cal-col-features text-muted small">{{ r.features }}</td>
+              <td class="cal-col-cap text-center">{{ r.capacity }}</td>
+              {% for t in time_slots %}
+                <td class="cal-slot-cell" data-slot-index="{{ loop.index0 }}"></td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const GRID_START_MIN = 6 * 60, GRID_END_MIN = 20 * 60, SLOT_MINUTES = 30;
+
+  function toMinutes(dtStr){ const d = new Date(dtStr); return d.getHours()*60 + d.getMinutes(); }
+  function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+
+  function clearGrid(){
+    document.querySelectorAll(".cal-slot-cell").forEach(td=>{
+      td.classList.remove("cal-booked","cal-booked-start","cal-booked-end");
+      td.title=""; td.innerHTML="";
+    });
+  }
+
+  function paintReservation(ev){
+    const row = document.querySelector(`tr[data-room-id="${ev.room_id}"]`);
+    if(!row) return;
+
+    let s = toMinutes(ev.start), e = toMinutes(ev.end);
+    if(e <= s) return;
+
+    s = clamp(s, GRID_START_MIN, GRID_END_MIN);
+    e = clamp(e, GRID_START_MIN, GRID_END_MIN);
+
+    const startIdx = Math.floor((s - GRID_START_MIN)/SLOT_MINUTES);
+    const endIdx   = Math.ceil((e - GRID_START_MIN)/SLOT_MINUTES);
+
+    for(let i=startIdx; i<endIdx; i++){
+      const cell = row.querySelector(`td.cal-slot-cell[data-slot-index="${i}"]`);
+      if(!cell) continue;
+      cell.classList.add("cal-booked");
+      if(i===startIdx){
+        cell.classList.add("cal-booked-start");
+        cell.title = `${ev.room}\n${ev.status}\n${ev.start} - ${ev.end}\n${ev.remarks||""}`;
+      }
+      if(i===endIdx-1) cell.classList.add("cal-booked-end");
+    }
+  }
+
+  async function loadAndPaint(){
+    clearGrid();
+    const date = "{{ selected_date }}";
+    const location = "{{ location_filter }}";
+    const room = "{{ room_filter }}";
+    const url = `/api/reservations_v2_day?date=${encodeURIComponent(date)}&location=${encodeURIComponent(location)}&room=${encodeURIComponent(room)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    (data||[]).forEach(paintReservation);
+  }
+
+  document.addEventListener("DOMContentLoaded", loadAndPaint);
+</script>
+
+<style>
+  .cal-grid-wrap{ border:1px solid #dee2e6; border-radius:10px; overflow:hidden; }
+  .cal-grid-scroll{ overflow:auto; max-height:55vh; position:relative; }
+  .cal-grid-table{ border-collapse:separate !important; border-spacing:0 !important; }
+  .cal-grid-table th,.cal-grid-table td{ white-space:nowrap; font-size:12px; padding:6px 8px; }
+
+  .cal-grid-table thead th{ position:sticky; top:0; background:#f8fafc; z-index:10; }
+  .cal-time-head,.cal-slot-cell{ min-width:70px; width:70px; text-align:center; }
+
+  .cal-col-room,.cal-col-features,.cal-col-cap{ position:sticky; background:#fff; z-index:6; }
+  .cal-col-room{ left:0; min-width:220px; width:220px; z-index:8; }
+  .cal-col-features{ left:220px; min-width:380px; width:380px; z-index:7; }
+  .cal-col-cap{ left:600px; min-width:70px; width:70px; z-index:7; border-right:2px solid #c9d1db; }
+
+  .cal-grid-table thead th.cal-col-room,
+  .cal-grid-table thead th.cal-col-features,
+  .cal-grid-table thead th.cal-col-cap{ z-index:20; background:#f8fafc; }
+
+  .cal-slot-cell.cal-booked{ background:#0aa88f; border-left-color:transparent; border-right-color:transparent; }
+  .cal-slot-cell.cal-booked-start{ border-left:1px solid #088f7a; border-radius:4px 0 0 4px; }
+  .cal-slot-cell.cal-booked-end{ border-right:1px solid #088f7a; border-radius:0 4px 4px 0; }
+</style>
+
+</body>
+</html>

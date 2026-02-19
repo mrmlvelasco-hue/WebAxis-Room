@@ -170,6 +170,22 @@
 
   </div>
 </div>
+<div class="card shadow-sm mt-3">
+  <div class="card-header bg-white d-flex justify-content-between align-items-center">
+    <div class="fw-semibold">
+      <i class="bi bi-grid-3x3-gap"></i> Room Availability (Excel View)
+    </div>
+    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="refreshAvailability()">
+      <i class="bi bi-arrow-clockwise"></i> Refresh
+    </button>
+  </div>
+
+  <div class="card-body p-0">
+    <iframe id="availabilityFrame"
+            src=""
+            style="width:100%; height:420px; border:0; background:#fff;"></iframe>
+  </div>
+</div>
 
 {% endblock %}
 
@@ -265,6 +281,7 @@
     populateRoomsForLocation(loc);
     // show calendar as soon as location is selected (defaults to today)
     updateCalendarLink();
+    refreshAvailability();
   });
 
   roomSelect.addEventListener('change', () => {
@@ -289,6 +306,8 @@
 
     // enable submit only when required fields exist
     submitBtn.disabled = false;
+    refreshAvailability();
+
   });
 
   // Basic validation: ensure start <= end
@@ -355,4 +374,65 @@
     form.appendChild(hEnd);
   });
 </script>
+<script>
+function getSelectedDateForGrid(){
+  // Use Start date for the grid
+  const startVal = document.getElementById("start_time")?.value || "";
+  if (!startVal) return "";
+
+  // datetime-local: "2026-02-19T08:00"
+  const d = new Date(startVal);
+  if (isNaN(d.getTime())) return "";
+
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function getSelectedRoomName(){
+  const sel = document.getElementById("roomSelect");
+  if (!sel || sel.disabled) return "all";
+  const opt = sel.options[sel.selectedIndex];
+  if (!opt || !opt.textContent || opt.value === "") return "all";
+  // opt.textContent is the room name (what calendar_view_v2 expects)
+  return opt.textContent.trim();
+}
+
+function refreshAvailability(){
+  const location = document.getElementById("locationSelect")?.value || "all";
+  const roomName = getSelectedRoomName();
+  const date = getSelectedDateForGrid() || new Date().toISOString().slice(0,10);
+
+  // If no location chosen yet, show nothing or show all (your choice)
+  const locFinal = location || "all";
+
+  const url = `/calendar_view_v2?embed=1`
+    + `&date=${encodeURIComponent(date)}`
+    + `&location=${encodeURIComponent(locFinal)}`
+    + `&room=${encodeURIComponent(roomName)}`;
+
+  const frame = document.getElementById("availabilityFrame");
+  if (frame) frame.src = url;
+}
+
+function wireAvailabilityAutoRefresh(){
+  const loc = document.getElementById("locationSelect");
+  const room = document.getElementById("roomSelect");
+  const start = document.getElementById("start_time");
+  const end = document.getElementById("end_time");
+
+  [loc, room, start, end].forEach(el => {
+    if (!el) return;
+    el.addEventListener("change", refreshAvailability);
+    el.addEventListener("blur", refreshAvailability);
+  });
+
+  refreshAvailability(); // initial load
+}
+
+document.addEventListener("DOMContentLoaded", wireAvailabilityAutoRefresh);
+</script>
+
+
 {% endblock %}
