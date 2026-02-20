@@ -26,7 +26,7 @@
               <th class="cal-col-features">Features</th>
               <th class="cal-col-cap text-center">Cap</th>
               {% for t in time_slots %}
-                <th class="cal-time-head text-center">{{ t }}</th>
+                <th class="cal-time-head text-center" data-time="{{ t }}">{{ t }}</th>
               {% endfor %}
             </tr>
           </thead>
@@ -94,8 +94,39 @@
     const res = await fetch(url);
     const data = await res.json();
     (data||[]).forEach(paintReservation);
+    // ✅ scroll after paint
+    // run AFTER browser lays out table
+    requestAnimationFrame(() => setTimeout(scrollToFocusTime, 50));
   }
+  function scrollToFocusTime(){
+      const params = new URLSearchParams(window.location.search);
+      const focus = params.get("focus"); // "13:30"
+      if (!focus) return;
 
+      const scroller = document.querySelector(".cal-grid-scroll");
+      if (!scroller) return;
+
+      const th = document.querySelector(`.cal-time-head[data-time="${CSS.escape(focus)}"]`);
+      if (!th) return;
+
+      // Compute frozen width dynamically (room + features + cap)
+      const frozenCells = document.querySelectorAll("thead th.cal-col-room, thead th.cal-col-features, thead th.cal-col-cap");
+      let frozenWidth = 0;
+      frozenCells.forEach(c => frozenWidth += c.getBoundingClientRect().width);
+
+      // Compute position relative to scroller
+      const scRect = scroller.getBoundingClientRect();
+      const thRect = th.getBoundingClientRect();
+
+      // thRect.left is viewport-based; convert to scroller scrollLeft target
+      const target = (thRect.left - scRect.left) + scroller.scrollLeft - frozenWidth - 16;
+
+      scroller.scrollLeft = Math.max(0, target);
+
+      // Optional highlight
+      th.classList.add("cal-focus-col");
+      setTimeout(() => th.classList.remove("cal-focus-col"), 1200);
+    }
   document.addEventListener("DOMContentLoaded", loadAndPaint);
 </script>
 
@@ -120,6 +151,10 @@
   .cal-slot-cell.cal-booked{ background:#0aa88f; border-left-color:transparent; border-right-color:transparent; }
   .cal-slot-cell.cal-booked-start{ border-left:1px solid #088f7a; border-radius:4px 0 0 4px; }
   .cal-slot-cell.cal-booked-end{ border-right:1px solid #088f7a; border-radius:0 4px 4px 0; }
+    .cal-focus-col {
+  outline: 2px solid #0d6efd;
+  outline-offset: -2px;
+}
 </style>
 
 </body>

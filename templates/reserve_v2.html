@@ -331,30 +331,30 @@
   });
 
   roomSelect.addEventListener('change', () => {
-    const roomId = roomSelect.value;
-    if (!roomId) {
-      featuresBox.value = '';
-      form.action = '#';
-      submitBtn.disabled = true;
-      selectedRoomName = null;
-      updateCalendarLink();
-      return;
-    }
+  const roomId = roomSelect.value;
 
-    const selected = roomSelect.options[roomSelect.selectedIndex];
-    featuresBox.value = selected.dataset.features || '';
-
-    selectedRoomName = selected.textContent || null;
+  if (!roomId) {
+    featuresBox.value = '';
+    form.action = '#';
+    submitBtn.disabled = true;
+    selectedRoomName = null;
     updateCalendarLink();
-
-    // Reuse existing saving endpoint used by your current module
-    form.action = `/reserve_post/${roomId}`;
-
-    // enable submit only when required fields exist
-    submitBtn.disabled = false;
     refreshAvailability();
+    return;
+  }
 
-  });
+  const selected = roomSelect.options[roomSelect.selectedIndex];
+  featuresBox.value = selected.dataset.features || '';
+
+  selectedRoomName = selected.textContent || null;
+  updateCalendarLink();
+
+  // Reuse existing saving endpoint used by your current module
+  form.action = `/reserve_post/${roomId}`;
+
+  submitBtn.disabled = false;
+  refreshAvailability();
+});
 
   // Basic validation: ensure start <= end
   function validateTimes() {
@@ -513,39 +513,77 @@ function getSelectedRoomName(){
   // opt.textContent is the room name (what calendar_view_v2 expects)
   return opt.textContent.trim();
 }
+function snapTo30Min(hhmm) {
+  // hhmm: "17:58"
+  const [hh, mm] = hhmm.split(":").map(Number);
+  if (Number.isNaN(hh) || Number.isNaN(mm)) return "";
 
-function refreshAvailability(){
-  const location = document.getElementById("locationSelect")?.value || "all";
-  const roomName = getSelectedRoomName();
-  const date = getSelectedDateForGrid() || new Date().toISOString().slice(0,10);
+  const total = hh * 60 + mm;
 
-  // If no location chosen yet, show nothing or show all (your choice)
-  const locFinal = location || "all";
+  // round to nearest 30 mins (change to floor if you prefer)
+  const snapped = Math.round(total / 30) * 30;
+
+  const H = String(Math.floor(snapped / 60)).padStart(2, "0");
+  const M = String(snapped % 60).padStart(2, "0");
+  return `${H}:${M}`;
+}
+
+function refreshAvailability() {
+  const loc = document.getElementById("locationSelect")?.value || "all";
+
+  // calendar_view_v2 expects ROOM NAME (not id)
+  const roomSel = document.getElementById("roomSelect");
+  let roomName = "all";
+  if (roomSel && roomSel.value) {
+    const opt = roomSel.options[roomSel.selectedIndex];
+    if (opt && opt.textContent) roomName = opt.textContent.trim();
+  }
+
+  const startVal = document.getElementById("start_time")?.value || "";
+
+  const date = startVal && startVal.includes("T")
+    ? startVal.split("T")[0]
+    : new Date().toISOString().slice(0,10);
+
+  // ✅ FIXED SECTION
+  let focus = "";
+  if (startVal && startVal.includes("T")) {
+    const focusRaw = startVal.split("T")[1].slice(0,5); // HH:MM
+    focus = snapTo30Min(focusRaw);
+  }
 
   const url = `/calendar_view_v2?embed=1`
     + `&date=${encodeURIComponent(date)}`
-    + `&location=${encodeURIComponent(locFinal)}`
-    + `&room=${encodeURIComponent(roomName)}`;
+    + `&location=${encodeURIComponent(loc || "all")}`
+    + `&room=${encodeURIComponent(roomName)}`
+    + (focus ? `&focus=${encodeURIComponent(focus)}` : "");
 
   const frame = document.getElementById("availabilityFrame");
+  console.log("Availability URL:", url);
   if (frame) frame.src = url;
 }
 
-function wireAvailabilityAutoRefresh(){
+function wireAvailabilityAutoRefresh() {
   const loc = document.getElementById("locationSelect");
   const room = document.getElementById("roomSelect");
   const start = document.getElementById("start_time");
   const end = document.getElementById("end_time");
 
-  [loc, room, start, end].forEach(el => {
-    if (!el) return;
-    el.addEventListener("change", refreshAvailability);
-    el.addEventListener("blur", refreshAvailability);
-  });
+  if (loc) loc.addEventListener("change", refreshAvailability);
+  if (room) room.addEventListener("change", refreshAvailability);
+
+  // datetime-local: input fires immediately when user picks time/date
+  if (start) {
+    start.addEventListener("input", refreshAvailability);
+    start.addEventListener("change", refreshAvailability);
+  }
+  if (end) {
+    end.addEventListener("input", refreshAvailability);
+    end.addEventListener("change", refreshAvailability);
+  }
 
   refreshAvailability(); // initial load
 }
-
 document.addEventListener("DOMContentLoaded", wireAvailabilityAutoRefresh);
 </script>
 
