@@ -186,7 +186,53 @@
             style="width:100%; height:420px; border:0; background:#fff;"></iframe>
   </div>
 </div>
+<!-- Success Modal -->
+<div class="modal fade" id="reserveSuccessModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title fw-bold">
+          <i class="bi bi-check-circle text-success"></i> Reservation Submitted
+        </h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="reserveSuccessText" class="mb-2">Success.</div>
+        <div class="small text-muted" id="reserveSuccessMeta"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+          Close
+        </button>
+        <button type="button" class="btn btn-sm btn-primary" data-bs-dismiss="modal" onclick="refreshAvailability()">
+          Refresh Availability
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 
+<!-- Error Modal -->
+<div class="modal fade" id="reserveErrorModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-danger">
+      <div class="modal-header">
+        <h6 class="modal-title fw-bold text-danger">
+          <i class="bi bi-exclamation-triangle"></i> Reservation Failed
+        </h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="reserveErrorText">Something went wrong.</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -338,41 +384,110 @@
   syncEndsInputs();
 
   // On submit: copy start/end values into the form as required field names (already correct)
-  form.addEventListener('submit', (e) => {
-    // Ensure a room is selected
-    if (!roomSelect.value) {
-      e.preventDefault();
-      alert('Please select a location and room.');
-      return;
+  form.addEventListener('submit', async (e) => {
+  e.preventDefault(); // ✅ stop browser navigation to JSON
+
+  // Ensure room selected
+  if (!roomSelect.value) {
+    alert('Please select a location and room.');
+    return;
+  }
+
+  // Ensure times exist
+  if (!startInput.value || !endInput.value) {
+    alert('Please provide start and end date/time.');
+    return;
+  }
+
+  // Basic validation
+  validateTimes();
+  if (!form.checkValidity()) {
+    form.reportValidity();
+    return;
+  }
+
+  // Remove old injected fields if any
+  const existingStart = form.querySelector('input[name="start_time"]');
+  const existingEnd = form.querySelector('input[name="end_time"]');
+  if (existingStart) existingStart.remove();
+  if (existingEnd) existingEnd.remove();
+
+  // Inject start/end because they are outside <form>
+  const hStart = document.createElement('input');
+  hStart.type = 'hidden';
+  hStart.name = 'start_time';
+  hStart.value = startInput.value;
+
+  const hEnd = document.createElement('input');
+  hEnd.type = 'hidden';
+  hEnd.name = 'end_time';
+  hEnd.value = endInput.value;
+
+  form.appendChild(hStart);
+  form.appendChild(hEnd);
+
+  // Submit using fetch as FormData
+  const actionUrl = form.action; // ex: /reserve_post/44
+  const fd = new FormData(form);
+
+  // Disable button to prevent double submit
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Submitting...`;
+
+  try {
+    const res = await fetch(actionUrl, {
+      method: "POST",
+      body: fd,
+      headers: { "X-Requested-With": "XMLHttpRequest" }
+    });
+
+    // Try parse JSON; if not JSON, still handle
+    let data = null;
+    const ct = res.headers.get("content-type") || "";
+    if (ct.includes("application/json")) {
+      data = await res.json();
+    } else {
+      const txt = await res.text();
+      data = { success: res.ok, message: txt };
     }
-    // Ensure times exist
-    if (!startInput.value || !endInput.value) {
-      e.preventDefault();
-      alert('Please provide start and end date/time.');
-      return;
+
+    if (res.ok && data && (data.success === true || data.status === "success")) {
+      // ✅ show success popup modal
+      document.getElementById("reserveSuccessText").textContent =
+        data.message || "Reservation submitted successfully.";
+
+      const meta = [];
+      if (data.created_count != null) meta.push(`Created: ${data.created_count}`);
+      if (data.skipped && Array.isArray(data.skipped)) meta.push(`Skipped: ${data.skipped.length}`);
+      document.getElementById("reserveSuccessMeta").textContent = meta.join(" • ");
+
+      const modal = new bootstrap.Modal(document.getElementById('reserveSuccessModal'));
+      modal.show();
+
+      // Optional: refresh availability grid immediately
+      refreshAvailability();
+
+      // Optional: reset remarks only
+      // document.getElementById("remarks").value = "";
+
+    } else {
+      // show error modal with message
+      const msg = (data && (data.error || data.message)) || `Request failed (${res.status}).`;
+      document.getElementById("reserveErrorText").textContent = msg;
+      const modal = new bootstrap.Modal(document.getElementById('reserveErrorModal'));
+      modal.show();
     }
 
-    // Inject start/end fields into form on submit (so backend receives them)
-    // They are outside the <form> in the layout, so we add hidden inputs at submit time.
-    const existingStart = form.querySelector('input[name="start_time"]');
-    const existingEnd = form.querySelector('input[name="end_time"]');
-
-    if (existingStart) existingStart.remove();
-    if (existingEnd) existingEnd.remove();
-
-    const hStart = document.createElement('input');
-    hStart.type = 'hidden';
-    hStart.name = 'start_time';
-    hStart.value = startInput.value;
-
-    const hEnd = document.createElement('input');
-    hEnd.type = 'hidden';
-    hEnd.name = 'end_time';
-    hEnd.value = endInput.value;
-
-    form.appendChild(hStart);
-    form.appendChild(hEnd);
-  });
+  } catch (err) {
+    document.getElementById("reserveErrorText").textContent = "Network error: " + err;
+    const modal = new bootstrap.Modal(document.getElementById('reserveErrorModal'));
+    modal.show();
+  } finally {
+    // restore button
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = `<i class="bi bi-check2-circle"></i> Submit Reservation`;
+  }
+});
 </script>
 <script>
 function getSelectedDateForGrid(){
