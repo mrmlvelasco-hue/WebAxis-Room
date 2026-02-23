@@ -7,9 +7,9 @@
   <!-- Header Toolbar -->
   <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap">
     <div class="d-flex align-items-center gap-2">
-      <a href="{{ url_for('room_list') }}" class="btn btn-outline-secondary btn-sm">
-        <i class="bi bi-arrow-left"></i> Back to Rooms
-      </a>
+<!--      <a href="{{ url_for('room_list') }}" class="btn btn-outline-secondary btn-sm">-->
+<!--        <i class="bi bi-arrow-left"></i> Back to Rooms-->
+<!--      </a>-->
 
       <h3 class="fw-bold text-primary mb-0 ms-2">
         <i class="bi bi-calendar3"></i> Meeting Room Calendar
@@ -64,6 +64,12 @@
 
   <!-- Calendar Container -->
   <div id="calendar" class="calendar-container"></div>
+    <!-- Excel Day View container (hidden by default) -->
+    <div id="excelDayWrap" class="mt-3" style="display:none;">
+      <iframe id="excelDayFrame"
+              src=""
+              style="width:100%; height:520px; border:0; background:#fff; border-radius:8px;"></iframe>
+    </div>
 </div>
 
 <!-- Reservation Detail Modal -->
@@ -107,27 +113,152 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
 
-  const calendarEl = document.getElementById('calendar');
-  const groupFilter = document.getElementById('groupFilter');
-  const roomFilter = document.getElementById('roomFilter');
-  const todayBtn = document.getElementById('todayBtn');
-  const refreshBtn = document.getElementById('refreshBtn');
+  const calendarEl   = document.getElementById('calendar');
+  const groupFilter  = document.getElementById('groupFilter');
+  const roomFilter   = document.getElementById('roomFilter');
+  const todayBtn     = document.getElementById('todayBtn');
+  const refreshBtn   = document.getElementById('refreshBtn');
+
   const groupedRooms = {{ grouped_rooms|tojson }};
 
+  // Query params
+  const urlQS = new URLSearchParams(window.location.search);
+  const allowedViews = new Set(["dayGridMonth", "dayGridWeek", "dayGridDay", "timeGridWeek", "timeGridDay"]);
+  const initialViewParam = urlQS.get("view") || "dayGridMonth";
+  const initialView = allowedViews.has(initialViewParam) ? initialViewParam : "dayGridMonth";
+  const initialDate = urlQS.get("date") || null;
+
+  // Excel (iframe) mode state
+  let EXCEL_MODE = false;
+
+  function fmtDateYYYYMMDD(d){
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  function updateRoomDropdown() {
+    const loc = groupFilter.value;
+    roomFilter.innerHTML = '<option value="all">All Rooms</option>';
+
+    if (groupedRooms[loc]) {
+      groupedRooms[loc].forEach(room => {
+        const opt = document.createElement('option');
+        opt.value = room;
+        opt.textContent = room;
+        roomFilter.appendChild(opt);
+      });
+    }
+  }
+
+  // Apply query params (location/group + room) BEFORE we render the calendar
+  (function applyQueryParamsOnLoad() {
+    const qLoc  = urlQS.get("location") || urlQS.get("group");
+    const qRoom = urlQS.get("room");
+
+    if (qLoc && groupedRooms[qLoc]) {
+      groupFilter.value = qLoc;
+    }
+
+    updateRoomDropdown();
+
+    if (qRoom) {
+      const hasRoom = Array.from(roomFilter.options).some(o => o.value === qRoom);
+      roomFilter.value = hasRoom ? qRoom : "all";
+    }
+  })();
+
+  // Build Excel URL using current date + filters
+  function buildExcelUrl(dateObj){
+    const loc = groupFilter?.value || "all";
+    const room = roomFilter?.value || "all";
+    const dateStr = fmtDateYYYYMMDD(dateObj);
+
+    const qs = new URLSearchParams();
+    qs.set("embed", "1");
+    qs.set("date", dateStr);
+
+    // v2 expects "location"
+    qs.set("location", loc);
+    qs.set("room", room);
+
+    return `/calendar_view_v2?${qs.toString()}`;
+  }
+
+  function showExcelDay(){
+  EXCEL_MODE = true;
+
+  calendarEl.classList.add("excel-mode"); // hide FC grid only
+
+  const wrap = document.getElementById("excelDayWrap");
+  const frame = document.getElementById("excelDayFrame");
+  if (wrap) wrap.style.display = "";
+  if (frame) frame.src = buildExcelUrl(calendar.getDate());
+}
+
+function showFullCalendar(){
+  EXCEL_MODE = false;
+
+  calendarEl.classList.remove("excel-mode");
+
+  const wrap = document.getElementById("excelDayWrap");
+  if (wrap) wrap.style.display = "none";
+
+  calendar.updateSize();
+}
+
+function refreshExcelIfVisible(){
+  if (!EXCEL_MODE) return;
+  const frame = document.getElementById("excelDayFrame");
+  if (frame) frame.src = buildExcelUrl(calendar.getDate());
+}
+
+  function reloadCalendar() {
+    calendarEl.classList.add("loading");
+    calendar.refetchEvents();
+    setTimeout(() => calendarEl.classList.remove("loading"), 250);
+  }
+
+  // FullCalendar init
   const calendar = new FullCalendar.Calendar(calendarEl, {
-    initialView: 'dayGridMonth',
+    initialView: initialView,
+    initialDate: initialDate || undefined,
+
     themeSystem: 'bootstrap5',
     height: 'auto',
     eventDisplay: 'block',
 
     headerToolbar: {
-      left: 'prev,next today',
+      left: 'prev,next fcToday excelView',
       center: 'title',
-      right: 'dayGridMonth,dayGridWeek,dayGridDay'
+      right: 'dayGridMonth,dayGridWeek,excelDay'
+    },
+
+    customButtons: {
+      fcToday: {
+        text: 'Today',
+        click: function () {
+          calendar.today();
+          reloadCalendar();
+          refreshExcelIfVisible();
+        }
+      },
+      excelDay: {
+        text: 'day',
+        click: function () {
+          showExcelDay(); // smooth switch
+        }
+      },
+      excelView: {
+        text: 'Excel View',
+        click: function () {
+          showExcelDay(); // same as day
+        }
+      }
     },
 
     events: function(fetchInfo, successCallback, failureCallback) {
-
       const params = new URLSearchParams({
         start: fetchInfo.startStr,
         end: fetchInfo.endStr,
@@ -137,9 +268,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
       fetch(`/api/reservations?${params.toString()}`)
         .then(r => r.json())
-        .then(data => {
-          successCallback(data);
-        })
+        .then(data => successCallback(data))
         .catch(err => failureCallback(err));
     },
 
@@ -185,38 +314,50 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   calendar.render();
+  reloadCalendar();
 
-  /* UPDATE ROOM DROPDOWN BASED ON LOCATION */
-  function updateRoomDropdown() {
-    const loc = groupFilter.value;
-    roomFilter.innerHTML = '<option value="all">All Rooms</option>';
+  // Keep Excel iframe synced when date range changes (prev/next/week/month)
+  calendar.on("datesSet", function(){
+    refreshExcelIfVisible();
+  });
 
-    if (groupedRooms[loc]) {
-      groupedRooms[loc].forEach(room => {
-        const opt = document.createElement('option');
-        opt.value = room;
-        opt.textContent = room;
-        roomFilter.appendChild(opt);
-      });
+  // If user clicks Month/Week while Excel is visible, switch back to FullCalendar
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest(".fc-button");
+    if (!btn) return;
+
+    if (EXCEL_MODE && (
+      btn.classList.contains("fc-dayGridMonth-button") ||
+      btn.classList.contains("fc-dayGridWeek-button")
+    )) {
+      showFullCalendar();
+      reloadCalendar();
     }
-  }
+  });
 
-  /* RELOAD CALENDAR */
-  function reloadCalendar() {
-    calendarEl.classList.add("loading");
-    calendar.refetchEvents();
-    setTimeout(() => calendarEl.classList.remove("loading"), 250);
-  }
-
-  /* EVENT LISTENERS */
+  // Filters and buttons
   groupFilter.addEventListener('change', function() {
     updateRoomDropdown();
     reloadCalendar();
+    refreshExcelIfVisible();
   });
 
-  roomFilter.addEventListener('change', reloadCalendar);
-  refreshBtn.addEventListener('click', reloadCalendar);
-  todayBtn.addEventListener('click', () => calendar.today());
+  roomFilter.addEventListener('change', function() {
+    reloadCalendar();
+    refreshExcelIfVisible();
+  });
+
+  refreshBtn.addEventListener('click', function() {
+    reloadCalendar();
+    refreshExcelIfVisible();
+  });
+
+  todayBtn.addEventListener('click', () => {
+    calendar.today();
+    reloadCalendar();
+    refreshExcelIfVisible();
+  });
+
 });
 </script>
 
@@ -256,6 +397,17 @@ document.addEventListener('DOMContentLoaded', function () {
 #calendar.loading {
   opacity: 0.5;
   pointer-events: none;
+}
+    /* Make custom day button look like FC buttons */
+.fc .fc-excelDay-button {
+  text-transform: lowercase;
+}
+    /* Excel mode: keep FC header, hide FC grid */
+#calendar.excel-mode .fc-view-harness {
+  display: none !important;
+}
+    .fc-excelView-button {
+  display: none !important;
 }
 </style>
 

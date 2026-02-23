@@ -383,7 +383,7 @@ function roundHour_00_30_60(dt) {
     params.set('date', todayStr());
     if (selectedRoomName) params.set('room', selectedRoomName);
 
-    viewCalendarBtn.href = `/calendar_view_v2?${params.toString()}`;
+    viewCalendarBtn.href = `/calendar_view?${params.toString()}`;
     viewCalendarBtn.style.display = '';
   }
 
