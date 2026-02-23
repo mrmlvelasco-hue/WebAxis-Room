@@ -44,7 +44,7 @@
 
             <div class="col-md-6">
               <label class="form-label fw-semibold">Start</label>
-              <input id="start_time" name="start_time" type="datetime-local" class="form-control form-control-sm" required>
+              <input id="start_time" name="start_time" type="datetime-local" class="form-control form-control-sm" step="1800"  required>
             </div>
 
             <div class="col-md-6">
@@ -237,7 +237,96 @@
 
 {% block scripts %}
 <script>
+/** ----- Utilities for <input type="datetime-local"> ----- **/
+
+function toDatetimeLocalValue(d) {
+  // Format: YYYY-MM-DDTHH:MM (local time, no seconds)
+  const pad = (n) => String(n).padStart(2, '0');
+  const year = d.getFullYear();
+  const month = pad(d.getMonth() + 1);
+  const day = pad(d.getDate());
+  const hours = pad(d.getHours());
+  const minutes = pad(d.getMinutes());
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function fromDatetimeLocalValue(val) {
+  // Accepts "YYYY-MM-DDTHH:MM" (or with seconds) as local time
+  if (!val) return null;
+  const [datePart, timePart] = val.split('T');
+  if (!datePart || !timePart) return null;
+  const [y, m, d] = datePart.split('-').map(Number);
+  const [hh, mm = '0'] = timePart.split(':');
+  const dt = new Date(y, Number(m) - 1, Number(d), Number(hh), Number(mm), 0, 0);
+  return isNaN(dt.getTime()) ? null : dt;
+}
+
+/** ----- Custom rounding: [00..14]->:00, [15..30]->:30, [31..59]->next hour ----- **/
+function roundHour_00_30_60(dt) {
+  const d = new Date(dt.getTime());
+  const m = d.getMinutes();
+
+  if (m <= 14) {
+    // 00..14 -> :00 of same hour
+    d.setMinutes(0, 0, 0);
+  } else if (m <= 30) {
+    // 15..30 -> :30 of same hour (30 inclusive)
+    d.setMinutes(30, 0, 0);
+  } else {
+    // 31..59 -> :00 of next hour
+    d.setMinutes(0, 0, 0);
+    d.setHours(d.getHours() + 1);
+  }
+  return d;
+}
+
+/** ----- Wire up your Start/End inputs ----- **/
+(function wireDatetimeInputs() {
+  const startInput = document.getElementById('start_time');
+  const endInput   = document.getElementById('end_time');
+
+  function applySnap(inputEl) {
+    if (!inputEl.value) return null;
+    const dt = fromDatetimeLocalValue(inputEl.value);
+    if (!dt) return null;
+    const snapped = roundHour_00_30_60(dt);
+    const newVal = toDatetimeLocalValue(snapped);
+    if (newVal !== inputEl.value) inputEl.value = newVal;
+    return snapped;
+  }
+
+  function enforceOrder() {
+    // Ensure end >= start (optional)
+    const s = fromDatetimeLocalValue(startInput.value);
+    const e = fromDatetimeLocalValue(endInput.value);
+    if (s && e && e < s) {
+      endInput.value = toDatetimeLocalValue(s);
+    }
+  }
+
+  const onCommit = () => {
+    applySnap(startInput);
+    applySnap(endInput);
+    enforceOrder();
+  };
+
+  // Round on change and blur
+  startInput.addEventListener('change', onCommit);
+  startInput.addEventListener('blur', onCommit);
+  endInput.addEventListener('change', onCommit);
+  endInput.addEventListener('blur', onCommit);
+
+  // Optional: match both spinners to 30-min steps (you already set Start to 1800)
+  if (!endInput.hasAttribute('step')) {
+    endInput.setAttribute('step', String(1800)); // 1800 sec = 30 minutes
+  }
+})();
+</script>
+<script>
   // Rooms data from server
+
+
+
   const ROOMS = {{ rooms_json | safe }};
 
   const locationSelect = document.getElementById('locationSelect');

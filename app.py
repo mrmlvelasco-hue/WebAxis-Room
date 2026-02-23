@@ -1587,6 +1587,29 @@ def get_combined_group_rooms(room_id):
 #
 #         return jsonify(success=False, message=str(e)), 500
 
+from datetime import datetime, timedelta, timezone
+
+def snap_to_30min_floor(dt: datetime) -> datetime:
+    """Floor to previous :00 or :30, preserve tz awareness."""
+    minutes = dt.minute
+    snapped_min = 0 if minutes < 30 else 30
+    return dt.replace(minute=snapped_min, second=0, microsecond=0)
+
+
+def snap_to_30min_round(dt: datetime) -> datetime:
+    """Round to nearest :00 or :30. >= :45 -> next hour; < :15 -> :00; else -> :30."""
+    total_minutes = dt.minute + dt.second / 60 + dt.microsecond / 1_000_000 / 60
+    if total_minutes < 15:
+        snapped_min = 0
+        return dt.replace(minute=snapped_min, second=0, microsecond=0)
+    elif total_minutes < 45:
+        snapped_min = 30
+        return dt.replace(minute=snapped_min, second=0, microsecond=0)
+    else:
+        # round up to next hour
+        return dt.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+
+
 @app.route('/reserve_post/<int:room_id>', methods=['POST'])
 @login_required
 def reserve_post(room_id):
@@ -1617,6 +1640,12 @@ def reserve_post(room_id):
         # Convert strings -> datetime
         start_dt = datetime.fromisoformat(start_time)
         end_dt = datetime.fromisoformat(end_time)
+
+        # Align to :00/:30 while keeping the same variable names
+        start_dt = snap_to_30min_round(start_dt)
+        end_dt = snap_to_30min_round(end_dt)
+
+        # Compute duration (optional)
         base_duration = end_dt - start_dt
 
         # --- Load room info (location, approval setting) ---
