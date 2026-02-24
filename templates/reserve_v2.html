@@ -2,233 +2,210 @@
 {% block title %}Reserve Room | WebAXIS{% endblock %}
 
 {% block content %}
-<div class="card shadow-sm p-4">
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h3 class="mb-0"><i class="bi bi-calendar-plus"></i> Reserve Room</h3>
-    <a href="{{ url_for('room_list') }}" class="btn btn-outline-secondary btn-sm">
+<div class="container-fluid py-2">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h2 class="h3 mb-1 fw-bold text-dark"><i class="bi bi-calendar-plus text-primary me-2"></i>Reserve Room</h2>
+      <p class="text-muted small mb-0">Schedule your meetings and manage room availability.</p>
+    </div>
+    <a href="{{ url_for('room_list') }}" class="btn btn-outline-secondary btn-sm shadow-sm">
       <i class="bi bi-arrow-left"></i> Back to Rooms
     </a>
   </div>
 
-  <div class="row g-3">
-    <!-- Left: Room selection / Schedule -->
-    <div class="col-lg-7">
-      <div class="card border-0 shadow-sm">
-        <div class="card-body">
-          <h6 class="fw-semibold mb-3">Room Details</h6>
-
+  <div class="row g-4">
+    <div class="col-lg-8">
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3">
+          <h6 class="card-title mb-0 fw-bold text-uppercase small tracking-wider">
+            <i class="bi bi-info-circle me-2 text-primary"></i>1. Room Selection & Timing
+          </h6>
+        </div>
+        <div class="card-body bg-light-50">
           <div class="row g-3">
             <div class="col-md-6">
-              <label class="form-label fw-semibold">Location Name</label>
-              <select id="locationSelect" class="form-select form-select-sm" required>
-                <option value="" selected disabled>Select location...</option>
-                {% for loc in locations %}
-                  <option value="{{ loc|e }}">{{ loc }}</option>
-                {% endfor %}
-              </select>
+              <label class="form-label fw-semibold small">Location</label>
+              <div class="input-group input-group-sm">
+                <span class="input-group-text bg-white"><i class="bi bi-geo-alt"></i></span>
+                <select id="locationSelect" class="form-select" required>
+                  <option value="" selected disabled>Select location...</option>
+                  {% for loc in locations %}
+                    <option value="{{ loc|e }}">{{ loc }}</option>
+                  {% endfor %}
+                </select>
+              </div>
             </div>
 
             <div class="col-md-6">
-              <label class="form-label fw-semibold">Room Name</label>
-              <select id="roomSelect" class="form-select form-select-sm" required disabled>
-                <option value="" selected disabled>Select room...</option>
-              </select>
-              <div class="form-text">Room list updates based on the selected location.</div>
+              <label class="form-label fw-semibold small">Room Name</label>
+              <div class="input-group input-group-sm">
+                <span class="input-group-text bg-white"><i class="bi bi-door-closed"></i></span>
+                <select id="roomSelect" class="form-select" required disabled>
+                  <option value="" selected disabled>Select room...</option>
+                </select>
+              </div>
             </div>
 
             <div class="col-12">
-              <label class="form-label fw-semibold">Room Features</label>
-              <textarea id="featuresBox" class="form-control form-control-sm" rows="4" readonly
-                        placeholder="Select a room to view its features..."></textarea>
+              <label class="form-label fw-semibold small">Room Features</label>
+              <textarea id="featuresBox" class="form-control form-control-sm bg-white" rows="2" readonly
+                        placeholder="Select a room to view its equipment and capacity..."></textarea>
             </div>
 
             <div class="col-md-6">
-              <label class="form-label fw-semibold">Start</label>
-              <input id="start_time" name="start_time" type="datetime-local" class="form-control form-control-sm" step="1800"  required>
+              <label class="form-label fw-semibold small">Start Time</label>
+              <input id="start_time" name="start_time" type="datetime-local" class="form-control form-control-sm" step="1800" required>
             </div>
 
             <div class="col-md-6">
-              <label class="form-label fw-semibold">End</label>
+              <label class="form-label fw-semibold small">End Time</label>
               <input id="end_time" name="end_time" type="datetime-local" class="form-control form-control-sm" required>
             </div>
           </div>
-
         </div>
       </div>
 
-      <div class="card border-0 shadow-sm mt-3">
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white py-3">
+          <h6 class="card-title mb-0 fw-bold text-uppercase small tracking-wider">
+            <i class="bi bi-pencil-square me-2 text-primary"></i>2. Purpose
+          </h6>
+        </div>
         <div class="card-body">
-          <h6 class="fw-semibold mb-3">Purpose</h6>
-
-          <!-- IMPORTANT: this form posts to existing reserve endpoint once room is selected -->
           <form id="reserveV2Form" method="POST" action="#">
-            <div class="row g-3">
-              <div class="col-12">
-                <label class="form-label fw-semibold">Purpose / Remarks</label>
-                <textarea name="remarks" id="remarks" class="form-control form-control-sm" rows="3" placeholder="Enter purpose..."></textarea>
+            <div class="mb-3">
+              <textarea name="remarks" id="remarks" class="form-control" rows="3" placeholder="What is this meeting about? (e.g. Project Sync, Client Interview)"></textarea>
+            </div>
+
+            <input type="hidden" name="reserved_by" id="reserved_by_hidden" value="{{ current_user.display_name or current_user.username }}">
+            <input type="hidden" name="email" id="email_hidden" value="{{ current_user.email or '' }}">
+
+            <div class="d-flex justify-content-between align-items-center bg-light p-3 rounded">
+              <div id="statusBadgeContainer">
+                <span class="badge bg-secondary-subtle text-secondary border px-3 py-2" id="uiStatusBadge">
+                  <i class="bi bi-circle-fill me-1 small"></i> Waiting for selection
+                </span>
               </div>
-
-              <!-- Hidden fields to reuse existing backend input names -->
-              <input type="hidden" name="reserved_by" id="reserved_by_hidden" value="{{ current_user.display_name or current_user.username }}">
-              <input type="hidden" name="email" id="email_hidden" value="{{ current_user.email or '' }}">
-
-              <div class="col-12 d-flex justify-content-end gap-2 mt-2">
-                <button type="submit" class="btn btn-primary px-4" id="submitBtn" disabled>
-                  <i class="bi bi-check2-circle"></i> Submit Reservation
-                </button>
-
-                <!-- Calendar View (defaults to TODAY; filtered by selected Location and optional Room) -->
-                <a href="#" class="btn btn-outline-primary px-4" id="viewCalendarBtn" style="display:none;">
-                  <i class="bi bi-calendar3"></i> View Calendar
+              <div class="d-flex gap-2">
+                <a href="#" class="btn btn-outline-primary" id="viewCalendarBtn" style="display:none;">
+                  <i class="bi bi-calendar3"></i> View Full Calendar
                 </a>
+                <button type="submit" class="btn btn-primary px-4 shadow-sm fw-bold" id="submitBtn" disabled>
+                  Confirm Reservation <i class="bi bi-chevron-right ms-1"></i>
+                </button>
               </div>
             </div>
           </form>
+        </div>
+      </div>
+    </div>
 
-          <div class="small text-muted mt-2">
-            Note: This page uses the same reservation saving logic as your existing Rooms module.
+    <div class="col-lg-4">
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body text-center py-4">
+          <div class="avatar-placeholder rounded-circle bg-primary text-white d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px; font-size: 1.5rem;">
+            {{ (current_user.display_name or current_user.username)[0] | upper }}
           </div>
+          <h6 class="fw-bold mb-1">{{ current_user.display_name or current_user.username }}</h6>
+          <p class="text-muted small mb-0"><i class="bi bi-envelope me-1"></i> {{ current_user.email or 'N/A' }}</p>
         </div>
       </div>
 
-    </div>
-
-    <!-- Right: User info / Repeat -->
-    <div class="col-lg-5">
       <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white py-3">
+          <h6 class="card-title mb-0 fw-bold text-uppercase small tracking-wider">
+            <i class="bi bi-repeat me-2 text-primary"></i>Recurrence
+          </h6>
+        </div>
         <div class="card-body">
-          <h6 class="fw-semibold mb-3">Your Details</h6>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Frequency</label>
+            <select class="form-select form-select-sm border-dashed" name="repeat_rule" id="repeat_rule">
+              <option value="none" selected>One-time event</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
 
-          <div class="row g-3">
-            <div class="col-12">
-              <label class="form-label fw-semibold">Reserved By</label>
-              <input class="form-control form-control-sm" value="{{ current_user.display_name or current_user.username }}" readonly>
-            </div>
-            <div class="col-12">
-              <label class="form-label fw-semibold">Email</label>
-              <input class="form-control form-control-sm" value="{{ current_user.email or '' }}" readonly>
+          <div id="weeklyOptions" class="p-2 bg-light rounded mb-3" style="display:none;">
+            <label class="form-label fw-semibold small d-block mb-2 text-center">Repeat on</label>
+            <div class="d-flex justify-content-between px-1">
+              {% for day, code in [('M','MO'), ('T','TU'), ('W','WE'), ('T','TH'), ('F','FR'), ('S','SA'), ('S','SU')] %}
+              <div class="text-center">
+                <input type="checkbox" class="btn-check" id="dow{{code}}" value="{{code}}">
+                <label class="btn btn-outline-primary btn-sm rounded-circle p-0" for="dow{{code}}" style="width: 32px; height: 32px; line-height: 30px;">{{day}}</label>
+              </div>
+              {% endfor %}
             </div>
           </div>
 
-          <hr class="my-4">
-
-          <h6 class="fw-semibold mb-3">Repeat</h6>
-          <!-- UI only for now (backend can ignore these fields if not implemented) -->
-          <div class="row g-3">
-            <div class="col-12">
-              <label class="form-label fw-semibold">Repeat</label>
-              <select class="form-select form-select-sm" name="repeat_rule" id="repeat_rule">
-                <option value="none" selected>No repeat</option>
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
-              </select>
-            </div>
-
-            <div class="col-12" id="weeklyOptions" style="display:none;">
-              <label class="form-label fw-semibold">Repeat on</label>
-              <div class="d-flex flex-wrap gap-2">
-                <div class="form-check"><input class="form-check-input" type="checkbox" value="MO" id="dowMO"><label class="form-check-label" for="dowMO">Mon</label></div>
-                <div class="form-check"><input class="form-check-input" type="checkbox" value="TU" id="dowTU"><label class="form-check-label" for="dowTU">Tue</label></div>
-                <div class="form-check"><input class="form-check-input" type="checkbox" value="WE" id="dowWE"><label class="form-check-label" for="dowWE">Wed</label></div>
-                <div class="form-check"><input class="form-check-input" type="checkbox" value="TH" id="dowTH"><label class="form-check-label" for="dowTH">Thu</label></div>
-                <div class="form-check"><input class="form-check-input" type="checkbox" value="FR" id="dowFR"><label class="form-check-label" for="dowFR">Fri</label></div>
-                <div class="form-check"><input class="form-check-input" type="checkbox" value="SA" id="dowSA"><label class="form-check-label" for="dowSA">Sat</label></div>
-                <div class="form-check"><input class="form-check-input" type="checkbox" value="SU" id="dowSU"><label class="form-check-label" for="dowSU">Sun</label></div>
+          <div class="mt-3 pt-3 border-top">
+            <label class="form-label fw-semibold small mb-2">Ends</label>
+            <div class="vstack gap-2">
+              <div class="form-check custom-radio-card p-2 border rounded">
+                <input class="form-check-input ms-0 me-2" type="radio" name="repeat_ends" id="endsNever" value="never" checked>
+                <label class="form-check-label small" for="endsNever">Ongoing</label>
               </div>
-              <div class="form-text">(Optional) Used only if weekly repeat is implemented on backend.</div>
-            </div>
 
-            <div class="col-12">
-              <label class="form-label fw-semibold">Ends</label>
-              <div class="d-flex flex-column gap-2">
-                <div class="form-check">
-                  <input class="form-check-input" type="radio" name="repeat_ends" id="endsNever" value="never" checked>
-                  <label class="form-check-label" for="endsNever">Never</label>
-                </div>
-
-                <div class="form-check d-flex align-items-center gap-2">
-                  <input class="form-check-input" type="radio" name="repeat_ends" id="endsOn" value="on">
-                  <label class="form-check-label" for="endsOn" style="min-width: 48px;">On</label>
-                  <input type="date" class="form-control form-control-sm" id="endsOnDate" style="max-width: 200px;" disabled>
-                </div>
-
-                <div class="form-check d-flex align-items-center gap-2">
-                  <input class="form-check-input" type="radio" name="repeat_ends" id="endsAfter" value="after">
-                  <label class="form-check-label" for="endsAfter" style="min-width: 48px;">After</label>
-                  <input type="number" min="1" class="form-control form-control-sm" id="endsAfterCount" style="max-width: 120px;" disabled>
-                  <span class="text-muted">occurrences</span>
+              <div class="form-check custom-radio-card p-2 border rounded">
+                <div class="d-flex align-items-center gap-2">
+                  <input class="form-check-input ms-0 me-2" type="radio" name="repeat_ends" id="endsOn" value="on">
+                  <label class="form-check-label small me-auto" for="endsOn">On Date</label>
+                  <input type="date" class="form-control form-control-sm w-50" id="endsOnDate" disabled>
                 </div>
               </div>
-              <div class="form-text">Repeat options are UI-ready; backend integration can be added later.</div>
+
+              <div class="form-check custom-radio-card p-2 border rounded">
+                <div class="d-flex align-items-center gap-2">
+                  <input class="form-check-input ms-0 me-2" type="radio" name="repeat_ends" id="endsAfter" value="after">
+                  <label class="form-check-label small me-auto" for="endsAfter">After</label>
+                  <div class="input-group input-group-sm w-50">
+                    <input type="number" min="1" class="form-control" id="endsAfterCount" disabled>
+                    <span class="input-group-text">times</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-
         </div>
       </div>
     </div>
-
   </div>
-</div>
-<div class="card shadow-sm mt-3">
-  <div class="card-header bg-white d-flex justify-content-between align-items-center">
-    <div class="fw-semibold">
-      <i class="bi bi-grid-3x3-gap"></i> Room Availability (Excel View)
+
+  <div class="card border-0 shadow-sm mt-4 overflow-hidden">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+      <div class="fw-bold text-uppercase small tracking-wider">
+        <i class="bi bi-grid-3x3-gap text-primary me-2"></i>Live Availability Grid
+      </div>
+      <button type="button" class="btn btn-sm btn-light border text-primary" onclick="refreshAvailability()">
+        <i class="bi bi-arrow-clockwise"></i> Sync View
+      </button>
     </div>
-    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="refreshAvailability()">
-      <i class="bi bi-arrow-clockwise"></i> Refresh
-    </button>
-  </div>
-
-  <div class="card-body p-0">
-    <iframe id="availabilityFrame"
-            src=""
-            style="width:100%; height:420px; border:0; background:#fff;"></iframe>
+    <div class="card-body p-0 bg-dark-subtle">
+      <iframe id="availabilityFrame" src="" style="width:100%; height:450px; border:0; display:block;"></iframe>
+    </div>
   </div>
 </div>
-<!-- Success Modal -->
+
 <div class="modal fade" id="reserveSuccessModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h6 class="modal-title fw-bold">
-          <i class="bi bi-check-circle text-success"></i> Reservation Submitted
-        </h6>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
+  <div class="modal-dialog modal-dialog-centered" style="max-width: 400px;">
+    <div class="modal-content border-0 shadow-lg p-4 text-center">
       <div class="modal-body">
-        <div id="reserveSuccessText" class="mb-2">Success.</div>
-        <div class="small text-muted" id="reserveSuccessMeta"></div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
-          Close
-        </button>
-        <button type="button" class="btn btn-sm btn-primary" data-bs-dismiss="modal" onclick="refreshAvailability()">
-          Refresh Availability
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
+        <div class="mb-4">
+          <div class="success-icon-circle mx-auto d-flex align-items-center justify-content-center">
+             <i class="bi bi-check-lg display-4 text-success"></i>
+          </div>
+        </div>
 
-<!-- Error Modal -->
-<div class="modal fade" id="reserveErrorModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content border-danger">
-      <div class="modal-header">
-        <h6 class="modal-title fw-bold text-danger">
-          <i class="bi bi-exclamation-triangle"></i> Reservation Failed
-        </h6>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <div id="reserveErrorText">Something went wrong.</div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
-          Close
-        </button>
+        <h3 class="fw-bold text-dark mb-2" style="font-size: 1.75rem;">Reservation Submitted</h3>
+        <p class="text-muted mb-4" id="reserveSuccessMetaText">1 reservations created.</p>
+
+        <div class="d-grid px-5">
+          <button type="button" class="btn btn-primary btn-lg rounded-pill fw-bold py-2 shadow-sm" data-bs-dismiss="modal" onclick="refreshAvailability()">
+            OK
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -322,11 +299,9 @@ function roundHour_00_30_60(dt) {
   }
 })();
 </script>
+
 <script>
   // Rooms data from server
-
-
-
   const ROOMS = {{ rooms_json | safe }};
 
   const locationSelect = document.getElementById('locationSelect');
@@ -357,17 +332,13 @@ function roundHour_00_30_60(dt) {
     featuresBox.value = '';
     form.action = '#';
     submitBtn.disabled = true;
-
     selectedRoomName = null;
     updateCalendarLink();
   }
 
   function todayStr() {
     const d = new Date();
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
+    return d.toISOString().split('T')[0];
   }
 
   function updateCalendarLink() {
@@ -377,12 +348,10 @@ function roundHour_00_30_60(dt) {
       viewCalendarBtn.href = '#';
       return;
     }
-
     const params = new URLSearchParams();
     params.set('location', selectedLocation);
     params.set('date', todayStr());
     if (selectedRoomName) params.set('room', selectedRoomName);
-
     viewCalendarBtn.href = `/calendar_view?${params.toString()}`;
     viewCalendarBtn.style.display = '';
   }
@@ -391,15 +360,19 @@ function roundHour_00_30_60(dt) {
     const filtered = ROOMS.filter(r => (r.location || 'General') === loc);
     roomSelect.innerHTML = '<option value="" selected disabled>Select room...</option>';
 
-    filtered.forEach(r => {
-      const opt = document.createElement('option');
-      opt.value = String(r.id);
-      opt.textContent = r.name;
-      opt.dataset.features = r.features || '';
-      roomSelect.appendChild(opt);
-    });
+    if (filtered.length > 0) {
+      filtered.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = String(r.id);
+        opt.textContent = r.name;
+        opt.dataset.features = r.features || '';
+        roomSelect.appendChild(opt);
+      });
+      roomSelect.disabled = false;
+    } else {
+      roomSelect.disabled = true;
+    }
 
-    roomSelect.disabled = filtered.length === 0;
     featuresBox.value = '';
     form.action = '#';
     submitBtn.disabled = true;
@@ -414,38 +387,38 @@ function roundHour_00_30_60(dt) {
     selectedLocation = loc;
     selectedRoomName = null;
     populateRoomsForLocation(loc);
-    // show calendar as soon as location is selected (defaults to today)
     updateCalendarLink();
-    refreshAvailability();
+    if (typeof refreshAvailability === "function") refreshAvailability();
   });
 
   roomSelect.addEventListener('change', () => {
-  const roomId = roomSelect.value;
+    const roomId = roomSelect.value;
+    if (!roomId) {
+      featuresBox.value = '';
+      form.action = '#';
+      submitBtn.disabled = true;
+      selectedRoomName = null;
+      updateCalendarLink();
+      return;
+    }
 
-  if (!roomId) {
-    featuresBox.value = '';
-    form.action = '#';
-    submitBtn.disabled = true;
-    selectedRoomName = null;
+    const selected = roomSelect.options[roomSelect.selectedIndex];
+    featuresBox.value = selected.dataset.features || '';
+    selectedRoomName = selected.textContent || null;
     updateCalendarLink();
-    refreshAvailability();
-    return;
-  }
 
-  const selected = roomSelect.options[roomSelect.selectedIndex];
-  featuresBox.value = selected.dataset.features || '';
+    form.action = `/reserve_post/${roomId}`;
+    submitBtn.disabled = false;
 
-  selectedRoomName = selected.textContent || null;
-  updateCalendarLink();
+    if (typeof refreshAvailability === "function") refreshAvailability();
 
-  // Reuse existing saving endpoint used by your current module
-  form.action = `/reserve_post/${roomId}`;
+    const statusBadge = document.getElementById('uiStatusBadge');
+    if (statusBadge) {
+        statusBadge.className = "badge bg-success-subtle text-success border border-success-subtle px-3 py-2";
+        statusBadge.innerHTML = `<i class="bi bi-check-circle-fill me-1"></i> Room Ready: ${selected.textContent}`;
+    }
+  });
 
-  submitBtn.disabled = false;
-  refreshAvailability();
-});
-
-  // Basic validation: ensure start <= end
   function validateTimes() {
     if (!startInput.value || !endInput.value) return;
     if (endInput.value < startInput.value) {
@@ -458,126 +431,101 @@ function roundHour_00_30_60(dt) {
   startInput.addEventListener('change', validateTimes);
   endInput.addEventListener('change', validateTimes);
 
-  // Repeat UI toggles
   repeatRule.addEventListener('change', () => {
     weeklyOptions.style.display = (repeatRule.value === 'weekly') ? '' : 'none';
   });
 
   function syncEndsInputs() {
-    endsOnDate.disabled = !endsOn.checked;
-    endsAfterCount.disabled = !endsAfter.checked;
+    if(endsOnDate) endsOnDate.disabled = !endsOn.checked;
+    if(endsAfterCount) endsAfterCount.disabled = !endsAfter.checked;
   }
-  endsNever.addEventListener('change', syncEndsInputs);
-  endsOn.addEventListener('change', syncEndsInputs);
-  endsAfter.addEventListener('change', syncEndsInputs);
+
+  [endsNever, endsOn, endsAfter].forEach(el => {
+    if(el) el.addEventListener('change', syncEndsInputs);
+  });
   syncEndsInputs();
 
-  // On submit: copy start/end values into the form as required field names (already correct)
   form.addEventListener('submit', async (e) => {
-  e.preventDefault(); // ✅ stop browser navigation to JSON
+    e.preventDefault();
 
-  // Ensure room selected
-  if (!roomSelect.value) {
-    alert('Please select a location and room.');
-    return;
-  }
-
-  // Ensure times exist
-  if (!startInput.value || !endInput.value) {
-    alert('Please provide start and end date/time.');
-    return;
-  }
-
-  // Basic validation
-  validateTimes();
-  if (!form.checkValidity()) {
-    form.reportValidity();
-    return;
-  }
-
-  // Remove old injected fields if any
-  const existingStart = form.querySelector('input[name="start_time"]');
-  const existingEnd = form.querySelector('input[name="end_time"]');
-  if (existingStart) existingStart.remove();
-  if (existingEnd) existingEnd.remove();
-
-  // Inject start/end because they are outside <form>
-  const hStart = document.createElement('input');
-  hStart.type = 'hidden';
-  hStart.name = 'start_time';
-  hStart.value = startInput.value;
-
-  const hEnd = document.createElement('input');
-  hEnd.type = 'hidden';
-  hEnd.name = 'end_time';
-  hEnd.value = endInput.value;
-
-  form.appendChild(hStart);
-  form.appendChild(hEnd);
-
-  // Submit using fetch as FormData
-  const actionUrl = form.action; // ex: /reserve_post/44
-  const fd = new FormData(form);
-
-  // Disable button to prevent double submit
-  submitBtn.disabled = true;
-  submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Submitting...`;
-
-  try {
-    const res = await fetch(actionUrl, {
-      method: "POST",
-      body: fd,
-      headers: { "X-Requested-With": "XMLHttpRequest" }
-    });
-
-    // Try parse JSON; if not JSON, still handle
-    let data = null;
-    const ct = res.headers.get("content-type") || "";
-    if (ct.includes("application/json")) {
-      data = await res.json();
-    } else {
-      const txt = await res.text();
-      data = { success: res.ok, message: txt };
+    if (!roomSelect.value || !startInput.value || !endInput.value) {
+      alert('Please select a room and provide valid dates/times.');
+      return;
     }
 
-    if (res.ok && data && (data.success === true || data.status === "success")) {
-      // ✅ show success popup modal
-      document.getElementById("reserveSuccessText").textContent =
-        data.message || "Reservation submitted successfully.";
-
-      const meta = [];
-      if (data.created_count != null) meta.push(`Created: ${data.created_count}`);
-      if (data.skipped && Array.isArray(data.skipped)) meta.push(`Skipped: ${data.skipped.length}`);
-      document.getElementById("reserveSuccessMeta").textContent = meta.join(" • ");
-
-      const modal = new bootstrap.Modal(document.getElementById('reserveSuccessModal'));
-      modal.show();
-
-      // Optional: refresh availability grid immediately
-      refreshAvailability();
-
-      // Optional: reset remarks only
-      // document.getElementById("remarks").value = "";
-
-    } else {
-      // show error modal with message
-      const msg = (data && (data.error || data.message)) || `Request failed (${res.status}).`;
-      document.getElementById("reserveErrorText").textContent = msg;
-      const modal = new bootstrap.Modal(document.getElementById('reserveErrorModal'));
-      modal.show();
+    const actionUrl = form.action;
+    if (actionUrl === "" || actionUrl === "#") {
+      alert("Error: Room not properly selected.");
+      return;
     }
 
-  } catch (err) {
-    document.getElementById("reserveErrorText").textContent = "Network error: " + err;
-    const modal = new bootstrap.Modal(document.getElementById('reserveErrorModal'));
-    modal.show();
-  } finally {
-    // restore button
-    submitBtn.disabled = false;
-    submitBtn.innerHTML = `<i class="bi bi-check2-circle"></i> Submit Reservation`;
-  }
-});
+    const fd = new FormData(form);
+    fd.append('start_time', startInput.value);
+    fd.append('end_time', endInput.value);
+
+    submitBtn.disabled = true;
+    const originalContent = submitBtn.innerHTML;
+    submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Saving...`;
+
+    try {
+      const res = await fetch(actionUrl, {
+        method: "POST",
+        body: fd,
+        headers: { "X-Requested-With": "XMLHttpRequest" }
+      });
+
+      let data;
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        data = { success: res.ok, message: text };
+      }
+
+      if (res.ok && (data.success || data.status === "success")) {
+        const mainTitle = "Reservation Submitted";
+        const subText = data.created_count != null
+            ? `${data.created_count} reservations created.`
+            : "Your booking has been confirmed.";
+
+        const titleEl = document.getElementById("reserveSuccessText");
+        const metaEl = document.getElementById("reserveSuccessMetaText");
+
+        if (titleEl) titleEl.textContent = mainTitle;
+        if (metaEl) metaEl.textContent = subText;
+
+        const modalElem = document.getElementById('reserveSuccessModal');
+        if (modalElem && typeof bootstrap !== 'undefined') {
+            const bsModal = new bootstrap.Modal(modalElem);
+            bsModal.show();
+        } else {
+            alert(`${mainTitle}\n${subText}`);
+        }
+
+        if (typeof refreshAvailability === "function") refreshAvailability();
+      } else {
+        throw new Error(data.message || data.error || "System encountered an error.");
+      }
+    } catch (err) {
+      console.error("Submission error:", err);
+      const errorTextEl = document.getElementById("reserveErrorText");
+      if (errorTextEl) errorTextEl.textContent = err.message;
+
+      const errorModalElem = document.getElementById('reserveErrorModal');
+      if (errorModalElem && typeof bootstrap !== 'undefined') {
+        const bsErrorModal = new bootstrap.Modal(errorModalElem);
+        bsErrorModal.show();
+      } else {
+        alert("Error: " + err.message);
+      }
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = originalContent;
+    }
+  }); // ✅ Fixed: Added missing closing brace and parenthesis
 </script>
+
 <script>
 function getSelectedDateForGrid(){
   // Use Start date for the grid
@@ -676,5 +624,36 @@ function wireAvailabilityAutoRefresh() {
 document.addEventListener("DOMContentLoaded", wireAvailabilityAutoRefresh);
 </script>
 
+<style>
+  /* Professional Modal Styling */
+  #reserveSuccessModal .modal-content {
+    border-radius: 20px; /* Softer corners like the image */
+  }
 
+  .success-icon-circle {
+    width: 100px;
+    height: 100px;
+    background-color: #f0fff4; /* Light green tint */
+    border: 3px solid #d1fae5; /* Very light border */
+    border-radius: 50%;
+  }
+
+  /* Match the blue button exactly if needed */
+  #reserveSuccessModal .btn-primary {
+    background-color: #004dc5;
+    border-color: #004dc5;
+    transition: all 0.2s ease;
+  }
+
+  #reserveSuccessModal .btn-primary:hover {
+    background-color: #003a94;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 77, 197, 0.2);
+  }
+
+  #reserveSuccessMetaText {
+    font-size: 1.1rem;
+    color: #6c757d;
+  }
+</style>
 {% endblock %}

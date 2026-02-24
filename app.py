@@ -1023,7 +1023,7 @@ def room_list():
             # fallback: simple text response
             return "Internal Server Error", 500
 
-
+# This is for the View route in new module
 @app.route('/reserve_v2', methods=['GET'])
 @login_required
 def reserve_v2():
@@ -1032,12 +1032,31 @@ def reserve_v2():
     conn = get_db_connection()
     cur = conn.cursor()
 
-    cur.execute("""
+    # 1. Get user-assigned locations
+    if current_user.is_admin():
+        cur.execute("SELECT DISTINCT location FROM rooms WHERE status='Active'")
+        allowed_locations = [r[0] for r in cur.fetchall()]
+    else:
+        cur.execute("""
+            SELECT DISTINCT ul.location_name
+            FROM user_locations ul
+            WHERE ul.user_id = ?
+        """, (current_user.id,))
+        allowed_locations = [r[0] for r in cur.fetchall()]
+
+    if not allowed_locations:
+        allowed_locations = ["Axis T1"]
+
+    # 2. Get all rooms under allowed locations
+    placeholders = ",".join(["?"] * len(allowed_locations))
+    sql = f"""
         SELECT id, name, location, ISNULL(features,'') AS features
-        FROM dbo.rooms
-        WHERE status = 'Active'
+        FROM rooms
+        WHERE status='Active'
+          AND location IN ({placeholders})
         ORDER BY location, name
-    """)
+    """
+    cur.execute(sql, tuple(allowed_locations))
     rows = cur.fetchall()
     conn.close()
 
@@ -1046,12 +1065,12 @@ def reserve_v2():
 
     for r in rows:
         rooms.append({
-            "id": int(r.id),
-            "name": r.name,
-            "location": r.location or "General",
-            "features": r.features or ""
+            "id": int(r[0]),
+            "name": r[1],
+            "location": r[2] or "General",
+            "features": r[3] or ""
         })
-        locations_set.add(r.location or "General")
+        locations_set.add(r[2] or "General")
 
     return render_template(
         "reserve_v2.html",
@@ -1135,11 +1154,26 @@ def calendar_view_v2():
     conn = get_db_connection()
     cur = conn.cursor()
 
+    allowed_locations = get_user_locations(current_user.id)
+
+    if current_user.is_admin():
+        cur.execute("SELECT DISTINCT location FROM rooms WHERE status='Active'")
+        allowed_locations = [r[0] for r in cur.fetchall()]
+
+    if not allowed_locations:
+        allowed_locations = ["Axis T1"]  # fallback
+
+    # ----------------------------------------
+    # 4. GET ALL ROOMS UNDER ALLOWED LOCATIONS
+    # ----------------------------------------
+    placeholders = ",".join(["?"] * len(allowed_locations))
+
     # locations for dropdown
     cur.execute("""
         SELECT DISTINCT ISNULL(NULLIF(LTRIM(RTRIM(location)), ''), 'General') AS location
         FROM dbo.rooms
         WHERE status='Active'
+         
         ORDER BY ISNULL(NULLIF(LTRIM(RTRIM(location)), ''), 'General')
     """)
     locations = [str(r[0]) for r in cur.fetchall()]
@@ -1609,7 +1643,7 @@ def snap_to_30min_round(dt: datetime) -> datetime:
         # round up to next hour
         return dt.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
 
-
+# saving of room reservation
 @app.route('/reserve_post/<int:room_id>', methods=['POST'])
 @login_required
 def reserve_post(room_id):

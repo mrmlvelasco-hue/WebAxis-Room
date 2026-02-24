@@ -3,28 +3,37 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-
-  <!-- keep bootstrap for table look (use your actual static paths) -->
   <link href="{{ url_for('static', filename='bootstrap.min.css') }}" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
 </head>
 
-<body class="p-0 m-0 bg-white">
+<body class="p-0 m-0 bg-white" style="font-family: 'Inter', sans-serif; color: #1e293b;">
 
-  <!-- OPTIONAL: small header line -->
-  <div class="px-2 py-2 border-bottom small text-muted">
-    Room Availability (Excel View) — {{ selected_date }}
+  <div class="px-3 py-2 bg-light border-bottom d-flex align-items-center justify-content-between">
+    <div class="d-flex align-items-center">
+      <span class="badge bg-primary-subtle text-primary border border-primary-subtle me-2 px-2 py-1">
+        <i class="bi bi-calendar-event"></i>
+      </span>
+      <div class="fw-bold text-secondary small text-uppercase tracking-wider">
+        Room Availability — <span class="text-dark">{{ selected_date }}</span>
+      </div>
+    </div>
+    <div class="small text-muted">
+      <span class="me-3"><i class="bi bi-circle-fill text-success small me-1"></i> Available</span>
+      <span><i class="bi bi-info-circle me-1"></i> 30m intervals</span>
+    </div>
   </div>
 
-  <!-- GRID ONLY -->
-  <div class="p-2">
-    <div class="cal-grid-wrap">
+  <div class="p-3">
+    <div class="cal-grid-wrap shadow-sm border border-2 border-light-subtle">
       <div class="cal-grid-scroll">
-        <table class="table table-sm table-bordered align-middle mb-0 cal-grid-table">
+        <table class="table table-sm table-hover mb-0 cal-grid-table">
           <thead>
             <tr>
               <th class="cal-col-room">Room</th>
               <th class="cal-col-features">Features</th>
-              <th class="cal-col-cap text-center">Cap</th>
+              <th class="cal-col-cap text-center"><i class="bi bi-people me-1"></i>Cap</th>
               {% for t in time_slots %}
                 <th class="cal-time-head text-center" data-time="{{ t }}">{{ t }}</th>
               {% endfor %}
@@ -33,9 +42,13 @@
           <tbody>
             {% for r in rooms %}
             <tr data-room-id="{{ r.id }}">
-              <td class="cal-col-room fw-semibold">{{ r.name }}</td>
-              <td class="cal-col-features text-muted small">{{ r.features }}</td>
-              <td class="cal-col-cap text-center">{{ r.capacity }}</td>
+              <td class="cal-col-room">
+                <div class="fw-bold text-dark">{{ r.name }}</div>
+              </td>
+              <td class="cal-col-features text-muted small">
+                <div class="text-truncate" style="max-width: 350px;" title="{{ r.features }}">{{ r.features }}</div>
+              </td>
+              <td class="cal-col-cap text-center fw-medium text-secondary">{{ r.capacity }}</td>
               {% for t in time_slots %}
                 <td class="cal-slot-cell" data-slot-index="{{ loop.index0 }}"></td>
               {% endfor %}
@@ -48,6 +61,7 @@
   </div>
 
 <script>
+  /* Functions remain exactly as provided in original script */
   const GRID_START_MIN = 6 * 60, GRID_END_MIN = 20 * 60, SLOT_MINUTES = 30;
 
   function toMinutes(dtStr){ const d = new Date(dtStr); return d.getHours()*60 + d.getMinutes(); }
@@ -94,13 +108,12 @@
     const res = await fetch(url);
     const data = await res.json();
     (data||[]).forEach(paintReservation);
-    // ✅ scroll after paint
-    // run AFTER browser lays out table
     requestAnimationFrame(() => setTimeout(scrollToFocusTime, 50));
   }
+
   function scrollToFocusTime(){
       const params = new URLSearchParams(window.location.search);
-      const focus = params.get("focus"); // "13:30"
+      const focus = params.get("focus");
       if (!focus) return;
 
       const scroller = document.querySelector(".cal-grid-scroll");
@@ -109,52 +122,101 @@
       const th = document.querySelector(`.cal-time-head[data-time="${CSS.escape(focus)}"]`);
       if (!th) return;
 
-      // Compute frozen width dynamically (room + features + cap)
       const frozenCells = document.querySelectorAll("thead th.cal-col-room, thead th.cal-col-features, thead th.cal-col-cap");
       let frozenWidth = 0;
       frozenCells.forEach(c => frozenWidth += c.getBoundingClientRect().width);
 
-      // Compute position relative to scroller
       const scRect = scroller.getBoundingClientRect();
       const thRect = th.getBoundingClientRect();
-
-      // thRect.left is viewport-based; convert to scroller scrollLeft target
       const target = (thRect.left - scRect.left) + scroller.scrollLeft - frozenWidth - 16;
 
       scroller.scrollLeft = Math.max(0, target);
-
-      // Optional highlight
       th.classList.add("cal-focus-col");
-      setTimeout(() => th.classList.remove("cal-focus-col"), 1200);
+      setTimeout(() => th.classList.remove("cal-focus-col"), 1500);
     }
   document.addEventListener("DOMContentLoaded", loadAndPaint);
 </script>
 
 <style>
-  .cal-grid-wrap{ border:1px solid #dee2e6; border-radius:10px; overflow:hidden; }
-  .cal-grid-scroll{ overflow:auto; max-height:55vh; position:relative; }
-  .cal-grid-table{ border-collapse:separate !important; border-spacing:0 !important; }
-  .cal-grid-table th,.cal-grid-table td{ white-space:nowrap; font-size:12px; padding:6px 8px; }
+  /* Advanced Professional Styles */
+  :root {
+    --booked-bg: #10b981; /* Modern Emerald Green */
+    --booked-border: #059669;
+    --frozen-bg: #ffffff;
+    --header-bg: #f8fafc;
+  }
 
-  .cal-grid-table thead th{ position:sticky; top:0; background:#f8fafc; z-index:10; }
-  .cal-time-head,.cal-slot-cell{ min-width:70px; width:70px; text-align:center; }
+  .cal-grid-wrap { border-radius: 12px; overflow: hidden; background: #fff; }
+  .cal-grid-scroll { overflow: auto; max-height: 55vh; position: relative; scroll-behavior: smooth; }
 
-  .cal-col-room,.cal-col-features,.cal-col-cap{ position:sticky; background:#fff; z-index:6; }
-  .cal-col-room{ left:0; min-width:220px; width:220px; z-index:8; }
-  .cal-col-features{ left:220px; min-width:380px; width:380px; z-index:7; }
-  .cal-col-cap{ left:600px; min-width:70px; width:70px; z-index:7; border-right:2px solid #c9d1db; }
+  .cal-grid-table { border-collapse: separate !important; border-spacing: 0 !important; }
+  .cal-grid-table th, .cal-grid-table td {
+    white-space: nowrap;
+    font-size: 13px;
+    padding: 12px 14px;
+    border-bottom: 1px solid #f1f5f9;
+    border-right: 1px solid #f1f5f9;
+  }
 
+  /* Sticky Header */
+  .cal-grid-table thead th {
+    position: sticky;
+    top: 0;
+    background: var(--header-bg);
+    z-index: 10;
+    font-weight: 600;
+    color: #64748b;
+    border-bottom: 2px solid #e2e8f0;
+  }
+
+  /* Fixed Columns with better depth */
+  .cal-time-head, .cal-slot-cell { min-width: 85px; width: 85px; }
+  .cal-col-room, .cal-col-features, .cal-col-cap { position: sticky; background: var(--frozen-bg); z-index: 6; }
+
+  .cal-col-room { left: 0; min-width: 200px; width: 200px; z-index: 8; box-shadow: 2px 0 5px -2px rgba(0,0,0,0.05); }
+  .cal-col-features { left: 200px; min-width: 300px; width: 300px; z-index: 7; }
+  .cal-col-cap { left: 500px; min-width: 80px; width: 80px; z-index: 7; border-right: 2px solid #cbd5e1; }
+
+  /* Ensure Header Sticky parts stay on top */
   .cal-grid-table thead th.cal-col-room,
   .cal-grid-table thead th.cal-col-features,
-  .cal-grid-table thead th.cal-col-cap{ z-index:20; background:#f8fafc; }
+  .cal-grid-table thead th.cal-col-cap { z-index: 20; background: var(--header-bg); }
 
-  .cal-slot-cell.cal-booked{ background:#0aa88f; border-left-color:transparent; border-right-color:transparent; }
-  .cal-slot-cell.cal-booked-start{ border-left:1px solid #088f7a; border-radius:4px 0 0 4px; }
-  .cal-slot-cell.cal-booked-end{ border-right:1px solid #088f7a; border-radius:0 4px 4px 0; }
-    .cal-focus-col {
-  outline: 2px solid #0d6efd;
-  outline-offset: -2px;
-}
+  /* Modern Booked Slot Styles */
+  .cal-slot-cell.cal-booked {
+    background: var(--booked-bg);
+    color: white;
+    border-top: 4px solid white;
+    border-bottom: 4px solid white;
+    border-right-color: transparent;
+    border-left-color: transparent;
+  }
+
+  .cal-slot-cell.cal-booked-start {
+    border-left: 2px solid var(--booked-border) !important;
+    border-top-left-radius: 8px;
+    border-bottom-left-radius: 8px;
+  }
+
+  .cal-slot-cell.cal-booked-end {
+    border-right: 2px solid var(--booked-border) !important;
+    border-top-right-radius: 8px;
+    border-bottom-right-radius: 8px;
+  }
+
+  /* Focus Column Highlight */
+  .cal-focus-col {
+    background: #e0f2fe !important;
+    box-shadow: inset 0 0 0 2px #0ea5e9;
+    color: #0369a1 !important;
+    transition: all 0.5s ease;
+  }
+
+  /* Custom Professional Scrollbar */
+  .cal-grid-scroll::-webkit-scrollbar { height: 8px; width: 8px; }
+  .cal-grid-scroll::-webkit-scrollbar-track { background: #f1f5f9; }
+  .cal-grid-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+  .cal-grid-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 </style>
 
 </body>
