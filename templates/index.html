@@ -757,7 +757,8 @@ async function showSlotDetails(cell) {
    const roomName = cell.dataset.roomName;
    const date = document.getElementById("viewDate")?.value;
    const time = cell.dataset.time;
-
+<!--   alert(date)-->
+<!--   alert(roomId)-->
    try {
        const resp = await fetch(`/api/room_availability/${roomId}?date=${date}`);
        const data = await resp.json();

@@ -199,7 +199,7 @@
         </div>
 
         <h3 class="fw-bold text-dark mb-2" style="font-size: 1.75rem;">Reservation Submitted</h3>
-        <p class="text-muted mb-4" id="reserveSuccessMetaText">reservations created.</p>
+        <p class="text-muted mb-4" id="reserveSuccessMetaText">1 reservations created.</p>
 
         <div class="d-grid px-5">
           <button type="button" class="btn btn-primary btn-lg rounded-pill fw-bold py-2 shadow-sm" data-bs-dismiss="modal" onclick="refreshAvailability()">
@@ -300,7 +300,6 @@ function roundHour_00_30_60(dt) {
 })();
 </script>
 
-
 <script>
   // Rooms data from server
   const ROOMS = {{ rooms_json | safe }};
@@ -327,24 +326,32 @@ function roundHour_00_30_60(dt) {
   const endsOnDate = document.getElementById('endsOnDate');
   const endsAfterCount = document.getElementById('endsAfterCount');
 
+  function resetRoomSelect() {
+    roomSelect.innerHTML = '<option value="" selected disabled>Select room...</option>';
+    roomSelect.disabled = true;
+    featuresBox.value = '';
+    form.action = '#';
+    submitBtn.disabled = true;
+    selectedRoomName = null;
+    updateCalendarLink();
+  }
+
   function todayStr() {
-    return new Date().toISOString().split('T')[0];
+    const d = new Date();
+    return d.toISOString().split('T')[0];
   }
 
   function updateCalendarLink() {
     if (!viewCalendarBtn) return;
-
     if (!selectedLocation) {
       viewCalendarBtn.style.display = 'none';
       viewCalendarBtn.href = '#';
       return;
     }
-
     const params = new URLSearchParams();
     params.set('location', selectedLocation);
     params.set('date', todayStr());
     if (selectedRoomName) params.set('room', selectedRoomName);
-
     viewCalendarBtn.href = `/calendar_view?${params.toString()}`;
     viewCalendarBtn.style.display = '';
   }
@@ -372,23 +379,37 @@ function roundHour_00_30_60(dt) {
   }
 
   locationSelect.addEventListener('change', () => {
-    selectedLocation = locationSelect.value || null;
+    const loc = locationSelect.value;
+    if (!loc) {
+      resetRoomSelect();
+      return;
+    }
+    selectedLocation = loc;
     selectedRoomName = null;
-    populateRoomsForLocation(selectedLocation);
+    populateRoomsForLocation(loc);
     updateCalendarLink();
+    if (typeof refreshAvailability === "function") refreshAvailability();
   });
 
   roomSelect.addEventListener('change', () => {
     const roomId = roomSelect.value;
-    if (!roomId) return;
+    if (!roomId) {
+      featuresBox.value = '';
+      form.action = '#';
+      submitBtn.disabled = true;
+      selectedRoomName = null;
+      updateCalendarLink();
+      return;
+    }
 
     const selected = roomSelect.options[roomSelect.selectedIndex];
     featuresBox.value = selected.dataset.features || '';
     selectedRoomName = selected.textContent || null;
+    updateCalendarLink();
 
     form.action = `/reserve_post/${roomId}`;
     submitBtn.disabled = false;
-    updateCalendarLink();
+
     if (typeof refreshAvailability === "function") refreshAvailability();
 
     const statusBadge = document.getElementById('uiStatusBadge');
@@ -400,8 +421,7 @@ function roundHour_00_30_60(dt) {
 
   function validateTimes() {
     if (!startInput.value || !endInput.value) return;
-
-    if (endInput.value <= startInput.value) {
+    if (endInput.value < startInput.value) {
       endInput.setCustomValidity('End must be after start');
     } else {
       endInput.setCustomValidity('');
@@ -416,18 +436,15 @@ function roundHour_00_30_60(dt) {
   });
 
   function syncEndsInputs() {
-    if (endsOnDate) endsOnDate.disabled = !endsOn.checked;
-    if (endsAfterCount) endsAfterCount.disabled = !endsAfter.checked;
+    if(endsOnDate) endsOnDate.disabled = !endsOn.checked;
+    if(endsAfterCount) endsAfterCount.disabled = !endsAfter.checked;
   }
 
   [endsNever, endsOn, endsAfter].forEach(el => {
-    if (el) el.addEventListener('change', syncEndsInputs);
+    if(el) el.addEventListener('change', syncEndsInputs);
   });
   syncEndsInputs();
 
-  // ===============================
-  // FINAL SUBMIT HANDLER (FIXED)
-  // ===============================
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
 
@@ -436,81 +453,79 @@ function roundHour_00_30_60(dt) {
       return;
     }
 
-    if (!form.action || form.action === '#') {
-      alert("Room not properly selected.");
+    const actionUrl = form.action;
+    if (actionUrl === "" || actionUrl === "#") {
+      alert("Error: Room not properly selected.");
       return;
     }
 
-
-
-    // Build payload manually (IMPORTANT FIX)
-    const fd = new FormData();
-
-    fd.append("start_time", startInput.value);
-    fd.append("end_time", endInput.value);
-    fd.append("remarks", form.querySelector('[name="remarks"]')?.value || "");
-
-    // recurrence type
-    fd.append("recurrence_type", repeatRule?.value || "none");
-
-    // weekly days
-    // weekly days (FIXED)
-    const selectedWeekdays = Array.from(
-      document.querySelectorAll('#weeklyOptions input[type="checkbox"]:checked')
-    ).map(cb => cb.value);
-
-    fd.append("weekdays", selectedWeekdays.join(","));
-    fd.append("weekly_interval",
-      form.querySelector('[name="weekly_interval"]')?.value || 1
-    );
-
-
-
-    // end mode
-    let endMode = "never";
-    if (endsOn?.checked) endMode = "on";
-    if (endsAfter?.checked) endMode = "after";
-
-    fd.append("end_mode", endMode);
-    fd.append("end_on_date", endsOnDate?.value || "");
-    fd.append("end_after_count", endsAfterCount?.value || "");
+    const fd = new FormData(form);
+    fd.append('start_time', startInput.value);
+    fd.append('end_time', endInput.value);
 
     submitBtn.disabled = true;
     const originalContent = submitBtn.innerHTML;
     submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Saving...`;
 
     try {
-      const res = await fetch(form.action, {
+      const res = await fetch(actionUrl, {
         method: "POST",
         body: fd,
         headers: { "X-Requested-With": "XMLHttpRequest" }
       });
 
-      const data = await res.json();
-
-      if (res.ok && data.success) {
-        const created = data.created_count || 0;
-        let html = `<b>${created}</b> reservations created.`;
-        if (data.skipped && data.skipped.length) {
-          html += `<br><b>${data.skipped.length}</b> skipped:<ul>`;
-          data.skipped.forEach(s => html += `<li>${s}</li>`);
-          html += `</ul>`;
-        }
-        Swal.fire({ icon: 'success', title: 'Reservation Submitted', html, confirmButtonColor: "#0047AB" })
-          .then(() => window.location.reload());
+      let data;
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        data = await res.json();
       } else {
-        throw new Error(data.message || "System error.");
+        const text = await res.text();
+        data = { success: res.ok, message: text };
       }
 
+      if (res.ok && (data.success || data.status === "success")) {
+        const mainTitle = "Reservation Submitted";
+        const subText = data.created_count != null
+            ? `${data.created_count} reservations created.`
+            : "Your booking has been confirmed.";
+
+        const titleEl = document.getElementById("reserveSuccessText");
+        const metaEl = document.getElementById("reserveSuccessMetaText");
+
+        if (titleEl) titleEl.textContent = mainTitle;
+        if (metaEl) metaEl.textContent = subText;
+
+        const modalElem = document.getElementById('reserveSuccessModal');
+        if (modalElem && typeof bootstrap !== 'undefined') {
+            const bsModal = new bootstrap.Modal(modalElem);
+            bsModal.show();
+        } else {
+            alert(`${mainTitle}\n${subText}`);
+        }
+
+        if (typeof refreshAvailability === "function") refreshAvailability();
+      } else {
+        throw new Error(data.message || data.error || "System encountered an error.");
+      }
     } catch (err) {
       console.error("Submission error:", err);
-      alert("Error: " + err.message);
+      const errorTextEl = document.getElementById("reserveErrorText");
+      if (errorTextEl) errorTextEl.textContent = err.message;
+
+      const errorModalElem = document.getElementById('reserveErrorModal');
+      if (errorModalElem && typeof bootstrap !== 'undefined') {
+        const bsErrorModal = new bootstrap.Modal(errorModalElem);
+        bsErrorModal.show();
+      } else {
+        alert("Error: " + err.message);
+      }
     } finally {
       submitBtn.disabled = false;
       submitBtn.innerHTML = originalContent;
     }
-  });
+  }); // ✅ Fixed: Added missing closing brace and parenthesis
 </script>
+
 <script>
 function getSelectedDateForGrid(){
   // Use Start date for the grid

@@ -1796,7 +1796,7 @@ def reserve_post(room_id):
                 SELECT COUNT(*)
                 FROM reservations
                 WHERE room_id=?
-                  AND NOT (end_time <= ? OR start_time >= ?)
+                  AND  start_time <= ?  AND end_time >= ?
                   AND status IN ('Pending','Approved','Blocked')
             """, (room_id, new_start, new_end))
             if cur.fetchone()[0] > 0:
@@ -2387,7 +2387,7 @@ def api_room_availability(room_id):
 
         conn = get_db_connection()
         cur = conn.cursor()
-
+        params = [room_id, selected_date]
         sql = """
             SELECT 
                 id,
@@ -2404,6 +2404,10 @@ def api_room_availability(room_id):
             ORDER BY start_time
         """
         cur.execute(sql, (room_id, selected_date))
+        # Debug logs
+        print("🧩 SQL:", sql)
+        print("🧩 PARAMS:", params)
+
         rows = cur.fetchall()
         conn.close()
 
