@@ -1265,7 +1265,8 @@ def api_reservations_v2_day():
             r.end_time,
             r.reserved_by,
             ISNULL(r.remarks,'') AS remarks,
-            r.status
+            r.status,
+            r.email
         FROM dbo.reservations r
         INNER JOIN dbo.rooms rm ON rm.id = r.room_id
         WHERE rm.status='Active'
@@ -1301,6 +1302,7 @@ def api_reservations_v2_day():
             "reserved_by": str(row.reserved_by),
             "remarks": str(row.remarks),
             "status": str(row.status),
+            "email": str(row.email),
         })
 
     return jsonify(events)

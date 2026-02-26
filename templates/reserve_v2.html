@@ -607,6 +607,166 @@ function wireAvailabilityAutoRefresh() {
   refreshAvailability(); // initial load
 }
 document.addEventListener("DOMContentLoaded", wireAvailabilityAutoRefresh);
+    window.addEventListener("message", function(event) {
+
+    if (!event.data || event.data.type !== "SHOW_RESERVATION") return;
+
+    const res = event.data.data;
+
+    showParentReservationPopup(res);
+
+});
+    function showParentReservationPopup(res) {
+
+    const status = (res.status || "").toLowerCase();
+
+    const statusMap = {
+        approved: { text: "APPROVED", bg: "#d1fae5", color: "#065f46" },
+        pending:  { text: "PENDING",  bg: "#fef3c7", color: "#92400e" },
+        blocked:  { text: "BLOCKED",  bg: "#fee2e2", color: "#991b1b" },
+        booked:   { text: "BOOKED",   bg: "#d1fae5", color: "#065f46" }
+    };
+
+    const badge = statusMap[status] || {
+        text: status.toUpperCase(),
+        bg: "#e5e7eb",
+        color: "#374151"
+    };
+
+     // robust time parsing
+     function toMinutes(t){
+         if (!t) return null;
+         if (t.includes('T')) t = t.split('T')[1];
+         const [hh,mm] = t.split(':');
+         return (parseInt(hh)||0)*60 + (parseInt(mm)||0);
+     }
+
+    function minutesToHHMM(mins){
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+    }
+    const startMin = toMinutes(res.start);
+    const endMin   = toMinutes(res.end);
+
+    const displayStart = minutesToHHMM(startMin);
+    const displayEnd   = minutesToHHMM(endMin);
+
+
+    Swal.fire({
+        target: document.body,
+        backdrop: true,
+        width: 600,
+        showConfirmButton: false,
+        showCloseButton: true,
+        padding: "2rem",
+        html: `
+        <div style="text-align:center;margin-bottom:20px;">
+            <div style="font-size:28px;color:#0d47a1;">
+                <i class="bi bi-calendar-check"></i>
+            </div>
+            <h3 style="margin-top:8px;font-weight:700;color:#0d47a1;">
+                Reservation Details
+            </h3>
+        </div>
+
+        <div style="text-align:left;font-size:15px;">
+
+            ${detailRow("Room:", `<strong style="color:#0d47a1">${res.room}</strong>`)}
+            ${divider()}
+
+            ${detailRow("Status:",
+                `<span style="
+                    display:inline-block;
+                    padding:6px 14px;
+                    border-radius:20px;
+                    background:${badge.bg};
+                    color:${badge.color};
+                    font-weight:600;
+                    font-size:13px;
+                ">${badge.text}</span>`
+            )}
+            ${divider()}
+
+            ${detailRow("Reserved By:", res.reserved_by)}
+            ${divider()}
+
+            ${detailRow("Email:", res.email || "-")}
+            ${divider()}
+
+            ${detailRow("Time:",
+                `<span style="color:#0d47a1;font-weight:600;">
+                    ${displayStart} — ${displayEnd}
+                </span>`
+            )}
+            ${divider()}
+
+            ${detailRow("Remarks:", res.remarks || "—")}
+
+        </div>
+
+        <div style="margin-top:30px;text-align:center;">
+            <button id="cancelBtn"
+                style="
+                    background:#dc2626;
+                    color:white;
+                    border:none;
+                    padding:12px 28px;
+                    border-radius:8px;
+                    font-weight:600;
+                    box-shadow:0 4px 12px rgba(220,38,38,0.3);
+                    cursor:pointer;
+                ">
+                <i class="bi bi-trash"></i>
+                Cancel Reservation
+            </button>
+        </div>
+        `,
+        didOpen: () => {
+
+            const btn = document.getElementById("cancelBtn");
+            if(!btn) return;
+
+            btn.addEventListener("click", async () => {
+
+                const confirm = await Swal.fire({
+                    title: "Confirm Cancellation?",
+                    icon: "warning",
+                    showCancelButton: true,
+                    confirmButtonColor: "#dc2626",
+                    confirmButtonText: "Yes, Cancel"
+                });
+
+                if(!confirm.isConfirmed) return;
+
+                const r = await fetch(`/api/cancel_reservation/${res.id}`, {
+                    method: "POST"
+                });
+
+                const d = await r.json();
+
+                if(d.success){
+                    Swal.fire("Cancelled!", "", "success")
+                        .then(()=> location.reload());
+                }else{
+                    Swal.fire("Error", d.message || "Cannot cancel", "error");
+                }
+            });
+        }
+    });
+
+    function detailRow(label, value){
+        return `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;">
+            <div style="color:#6b7280;width:140px;">${label}</div>
+            <div style="flex:1;text-align:left;">${value}</div>
+        </div>`;
+    }
+
+    function divider(){
+        return `<div style="border-bottom:1px solid #e5e7eb;"></div>`;
+    }
+}
 </script>
 
 <style>

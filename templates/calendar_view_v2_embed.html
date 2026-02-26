@@ -6,6 +6,7 @@
   <link href="{{ url_for('static', filename='bootstrap.min.css') }}" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 
 <body class="p-0 m-0 bg-white" style="font-family: 'Inter', sans-serif; color: #1e293b;">
@@ -51,6 +52,7 @@
               <td class="cal-col-cap text-center fw-medium text-secondary">{{ r.capacity }}</td>
               {% for t in time_slots %}
                 <td class="cal-slot-cell" data-slot-index="{{ loop.index0 }}"></td>
+
               {% endfor %}
             </tr>
             {% endfor %}
@@ -61,520 +63,317 @@
   </div>
 
 <script>
-  /* Functions remain exactly as provided in original script */
-  const GRID_START_MIN = 6 * 60, GRID_END_MIN = 20 * 60, SLOT_MINUTES = 30;
 
-  function toMinutes(dtStr){ const d = new Date(dtStr); return d.getHours()*60 + d.getMinutes(); }
-  function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+/* =========================================================
+   CALENDAR V2 – PRO VERSION
+   ✔ Solid coloring
+   ✔ Perfect click detection
+   ✔ No duplicate listeners
+   ✔ No extra API calls
+   ✔ Instant popup
+========================================================= */
 
-  function clearGrid(){
+const GRID_START_MIN = 6 * 60;
+const GRID_END_MIN   = 20 * 60;
+const SLOT_MINUTES   = 30;
+
+/* =============================
+   In-memory reservation map
+============================= */
+let reservationMap = {};
+// key format: roomId_slotMin → reservation object
+
+/* =============================
+   Helpers
+============================= */
+const CURRENT_USER = {
+    name: "{{ current_user.display_name }}",
+    username: "{{ current_user.username }}",
+    isAdmin: {{ 'true' if current_user.is_admin() else 'false' }}
+};
+
+function toMinutes(dtStr){
+    const d = new Date(dtStr);
+    return d.getHours()*60 + d.getMinutes();
+}
+
+function clamp(v,min,max){
+    return Math.max(min, Math.min(max, v));
+}
+
+function formatSlotKey(roomId, slotMin){
+    return `${roomId}_${slotMin}`;
+}
+
+/* =============================
+   Clear Grid
+============================= */
+
+function clearGrid(){
+    reservationMap = {};
+
     document.querySelectorAll(".cal-slot-cell").forEach(td=>{
-      td.classList.remove("cal-booked","cal-booked-start","cal-booked-end");
-      td.title=""; td.innerHTML="";
+        td.classList.remove("cal-booked","cal-booked-start","cal-booked-end");
+        td.innerHTML = "";
+        td.removeAttribute("data-room-id");
+        td.removeAttribute("data-slot-min");
+        td.style.backgroundColor = "";
+        td.innerHTML = "";
+        td.removeAttribute("data-room-id");
+        td.removeAttribute("data-slot-min");
     });
-  }
+}
 
-  function paintReservation(ev){
+/* =============================
+   Paint Reservations
+============================= */
+
+function paintReservation(ev){
+
     const row = document.querySelector(`tr[data-room-id="${ev.room_id}"]`);
     if(!row) return;
 
-    let s = toMinutes(ev.start), e = toMinutes(ev.end);
-    if(e <= s) return;
+    let startMin = toMinutes(ev.start);
+    let endMin   = toMinutes(ev.end);
+    if(endMin <= startMin) return;
 
-    s = clamp(s, GRID_START_MIN, GRID_END_MIN);
-    e = clamp(e, GRID_START_MIN, GRID_END_MIN);
+    startMin = clamp(startMin, GRID_START_MIN, GRID_END_MIN);
+    endMin   = clamp(endMin, GRID_START_MIN, GRID_END_MIN);
 
-    const startIdx = Math.floor((s - GRID_START_MIN)/SLOT_MINUTES);
-    const endIdx   = Math.ceil((e - GRID_START_MIN)/SLOT_MINUTES);
+    const startIdx = Math.floor((startMin - GRID_START_MIN)/SLOT_MINUTES);
+    const endIdx   = Math.ceil((endMin - GRID_START_MIN)/SLOT_MINUTES);
 
-    for (let i = startIdx; i < endIdx; i++) {
+    for(let i=startIdx;i<endIdx;i++){
+
         const cell = row.querySelector(`td.cal-slot-cell[data-slot-index="${i}"]`);
-        if (!cell) continue;
+        if(!cell) continue;
+
+        const slotMin = GRID_START_MIN + (i * SLOT_MINUTES);
 
         cell.classList.add("cal-booked");
+        cell.dataset.roomId = ev.room_id;
+        cell.dataset.slotMin = slotMin;
 
-        // Make each cell clickable
-        cell.classList.add("clickable-slot");
-        cell.addEventListener("click", () => showSlotDetails(cell));
+        /* ----- Color by status ----- */
+        const status = (ev.status || "").toLowerCase();
+        console.log("Painting:", ev.room_id, slotMin);
+<!--        if(status === "approved" || status === "booked"){-->
+<!--            cell.style.backgroundColor = "#d4edda";-->
+<!--        }-->
+<!--        else if(status === "pending"){-->
+<!--            cell.style.backgroundColor = "#fff3cd";-->
+<!--        }-->
+<!--        else if(status === "blocked"){-->
+<!--            cell.style.backgroundColor = "#f8d7da";-->
+<!--        }-->
 
-        if (i === startIdx) {
-            cell.classList.add("cal-booked-start");
-            cell.title = `${ev.reserved_by}\n${ev.room}\n${ev.status}\n${ev.start} - ${ev.end}\n${ev.remarks || ""}`;
+        /* ----- Store reservation in map ----- */
+        reservationMap[formatSlotKey(ev.room_id, slotMin)] = ev;
 
-            // Show ONLY remarks
-            cell.innerHTML = "";
+        /* ----- Show remarks only on first cell ----- */
+        if(i === startIdx){
             const div = document.createElement("div");
             div.className = "cal-remarks";
             div.textContent = ev.remarks || "";
             cell.appendChild(div);
         }
-
-        if (i === endIdx - 1) {
-            cell.classList.add("cal-booked-end");
-        }
     }
-  }
- /* ========================= UPDATED showSlotDetails with Modern UI ========================= */
-async function showSlotDetails(cell) {
-
-   const roomId = cell.dataset.roomId;
-   const roomName = cell.dataset.roomName;
-   const date = document.getElementById("viewDate")?.value;
-   const time = cell.dataset.time;
-
-   alert(date)
-   alert(roomId)
-   try {
-       const resp = await fetch(`/api/room_availability/${roomId}?date=${date}`);
-       const data = await resp.json();
-
-       // robust time parsing
-       function toMinutes(t){
-           if (!t) return null;
-           if (t.includes('T')) t = t.split('T')[1];
-           const [hh,mm] = t.split(':');
-           return (parseInt(hh)||0)*60 + (parseInt(mm)||0);
-       }
-
-       const clickedMin = toMinutes(time);
-       let match = null;
-
-       for (const r of (data || [])) {
-           const sm = toMinutes(r.start);
-           const em = toMinutes(r.end);
-           if (sm != null && em != null && clickedMin >= sm && clickedMin < em) {
-               match = r;
-               break;
-           }
-       }
-
-       if (!match) {
-           Swal.fire({
-               icon: "info",
-               title: "No Reservation Found",
-               text: `No reservation record for ${time}.`,
-               confirmButtonColor: "#0047AB"
-           });
-           return;
-       }
-
-       const reservedBy = (match.reserved_by || "").trim();
-       const email = match.email || "N/A";
-       const remarks = match.remarks || "—";
-       const status = (match.status || "").toLowerCase();
-       const start = match.start;
-       const end = match.end;
-       const resId = match.id;
-       const currentUser = "{{ current_user.display_name }}".trim();
-       const isAdmin = "{{ 'true' if current_user.is_admin() else 'false' }}" === "true";
-
-       // Status badge styling
-       let statusColor, statusBg, statusIcon;
-       switch(status) {
-           case 'approved':
-           case 'booked':
-               statusColor = '#0b8a44';
-               statusBg = '#d4edda';
-               statusIcon = '✓';
-               break;
-           case 'pending':
-               statusColor = '#856404';
-               statusBg = '#fff3cd';
-               statusIcon = '⏱';
-               break;
-           case 'blocked':
-               statusColor = '#721c24';
-               statusBg = '#f8d7da';
-               statusIcon = '✕';
-               break;
-           default:
-               statusColor = '#6c757d';
-               statusBg = '#e9ecef';
-               statusIcon = '•';
-       }
-
-       let html = `
-        <style>
-            .reservation-details-container {
-                text-align: left;
-                padding: 8px 0;
-            }
-            .detail-row {
-                display: flex;
-                padding: 14px 0;
-                border-bottom: 1px solid #f0f0f0;
-                align-items: flex-start;
-            }
-            .detail-row:last-child {
-                border-bottom: none;
-            }
-            .detail-label {
-                font-weight: 600;
-                color: #495057;
-                min-width: 130px;
-                font-size: 0.95rem;
-            }
-            .detail-value {
-                color: #212529;
-                flex: 1;
-                font-size: 0.95rem;
-                word-break: break-word;
-            }
-            .status-badge-modern {
-                display: inline-flex;
-                align-items: center;
-                gap: 6px;
-                padding: 6px 14px;
-                border-radius: 20px;
-                font-weight: 600;
-                font-size: 0.85rem;
-                background-color: ${statusBg};
-                color: ${statusColor};
-                border: 1px solid ${statusColor}40;
-            }
-            .room-name-display {
-                font-size: 1.1rem;
-                font-weight: 700;
-                color: #0047AB;
-                margin-bottom: 4px;
-            }
-            .time-display {
-                font-family: 'Courier New', monospace;
-                font-weight: 600;
-                color: #0047AB;
-                font-size: 1rem;
-            }
-            .action-buttons {
-                display: flex;
-                gap: 10px;
-                justify-content: center;
-                margin-top: 24px;
-                padding-top: 20px;
-                border-top: 2px solid #f0f0f0;
-            }
-            .btn-modern {
-                padding: 10px 24px;
-                border-radius: 8px;
-                font-weight: 600;
-                font-size: 0.9rem;
-                border: none;
-                cursor: pointer;
-                transition: all 0.2s ease;
-                display: inline-flex;
-                align-items: center;
-                gap: 6px;
-            }
-            .btn-approve {
-                background: linear-gradient(135deg, #0b8a44 0%, #0a7538 100%);
-                color: white;
-                box-shadow: 0 2px 8px rgba(11, 138, 68, 0.3);
-            }
-            .btn-approve:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 4px 12px rgba(11, 138, 68, 0.4);
-            }
-            .btn-reject {
-                background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%);
-                color: #000;
-                box-shadow: 0 2px 8px rgba(255, 193, 7, 0.3);
-            }
-            .btn-reject:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 4px 12px rgba(255, 193, 7, 0.4);
-            }
-            .btn-cancel {
-                background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
-                color: white;
-                box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
-            }
-            .btn-cancel:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
-            }
-        </style>
-        <div class="reservation-details-container">
-            <div class="detail-row">
-                <div class="detail-label">Room:</div>
-                <div class="detail-value">
-                    <div class="room-name-display">${roomName}</div>
-                </div>
-            </div>
-            <div class="detail-row">
-                <div class="detail-label">Status:</div>
-                <div class="detail-value">
-                    <span class="status-badge-modern">
-                        <span>${statusIcon}</span>
-                        <span>${status.toUpperCase()}</span>
-                    </span>
-                </div>
-            </div>
-            <div class="detail-row">
-                <div class="detail-label">Reserved By:</div>
-                <div class="detail-value">${reservedBy}</div>
-            </div>
-            <div class="detail-row">
-                <div class="detail-label">Email:</div>
-                <div class="detail-value">${email}</div>
-            </div>
-            <div class="detail-row">
-                <div class="detail-label">Time:</div>
-                <div class="detail-value">
-                    <div class="time-display">${start} – ${end}</div>
-                </div>
-            </div>
-            <div class="detail-row">
-                <div class="detail-label">Remarks:</div>
-                <div class="detail-value">${remarks}</div>
-            </div>
-        </div>
-       `;
-
-       // BUTTONS - Fixed authorization logic
-       let buttonsHTML = "";
-
-       // Check if user can manage this reservation (case-insensitive comparison)
-       const canManage = isAdmin || currentUser.toLowerCase() === reservedBy.toLowerCase();
-
-       if (['approved', 'pending', 'booked'].includes(status) && canManage) {
-           buttonsHTML = `<div class="action-buttons">`;
-
-           // Show Approve/Reject buttons only for pending reservations and only for admins
-           if (status === 'pending' && isAdmin) {
-               buttonsHTML += `
-               <button id='approveResv' class='btn-modern btn-approve'>
-                   <span>✓</span> Approve
-               </button>
-               <button id='rejectResv' class='btn-modern btn-reject'>
-                   <span>✕</span> Reject
-               </button>`;
-           }
-
-           // Show Cancel button for approved/booked/pending if user has permission
-           buttonsHTML += `
-           <button id='cancelResv' class='btn-modern btn-cancel'>
-               <span>🗑</span> Cancel Reservation
-           </button>`;
-
-           buttonsHTML += `</div>`;
-       }
-
-       html += buttonsHTML;
-
-       Swal.fire({
-           title: `<div style="color: #0047AB; font-size: 1.5rem; font-weight: 700;">
-                       <i class="bi bi-calendar-check" style="margin-right: 8px;"></i>
-                       Reservation Details
-                   </div>`,
-           html,
-           width: 600,
-           showConfirmButton: false,
-           showCloseButton: true,
-           padding: '2rem',
-           customClass: {
-               popup: 'reservation-details-popup',
-               closeButton: 'reservation-close-btn'
-           },
-           didRender: () => {
-               // CANCEL BUTTON
-               const cancelBtn = document.getElementById("cancelResv");
-               if (cancelBtn) {
-                   cancelBtn.addEventListener("click", async () => {
-                       const confirmResult = await Swal.fire({
-                           title: 'Cancel Reservation?',
-                           html: `<p style="font-size: 1rem; color: #495057;">Are you sure you want to cancel this reservation?</p>
-                                  <p style="font-size: 0.9rem; color: #6c757d; margin-top: 12px;">
-                                      <strong>${roomName}</strong><br>
-                                      ${start} – ${end}
-                                  </p>`,
-                           icon: 'warning',
-                           showCancelButton: true,
-                           confirmButtonColor: '#dc3545',
-                           cancelButtonColor: '#6c757d',
-                           confirmButtonText: '<i class="bi bi-check-lg"></i> Yes, cancel it',
-                           cancelButtonText: '<i class="bi bi-x-lg"></i> No, keep it',
-                           reverseButtons: true,
-                           padding: '2rem'
-                       });
-
-                       if (confirmResult.isConfirmed) {
-                           try {
-                               const r = await fetch(`/api/cancel_reservation/${resId}`, {
-                                   method: "POST",
-                                   headers: {
-                                       'Content-Type': 'application/json'
-                                   }
-                               });
-                               const d = await r.json();
-
-                               if (d.success) {
-                                   Swal.fire({
-                                       icon: "success",
-                                       title: "Cancelled Successfully",
-                                       text: d.message,
-                                       confirmButtonColor: "#0047AB"
-                                   }).then(() => location.reload());
-                               } else {
-                                   Swal.fire({
-                                       icon: "error",
-                                       title: "Cancellation Failed",
-                                       text: d.message || "Unable to cancel reservation",
-                                       confirmButtonColor: "#0047AB"
-                                   });
-                               }
-                           } catch (err) {
-                               console.error('Cancel error:', err);
-                               Swal.fire({
-                                   icon: "error",
-                                   title: "System Error",
-                                   text: "Failed to cancel reservation. Please try again.",
-                                   confirmButtonColor: "#0047AB"
-                               });
-                           }
-                       }
-                   });
-               }
-
-               // APPROVE BUTTON
-               const approveBtn = document.getElementById("approveResv");
-               if (approveBtn) {
-                   approveBtn.addEventListener("click", async () => {
-                       try {
-                           const r = await fetch(`/approvals/${resId}/approve`, {
-                               method: "POST",
-                               headers: {
-                                   'Content-Type': 'application/json'
-                               }
-                           });
-
-                           if (r.ok) {
-                               Swal.fire({
-                                   icon: "success",
-                                   title: "Approved!",
-                                   text: "Reservation has been approved successfully.",
-                                   confirmButtonColor: "#0047AB"
-                               }).then(() => location.reload());
-                           } else {
-                               const errData = await r.json();
-                               Swal.fire({
-                                   icon: "error",
-                                   title: "Approval Failed",
-                                   text: errData.message || "Unable to approve reservation",
-                                   confirmButtonColor: "#0047AB"
-                               });
-                           }
-                       } catch (err) {
-                           console.error('Approve error:', err);
-                           Swal.fire({
-                               icon: "error",
-                               title: "System Error",
-                               text: "Failed to approve reservation.",
-                               confirmButtonColor: "#0047AB"
-                           });
-                       }
-                   });
-               }
-
-               // REJECT BUTTON
-               const rejectBtn = document.getElementById("rejectResv");
-               if (rejectBtn) {
-                   rejectBtn.addEventListener("click", async () => {
-                       const confirmResult = await Swal.fire({
-                           title: 'Reject Reservation?',
-                           text: 'This will deny the reservation request.',
-                           icon: 'warning',
-                           showCancelButton: true,
-                           confirmButtonColor: '#ffc107',
-                           cancelButtonColor: '#6c757d',
-                           confirmButtonText: 'Yes, reject it',
-                           cancelButtonText: 'Cancel'
-                       });
-
-                       if (confirmResult.isConfirmed) {
-                           try {
-                               const r = await fetch(`/approvals/${resId}/deny`, {
-                                   method: "POST",
-                                   headers: {
-                                       'Content-Type': 'application/json'
-                                   }
-                               });
-
-                               if (r.ok) {
-                                   Swal.fire({
-                                       icon: "success",
-                                       title: "Rejected",
-                                       text: "Reservation has been rejected.",
-                                       confirmButtonColor: "#0047AB"
-                                   }).then(() => location.reload());
-                               } else {
-                                   const errData = await r.json();
-                                   Swal.fire({
-                                       icon: "error",
-                                       title: "Rejection Failed",
-                                       text: errData.message || "Unable to reject reservation",
-                                       confirmButtonColor: "#0047AB"
-                                   });
-                               }
-                           } catch (err) {
-                               console.error('Reject error:', err);
-                               Swal.fire({
-                                   icon: "error",
-                                   title: "System Error",
-                                   text: "Failed to reject reservation.",
-                                   confirmButtonColor: "#0047AB"
-                               });
-                           }
-                       }
-                   });
-               }
-           }
-       });
-   } catch (err) {
-       console.error(err);
-       Swal.fire({
-           icon: "error",
-           title: "Error",
-           text: "Failed to load reservation details.",
-           confirmButtonColor: "#0047AB"
-       });
-   }
 }
-/* ========================= END showSlotDetails ========================= */
-  async function loadAndPaint(){
+
+/* =============================
+   Global Click Handler
+============================= */
+
+document.addEventListener("click", function(e){
+
+    const cell = e.target.closest(".cal-slot-cell");
+<!--    alert(!cell)-->
+    if (!cell) return;
+
+    console.log("Clicked cell:", cell);
+
+    const roomId = cell.dataset.roomId;
+    const slotMin = parseInt(cell.dataset.slotMin);
+
+    console.log("roomId:", roomId, "slotMin:", slotMin);
+
+    if (!roomId || !slotMin) return;
+
+    const key = `${parseInt(roomId)}_${parseInt(slotMin)}`;
+    const reservation = reservationMap[key];
+
+    console.log("reservation:", reservation);
+
+    if (!reservation) return;
+
+<!--    showReservationDetails(reservation);-->
+    window.parent.postMessage({
+    type: "SHOW_RESERVATION",
+    data: reservation
+}, "*");
+});
+
+/* =============================
+   Popup
+============================= */
+
+function showReservationDetails(res){
+
+    const status = (res.status || "").toLowerCase();
+
+    const statusMap = {
+        approved: { text: "APPROVED", bg: "#d1fae5", color: "#065f46" },
+        pending:  { text: "PENDING",  bg: "#fef3c7", color: "#92400e" },
+        blocked:  { text: "BLOCKED",  bg: "#fee2e2", color: "#991b1b" },
+        booked:   { text: "BOOKED",   bg: "#d1fae5", color: "#065f46" }
+    };
+
+    const badge = statusMap[status] || {
+        text: status.toUpperCase(),
+        bg: "#e5e7eb",
+        color: "#374151"
+    };
+
+    Swal.fire({
+        target: document.body,
+        backdrop: true,
+        width: 600,
+        showConfirmButton: false,
+        showCloseButton: true,
+        padding: "2rem",
+        html: `
+        <div style="text-align:center;margin-bottom:20px;">
+            <div style="font-size:28px;color:#0d47a1;">
+                <i class="bi bi-calendar-check"></i>
+            </div>
+            <h3 style="margin-top:8px;font-weight:700;color:#0d47a1;">
+                Reservation Details
+            </h3>
+        </div>
+
+        <div style="text-align:left;font-size:15px;">
+
+            ${detailRow("Room:", `<strong style="color:#0d47a1">${res.room}</strong>`)}
+            ${divider()}
+
+            ${detailRow("Status:",
+                `<span style="
+                    display:inline-block;
+                    padding:6px 14px;
+                    border-radius:20px;
+                    background:${badge.bg};
+                    color:${badge.color};
+                    font-weight:600;
+                    font-size:13px;
+                ">${badge.text}</span>`
+            )}
+            ${divider()}
+
+            ${detailRow("Reserved By:", res.reserved_by)}
+            ${divider()}
+
+            ${detailRow("Email:", res.email || "-")}
+            ${divider()}
+
+            ${detailRow("Time:",
+                `<span style="color:#0d47a1;font-weight:600;">
+                    ${res.start} — ${res.end}
+                </span>`
+            )}
+            ${divider()}
+
+            ${detailRow("Remarks:", res.remarks || "—")}
+
+        </div>
+
+        <div style="margin-top:30px;text-align:center;">
+            <button id="cancelBtn"
+                style="
+                    background:#dc2626;
+                    color:white;
+                    border:none;
+                    padding:12px 28px;
+                    border-radius:8px;
+                    font-weight:600;
+                    box-shadow:0 4px 12px rgba(220,38,38,0.3);
+                    cursor:pointer;
+                ">
+                <i class="bi bi-trash"></i>
+                Cancel Reservation
+            </button>
+        </div>
+        `,
+        didOpen: () => {
+
+            const btn = document.getElementById("cancelBtn");
+            if(!btn) return;
+
+            btn.addEventListener("click", async () => {
+
+                const confirm = await Swal.fire({
+                    title: "Confirm Cancellation?",
+                    icon: "warning",
+                    showCancelButton: true,
+                    confirmButtonColor: "#dc2626",
+                    confirmButtonText: "Yes, Cancel"
+                });
+
+                if(!confirm.isConfirmed) return;
+
+                const r = await fetch(`/api/cancel_reservation/${res.id}`, {
+                    method: "POST"
+                });
+
+                const d = await r.json();
+
+                if(d.success){
+                    Swal.fire("Cancelled!", "", "success")
+                        .then(()=> location.reload());
+                }else{
+                    Swal.fire("Error", d.message || "Cannot cancel", "error");
+                }
+            });
+        }
+    });
+
+    function detailRow(label, value){
+        return `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;">
+            <div style="color:#6b7280;width:140px;">${label}</div>
+            <div style="flex:1;text-align:left;">${value}</div>
+        </div>`;
+    }
+
+    function divider(){
+        return `<div style="border-bottom:1px solid #e5e7eb;"></div>`;
+    }
+}
+
+/* =============================
+   Load Data
+============================= */
+
+async function loadAndPaint(){
+
     clearGrid();
+
     const date = "{{ selected_date }}";
     const location = "{{ location_filter }}";
     const room = "{{ room_filter }}";
-    const url = `/api/reservations_v2_day?date=${encodeURIComponent(date)}&location=${encodeURIComponent(location)}&room=${encodeURIComponent(room)}`;
+
+    const url =
+        `/api/reservations_v2_day?date=${encodeURIComponent(date)}`
+        + `&location=${encodeURIComponent(location)}`
+        + `&room=${encodeURIComponent(room)}`;
+
     const res = await fetch(url);
     const data = await res.json();
+
     (data||[]).forEach(paintReservation);
-    requestAnimationFrame(() => setTimeout(scrollToFocusTime, 50));
-  }
+}
 
-  function scrollToFocusTime(){
-      const params = new URLSearchParams(window.location.search);
-      const focus = params.get("focus");
-      if (!focus) return;
+document.addEventListener("DOMContentLoaded", loadAndPaint);
 
-      const scroller = document.querySelector(".cal-grid-scroll");
-      if (!scroller) return;
-
-      const th = document.querySelector(`.cal-time-head[data-time="${CSS.escape(focus)}"]`);
-      if (!th) return;
-
-      const frozenCells = document.querySelectorAll("thead th.cal-col-room, thead th.cal-col-features, thead th.cal-col-cap");
-      let frozenWidth = 0;
-      frozenCells.forEach(c => frozenWidth += c.getBoundingClientRect().width);
-
-      const scRect = scroller.getBoundingClientRect();
-      const thRect = th.getBoundingClientRect();
-      const target = (thRect.left - scRect.left) + scroller.scrollLeft - frozenWidth - 16;
-
-      scroller.scrollLeft = Math.max(0, target);
-      th.classList.add("cal-focus-col");
-      setTimeout(() => th.classList.remove("cal-focus-col"), 1500);
-    }
-  document.addEventListener("DOMContentLoaded", loadAndPaint);
 </script>
 
 <style>
@@ -633,25 +432,31 @@ overflow: auto;
 
   /* Modern Booked Slot Styles */
   .cal-slot-cell.cal-booked {
-    background: var(--booked-bg);
-    color: white;
-    border-top: 4px solid white;
-    border-bottom: 4px solid white;
-    border-right-color: transparent;
-    border-left-color: transparent;
-  }
+  background: var(--booked-bg);
+  color: white;
+   box-shadow: inset 0 0 0 2px white;
+   transition: all 0.2s ease;
+}
+.cal-slot-cell.cal-booked {
+  transition: all 0.2s ease;
+}
 
+.cal-slot-cell.cal-booked:hover {
+  filter: brightness(1.1);
+  transform: scale(1.02);
+
+}
   .cal-slot-cell.cal-booked-start {
-    border-left: 2px solid var(--booked-border) !important;
-    border-top-left-radius: 8px;
-    border-bottom-left-radius: 8px;
-  }
+  border-left: 2px solid var(--booked-border) !important;
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+}
 
-  .cal-slot-cell.cal-booked-end {
-    border-right: 2px solid var(--booked-border) !important;
-    border-top-right-radius: 8px;
-    border-bottom-right-radius: 8px;
-  }
+.cal-slot-cell.cal-booked-end {
+  border-right: 2px solid var(--booked-border) !important;
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
 
   /* Focus Column Highlight */
   .cal-focus-col {
@@ -671,12 +476,7 @@ overflow: auto;
   position: relative;
 }
 
-.cal-booked {
-  background: #e6f2ff;
-}
 
-.cal-booked-start { border-left: 2px solid #2b7cff; }
-.cal-booked-end   { border-right: 2px solid #2b7cff; }
 
 /* Truncate long remarks nicely */
 td.cal-slot-cell.cal-booked-start {
@@ -707,6 +507,28 @@ td.cal-slot-cell.cal-booked-start {
 
 .clickable-slot:hover {
     background-color: #dbe7ff; /* light highlight */
+}
+    .cal-slot-cell {
+    cursor: pointer;
+}
+
+.cal-slot-cell {
+    position: relative;
+    z-index: 1;
+}
+    .cal-slot-cell.status-approved {
+  background: #10b981;
+  color: white;
+}
+
+.cal-slot-cell.status-pending {
+  background: #f59e0b;
+  color: white;
+}
+
+.cal-slot-cell.status-blocked {
+  background: #ef4444;
+  color: white;
 }
 </style>
 

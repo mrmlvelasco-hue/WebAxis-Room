@@ -4,13 +4,14 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="e38152d8-cf4c-4200-8245-858a548afff2" name="Changes" comment="Room 02/23/2026 Home laptop V2">
-      <change beforePath="$PROJECT_DIR$/.idea/WebAXIS Room.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/WebAXIS Room.iml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+    <list default="true" id="e38152d8-cf4c-4200-8245-858a548afff2" name="Changes" comment="Room 02/25/2026 Home laptop V2">
+      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_2_18_2026_7_46_PM_[Changes]/Pepsi_logo_Flash.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_2_18_2026_7_46_PM_[Changes]/shelved.patch" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_2_18_2026_7_46_PM__Changes_.xml" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/calendar_view.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/calendar_view.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/templates/calendar_view_v2_embed.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/calendar_view_v2_embed.html" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/templates/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/index.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/templates/reserve_v2.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/reserve_v2.html" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -36,12 +37,12 @@
     &quot;assignee&quot;: &quot;mrmlvelasco-hue&quot;
   }
 }</component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/mrmlvelasco-hue/WebAxis-Room.git",
-    "accountId": "2983f355-5b3f-42cc-95eb-38a80702a70b"
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/mrmlvelasco-hue/WebAxis-Room.git&quot;,
+    &quot;accountId&quot;: &quot;2983f355-5b3f-42cc-95eb-38a80702a70b&quot;
   }
-}]]></component>
+}</component>
   <component name="ProjectColorInfo">{
   &quot;associatedIndex&quot;: 1
 }</component>
@@ -211,7 +212,15 @@
       <option name="project" value="LOCAL" />
       <updated>1771601194067</updated>
     </task>
-    <option name="localTasksCounter" value="11" />
+    <task id="LOCAL-00011" summary="Room 02/24/2026 Home laptop V2">
+      <option name="closed" value="true" />
+      <created>1772013368710</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1772013368710</updated>
+    </task>
+    <option name="localTasksCounter" value="12" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -226,7 +235,8 @@
     <MESSAGE value="Room 12/01/2025 office" />
     <MESSAGE value="Room 02/19/2026 Home laptop V2" />
     <MESSAGE value="Room 02/20/2026 Home laptop V2" />
-    <option name="LAST_COMMIT_MESSAGE" value="Room 02/20/2026 Home laptop V2" />
+    <MESSAGE value="Room 02/24/2026 Home laptop V2" />
+    <option name="LAST_COMMIT_MESSAGE" value="Room 02/24/2026 Home laptop V2" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
