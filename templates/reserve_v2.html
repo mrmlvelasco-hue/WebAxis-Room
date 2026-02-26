@@ -480,35 +480,184 @@ function roundHour_00_30_60(dt) {
     submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Saving...`;
 
     try {
-      const res = await fetch(form.action, {
-        method: "POST",
-        body: fd,
-        headers: { "X-Requested-With": "XMLHttpRequest" }
-      });
+          const res = await fetch(form.action, {
+            method: "POST",
+            body: fd,
+            headers: { "X-Requested-With": "XMLHttpRequest" }
+          });
 
-      const data = await res.json();
+          const data = await res.json();
 
-      if (res.ok && data.success) {
-        const created = data.created_count || 0;
-        let html = `<b>${created}</b> reservations created.`;
-        if (data.skipped && data.skipped.length) {
-          html += `<br><b>${data.skipped.length}</b> skipped:<ul>`;
-          data.skipped.forEach(s => html += `<li>${s}</li>`);
-          html += `</ul>`;
+          // ===============================
+          // ✅ SUCCESS
+          // ===============================
+          if (res.ok && data.success) {
+
+            const created = data.created_count || 0;
+
+            const successHtml = `
+              <div style="text-align:left; font-size:0.95rem;">
+                <div style="margin-bottom:8px;">
+                  <b style="color:#0b8a44;">✔ ${created}</b> reservation(s) successfully created.
+                </div>
+                <div style="color:#6c757d;">
+                  All selected dates were available and confirmed.
+                </div>
+              </div>
+            `;
+
+            await Swal.fire({
+              icon: "success",
+              title: "Reservation Confirmed",
+              html: successHtml,
+              confirmButtonColor: "#0047AB",
+              width: 520
+            });
+
+            window.location.reload();
+            return;
+          }
+
+          // ===============================
+          // ❌ CONFLICT (ALL OR NOTHING)
+          // ===============================
+          if (res.status === 409 && data.conflicts) {
+              let html = `
+              <style>
+                .conflict-container {
+                    text-align:left;
+                    padding: 8px 0;
+                }
+                .conflict-card {
+                    border: 1px solid #eee;
+                    border-radius: 10px;
+                    padding: 12px 14px;
+                    margin-bottom: 12px;
+                    background: #fff;
+                }
+                .conflict-row {
+                    display:flex;
+                    padding:8px 0;
+                    border-bottom:1px solid #f1f1f1;
+                }
+                .conflict-row:last-child {
+                    border-bottom:none;
+                }
+                .conflict-label {
+                    min-width:110px;
+                    font-weight:600;
+                    color:#555;
+                }
+                .conflict-value {
+                    flex:1;
+                    color:#212529;
+                }
+                .conflict-date {
+                    font-weight:700;
+                    color:#0047AB;
+                    margin-bottom:6px;
+                    font-size:0.95rem;
+                }
+                .status-badge-conflict {
+                    display:inline-block;
+                    padding:4px 10px;
+                    border-radius:16px;
+                    background:#f8d7da;
+                    color:#721c24;
+                    font-size:0.75rem;
+                    font-weight:600;
+                }
+              </style>
+
+              <div class="conflict-container">
+                <div style="margin-bottom:10px;">
+                  <b style="color:#dc3545;">
+                    ${data.conflicts.length} conflict(s) detected
+                  </b>
+                </div>
+              `;
+
+              data.conflicts.forEach(c => {
+                html += `
+                  <div class="conflict-card">
+                    <div class="conflict-date">
+                      ${c.date}
+                    </div>
+
+                    <div class="conflict-row">
+                      <div class="conflict-label">Name:</div>
+                      <div class="conflict-value">${c.Name}</div>
+                    </div>
+
+                    <div class="conflict-row">
+                      <div class="conflict-label">Reserved By:</div>
+                      <div class="conflict-value">${c.conflict_with}</div>
+                    </div>
+
+                    <div class="conflict-row">
+                      <div class="conflict-label">Time:</div>
+                      <div class="conflict-value">
+                          ${formatTimeRange(c.time_range)}
+                      </div>
+                    </div>
+
+                    <div class="conflict-row">
+                      <div class="conflict-label">Status:</div>
+                      <div class="conflict-value">
+                        <span class="status-badge-conflict">CONFLICT</span>
+                      </div>
+                    </div>
+                  </div>
+                `;
+              });
+
+              html += `
+                  <div style="margin-top:8px; color:#6c757d;">
+                    No reservations were saved due to these conflicts.
+                  </div>
+                </div>
+              `;
+
+              await Swal.fire({
+                icon: "error",
+                title: "Reservation Conflict",
+                html: html,
+                width: 620,
+                confirmButtonColor: "#0047AB"
+              });
+
+              return;
+            }
+
+          // ===============================
+          // ⚠ OTHER FAILURE
+          // ===============================
+          throw new Error(data.message || "Unexpected system error.");
+
+        } catch (err) {
+
+          console.error("Submission error:", err);
+
+          await Swal.fire({
+            icon: "error",
+            title: "Submission Failed",
+            html: `
+              <div style="text-align:left;">
+                <div style="margin-bottom:8px;">
+                  Something went wrong while processing your reservation.
+                </div>
+                <div style="color:#dc3545;">
+                  ${err.message}
+                </div>
+              </div>
+            `,
+            confirmButtonColor: "#0047AB"
+          });
+
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = originalContent;
         }
-        Swal.fire({ icon: 'success', title: 'Reservation Submitted', html, confirmButtonColor: "#0047AB" })
-          .then(() => window.location.reload());
-      } else {
-        throw new Error(data.message || "System error.");
-      }
-
-    } catch (err) {
-      console.error("Submission error:", err);
-      alert("Error: " + err.message);
-    } finally {
-      submitBtn.disabled = false;
-      submitBtn.innerHTML = originalContent;
-    }
   });
 </script>
 <script>
@@ -767,6 +916,23 @@ document.addEventListener("DOMContentLoaded", wireAvailabilityAutoRefresh);
         return `<div style="border-bottom:1px solid #e5e7eb;"></div>`;
     }
 }
+    function formatTimeRange(range) {
+        if (!range) return "";
+
+        const parts = range.split(" - ");
+        if (parts.length !== 2) return range;
+
+        const formatSingle = (dtStr) => {
+            const d = new Date(dtStr);
+            if (isNaN(d)) return dtStr;
+
+            const hh = String(d.getHours()).padStart(2, '0');
+            const mm = String(d.getMinutes()).padStart(2, '0');
+            return `${hh}:${mm}`;
+        };
+
+        return `${formatSingle(parts[0])} – ${formatSingle(parts[1])}`;
+    }
 </script>
 
 <style>
