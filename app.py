@@ -1288,12 +1288,14 @@ def calendar_view_v2():
 
     # locations for dropdown
     cur.execute("""
-        SELECT DISTINCT ISNULL(NULLIF(LTRIM(RTRIM(location)), ''), 'General') AS location
-        FROM dbo.rooms
-        WHERE status='Active'
-         
-        ORDER BY ISNULL(NULLIF(LTRIM(RTRIM(location)), ''), 'General')
-    """)
+        SELECT DISTINCT ISNULL(NULLIF(LTRIM(RTRIM(r.location)), ''), 'General') AS location
+        FROM dbo.rooms r (NOLOCK) JOIN 
+        user_locations ul (NOLOCK) on r.location = ul.location_name
+        WHERE
+        ul.user_id = ? 
+        AND  status='Active'
+        ORDER BY ISNULL(NULLIF(LTRIM(RTRIM(r.location)), ''), 'General')
+    """,current_user.id)
     locations = [str(r[0]) for r in cur.fetchall()]
 
     # rooms list
@@ -1305,6 +1307,12 @@ def calendar_view_v2():
         WHERE status='Active'
     """
     params = []
+    # 🔒 Enforce user access
+    if allowed_locations is not None:
+        placeholders = ",".join(["?"] * len(allowed_locations))
+        sql += f" AND location IN ({placeholders})"
+        params.extend(allowed_locations)
+
     if location_filter.lower() != 'all':
         sql += " AND LOWER(LTRIM(RTRIM(location))) = LOWER(?)"
         params.append(location_filter)
@@ -1314,6 +1322,8 @@ def calendar_view_v2():
     sql += " ORDER BY location, name"
 
     cur.execute(sql, params)
+    print("🧩 SQL:", sql)
+
     rows = cur.fetchall()
     conn.close()
 
@@ -1349,7 +1359,13 @@ def calendar_view_v2():
 @app.route("/api/reservations_v2_day")
 @login_required
 def api_reservations_v2_day():
-
+    """
+    For calendar_view_v2 Excel-style grid (30-min slots).
+    Params:
+      - date=YYYY-MM-DD
+      - location=all|<location>
+      - room=all|<room name>
+    """
     from datetime import datetime, timedelta, time as dt_time
 
     date_str = (request.args.get("date") or "").strip()
@@ -1361,8 +1377,8 @@ def api_reservations_v2_day():
     except:
         return jsonify([])
 
-    day_start = datetime.combine(d, dt_time.min)
-    day_end = day_start + timedelta(days=1)
+    day_start = datetime.combine(d, dt_time.min)          # 00:00
+    day_end = day_start + timedelta(days=1)               # next day 00:00
 
     conn = get_db_connection()
     cur = conn.cursor()
@@ -1377,10 +1393,11 @@ def api_reservations_v2_day():
         # Example: if user table has assigned location
         cur.execute("""
             SELECT DISTINCT location
-            FROM rooms
+            FROM rooms r (nolock) 
+            JOIN user_locations ul (NOLOCK) on r.location = ul.location_name
             WHERE status='Active'
-              AND group_code = ?
-        """, (current_user.group_code,))
+            and ul.user_id= ?
+        """, (current_user.id,))
         allowed_locations = [r[0] for r in cur.fetchall()]
 
         # If user has no assigned locations → return empty
@@ -1404,13 +1421,13 @@ def api_reservations_v2_day():
             ISNULL(r.remarks,'') AS remarks,
             r.status,
             r.email
-        FROM dbo.reservations r (NOLOCK)
-        INNER JOIN dbo.rooms (NOLOCK) rm ON rm.id = r.room_id
+        FROM dbo.reservations r
+        INNER JOIN dbo.rooms rm ON rm.id = r.room_id
         WHERE rm.status='Active'
           AND r.status IN ('Approved','Pending','Blocked')
+          -- ✅ overlap logic (shows full duration)
           AND r.start_time < ? AND r.end_time > ?
     """
-
     params = [day_end, day_start]
 
     # 🔒 Enforce user access
@@ -1437,7 +1454,7 @@ def api_reservations_v2_day():
     events = []
     for row in rows:
         events.append({
-            "id": int(row.reservation_id),
+            "id": int(row.reservation_id),   # ✅ unique reservation id
             "room_id": int(row.room_id),
             "room": str(row.room_name),
             "location": str(row.location),
@@ -1450,7 +1467,6 @@ def api_reservations_v2_day():
         })
 
     return jsonify(events)
-
 
 
 @app.route("/calendar_view")
@@ -2330,7 +2346,7 @@ def api_cancel_reservation(res_id):
                     rev.id = ?
                     AND r.is_combined = 1
                     AND crev.reserved_by LIKE '%' + rev.reserved_by + '%'
-                    AND crev.status = 'Blocked';
+                    AND crev.status in ('Blocked','Pending','Approved');
 
         """, (res_id))
 

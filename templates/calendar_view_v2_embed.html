@@ -366,6 +366,8 @@ async function loadAndPaint(){
         + `&location=${encodeURIComponent(location)}`
         + `&room=${encodeURIComponent(room)}`;
 
+
+
     const res = await fetch(url);
     const data = await res.json();
 

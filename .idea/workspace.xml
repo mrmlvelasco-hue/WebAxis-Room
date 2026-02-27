@@ -4,14 +4,12 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="e38152d8-cf4c-4200-8245-858a548afff2" name="Changes" comment="Room 02/23/2026 Home laptop V2">
+    <list default="true" id="e38152d8-cf4c-4200-8245-858a548afff2" name="Changes" comment="Room 02/25/2026 Home laptop V2">
       <change beforePath="$PROJECT_DIR$/.idea/WebAXIS Room.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/WebAXIS Room.iml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_2_19_2026_7_15_PM_[Changes]/Pepsi_logo_Flash.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_2_19_2026_7_15_PM_[Changes]/shelved.patch" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_2_19_2026_7_15_PM__Changes_.xml" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/calendar_view_v2_embed.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/calendar_view_v2_embed.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/templates/reserve_v2.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/reserve_v2.html" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -40,7 +38,7 @@
   <component name="GithubPullRequestsUISettings">{
   &quot;selectedUrlAndAccountId&quot;: {
     &quot;url&quot;: &quot;https://github.com/mrmlvelasco-hue/WebAxis-Room.git&quot;,
-    &quot;accountId&quot;: &quot;5cb6a370-6101-4134-8beb-5de7ec3dd091&quot;
+    &quot;accountId&quot;: &quot;2983f355-5b3f-42cc-95eb-38a80702a70b&quot;
   }
 }</component>
   <component name="ProjectColorInfo">{
@@ -60,7 +58,7 @@
     "JavaScript Debug.admin.html.executor": "Run",
     "JavaScript Debug.user_maintenance.html.executor": "Run",
     "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "Python.PCPPI_Room.executor": "Debug",
+    "Python.PCPPI_Room.executor": "Run",
     "Python.app.executor": "Run",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
@@ -94,7 +92,7 @@
         <env name="PYTHONUNBUFFERED" value="1" />
       </envs>
       <option name="SDK_HOME" value="" />
-      <option name="SDK_NAME" value="Python 3.13 (WebAXIS Room)" />
+      <option name="SDK_NAME" value="Python 3.13 (WebAxis-Room)" />
       <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
       <option name="IS_MODULE_SDK" value="false" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
@@ -117,7 +115,7 @@
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-python-sdk-b3d66beaba9a-c6efb3732140-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-252.26199.168" />
+        <option value="bundled-python-sdk-7e47963ff851-f0eec537fc84-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-252.23892.515" />
       </set>
     </attachedChunks>
   </component>
@@ -212,11 +210,30 @@
       <option name="project" value="LOCAL" />
       <updated>1771601194067</updated>
     </task>
-    <option name="localTasksCounter" value="11" />
+    <task id="LOCAL-00011" summary="Room 02/24/2026 Home laptop V2">
+      <option name="closed" value="true" />
+      <created>1772013368710</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1772013368710</updated>
+    </task>
+    <option name="localTasksCounter" value="12" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Room 11/09/2025" />
@@ -227,14 +244,20 @@
     <MESSAGE value="Room 12/01/2025 office" />
     <MESSAGE value="Room 02/19/2026 Home laptop V2" />
     <MESSAGE value="Room 02/20/2026 Home laptop V2" />
-    <option name="LAST_COMMIT_MESSAGE" value="Room 02/20/2026 Home laptop V2" />
+    <MESSAGE value="Room 02/24/2026 Home laptop V2" />
+    <option name="LAST_COMMIT_MESSAGE" value="Room 02/24/2026 Home laptop V2" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
       <breakpoints>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/app.py</url>
-          <line>728</line>
+          <line>482</line>
+          <option name="timeStamp" value="7" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/app.py</url>
+          <line>846</line>
           <option name="timeStamp" value="14" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
@@ -244,33 +267,43 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/app.py</url>
-          <line>2512</line>
-          <option name="timeStamp" value="28" />
+          <line>2263</line>
+          <option name="timeStamp" value="30" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/app.py</url>
-          <line>1247</line>
+          <line>1403</line>
+          <option name="timeStamp" value="31" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/app.py</url>
+          <line>1439</line>
+          <option name="timeStamp" value="32" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/app.py</url>
+          <line>1371</line>
           <option name="timeStamp" value="33" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/app.py</url>
-          <line>1907</line>
+          <line>1286</line>
           <option name="timeStamp" value="34" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/app.py</url>
-          <line>834</line>
-          <option name="timeStamp" value="40" />
+          <line>1323</line>
+          <option name="timeStamp" value="35" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/app.py</url>
-          <line>1373</line>
-          <option name="timeStamp" value="44" />
+          <line>1315</line>
+          <option name="timeStamp" value="36" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/app.py</url>
-          <line>1354</line>
-          <option name="timeStamp" value="45" />
+          <line>1310</line>
+          <option name="timeStamp" value="37" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>

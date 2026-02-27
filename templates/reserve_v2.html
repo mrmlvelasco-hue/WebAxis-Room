@@ -8,7 +8,7 @@
       <h2 class="h3 mb-1 fw-bold text-dark"><i class="bi bi-calendar-plus text-primary me-2"></i>Reserve Room</h2>
       <p class="text-muted small mb-0">Schedule your meetings and manage room availability.</p>
     </div>
-    <a href="{{ url_for('room_list') }}" class="btn btn-outline-secondary btn-sm shadow-sm">
+    <a href="{{ url_for('room_list') }}" class="btn btn-outline-secondary btn-sm shadow-sm" style="display:none;">
       <i class="bi bi-arrow-left"></i> Back to Rooms
     </a>
   </div>
@@ -87,7 +87,7 @@
                 </span>
               </div>
               <div class="d-flex gap-2">
-                <a href="#" class="btn btn-outline-primary" id="viewCalendarBtn" style="display:none;">
+                <a href="#" class="btn btn-outline-primary" id="viewCalendarBtn">
                   <i class="bi bi-calendar3"></i> View Full Calendar
                 </a>
                 <button type="submit" class="btn btn-primary px-4 shadow-sm fw-bold" id="submitBtn" disabled>
@@ -332,22 +332,16 @@ function roundHour_00_30_60(dt) {
   }
 
   function updateCalendarLink() {
-    if (!viewCalendarBtn) return;
-
-    if (!selectedLocation) {
-      viewCalendarBtn.style.display = 'none';
-      viewCalendarBtn.href = '#';
-      return;
-    }
-
-    const params = new URLSearchParams();
-    params.set('location', selectedLocation);
-    params.set('date', todayStr());
-    if (selectedRoomName) params.set('room', selectedRoomName);
-
-    viewCalendarBtn.href = `/calendar_view?${params.toString()}`;
-    viewCalendarBtn.style.display = '';
-  }
+  if (!viewCalendarBtn) return;
+  const params = new URLSearchParams();
+  const loc = selectedLocation || 'all';
+  params.set('location', loc);
+  params.set('date', todayStr());
+  params.set('room', selectedRoomName || 'all');
+  // Use v2 calendar route by default
+  viewCalendarBtn.href = `/calendar_view?embed=1${params.toString()}`;
+  viewCalendarBtn.style.display = '';
+}
 
   function populateRoomsForLocation(loc) {
     const filtered = ROOMS.filter(r => (r.location || 'General') === loc);
@@ -424,7 +418,7 @@ function roundHour_00_30_60(dt) {
     if (el) el.addEventListener('change', syncEndsInputs);
   });
   syncEndsInputs();
-
+   updateCalendarLink();
   // ===============================
   // FINAL SUBMIT HANDLER (FIXED)
   // ===============================
@@ -463,8 +457,6 @@ function roundHour_00_30_60(dt) {
     fd.append("weekly_interval",
       form.querySelector('[name="weekly_interval"]')?.value || 1
     );
-
-
 
     // end mode
     let endMode = "never";
