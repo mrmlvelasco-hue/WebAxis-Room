@@ -187,30 +187,40 @@ function paintReservation(ev){
 document.addEventListener("click", function(e){
 
     const cell = e.target.closest(".cal-slot-cell");
-<!--    alert(!cell)-->
     if (!cell) return;
 
-    console.log("Clicked cell:", cell);
+    const row = cell.closest("tr");
+    if (!row) return;
 
-    const roomId = cell.dataset.roomId;
-    const slotMin = parseInt(cell.dataset.slotMin);
+    const roomId = row.dataset.roomId;
+    const slotIndex = parseInt(cell.dataset.slotIndex);
 
-    console.log("roomId:", roomId, "slotMin:", slotMin);
+    if (!roomId || isNaN(slotIndex)) return;
 
-    if (!roomId || !slotMin) return;
+    const slotMin = GRID_START_MIN + (slotIndex * SLOT_MINUTES);
 
-    const key = `${parseInt(roomId)}_${parseInt(slotMin)}`;
+    const key = `${roomId}_${slotMin}`;
     const reservation = reservationMap[key];
+    console.log("roomId:", roomId);
+    console.log("slotMin:", slotMin);
+    console.log("isNaN:", isNaN(slotMin));
 
-    console.log("reservation:", reservation);
+    // Booked slot
+    if (reservation) {
+        window.parent.postMessage({
+            type: "SHOW_RESERVATION",
+            data: reservation
+        }, "*");
+        return;
+    }
 
-    if (!reservation) return;
-
-<!--    showReservationDetails(reservation);-->
+    // Empty slot
     window.parent.postMessage({
-    type: "SHOW_RESERVATION",
-    data: reservation
-}, "*");
+        type: "OPEN_NEW_RESERVATION",
+        room_id: roomId,
+        slot_min: slotMin
+    }, "*");
+
 });
 
 /* =============================
@@ -282,7 +292,7 @@ function showReservationDetails(res){
             )}
             ${divider()}
 
-            ${detailRow("Remarks:", res.remarks || "—")}
+            ${detailRow("Meeting Title:", res.remarks || "—")}
 
         </div>
 

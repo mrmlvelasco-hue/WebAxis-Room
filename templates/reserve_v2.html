@@ -12,96 +12,60 @@
       <i class="bi bi-arrow-left"></i> Back to Rooms
     </a>
   </div>
+<div class="container-fluid py-2">
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3">
 
+  <!-- LEFT: FILTERS -->
+  <div class="d-flex align-items-center gap-2 flex-wrap">
+
+    <select id="locationFilterHeader"
+            class="form-select form-select-sm"
+            style="min-width:160px;">
+      <option value="all">All Locations</option>
+      {% for loc in locations %}
+        <option value="{{ loc }}">{{ loc }}</option>
+      {% endfor %}
+    </select>
+
+    <select id="roomFilterHeader"
+            class="form-select form-select-sm"
+            style="min-width:160px;">
+      <option value="all">All Rooms</option>
+    </select>
+
+    <button id="applyFilterBtn"
+            class="btn btn-primary btn-sm">
+      <i class="bi bi-funnel me-1"></i>
+      Apply Filters
+    </button>
+
+  </div>
+
+  <!-- RIGHT: ACTION BUTTONS -->
+  <div class="d-flex align-items-center gap-2">
+
+    <button id="openReserveBtn"
+            class="btn btn-success btn-sm">
+      <i class="bi bi-calendar-plus me-1"></i>
+      Reserve Room
+    </button>
+
+    <a id="viewFullCalendarBtn"
+
+       href="/calendar_view?embed=1${params.toString()}"
+       class="btn btn-outline-primary btn-sm">
+      <i class="bi bi-calendar3 me-1"></i>
+      View Full Calendar
+    </a>
+
+  </div>
+
+</div>
   <div class="row g-4">
-    <div class="col-lg-8">
-      <div class="card border-0 shadow-sm mb-4">
-        <div class="card-header bg-white py-3">
-          <h6 class="card-title mb-0 fw-bold text-uppercase small tracking-wider">
-            <i class="bi bi-info-circle me-2 text-primary"></i>1. Room Selection & Timing
-          </h6>
-        </div>
-        <div class="card-body bg-light-50">
-          <div class="row g-3">
-            <div class="col-md-6">
-              <label class="form-label fw-semibold small">Location</label>
-              <div class="input-group input-group-sm">
-                <span class="input-group-text bg-white"><i class="bi bi-geo-alt"></i></span>
-                <select id="locationSelect" class="form-select" required>
-                  <option value="" selected disabled>Select location...</option>
-                  {% for loc in locations %}
-                    <option value="{{ loc|e }}">{{ loc }}</option>
-                  {% endfor %}
-                </select>
-              </div>
-            </div>
 
-            <div class="col-md-6">
-              <label class="form-label fw-semibold small">Room Name</label>
-              <div class="input-group input-group-sm">
-                <span class="input-group-text bg-white"><i class="bi bi-door-closed"></i></span>
-                <select id="roomSelect" class="form-select" required disabled>
-                  <option value="" selected disabled>Select room...</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="col-12">
-              <label class="form-label fw-semibold small">Room Features</label>
-              <textarea id="featuresBox" class="form-control form-control-sm bg-white" rows="2" readonly
-                        placeholder="Select a room to view its equipment and capacity..."></textarea>
-            </div>
-
-            <div class="col-md-6">
-              <label class="form-label fw-semibold small">Start Time</label>
-              <input id="start_time" name="start_time" type="datetime-local" class="form-control form-control-sm" step="1800" required>
-            </div>
-
-            <div class="col-md-6">
-              <label class="form-label fw-semibold small">End Time</label>
-              <input id="end_time" name="end_time" type="datetime-local" class="form-control form-control-sm" required>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="card border-0 shadow-sm">
-        <div class="card-header bg-white py-3">
-          <h6 class="card-title mb-0 fw-bold text-uppercase small tracking-wider">
-            <i class="bi bi-pencil-square me-2 text-primary"></i>2. Purpose
-          </h6>
-        </div>
-        <div class="card-body">
-          <form id="reserveV2Form" method="POST" action="#">
-            <div class="mb-3">
-              <textarea name="remarks" id="remarks" class="form-control" rows="3" placeholder="What is this meeting about? (e.g. Project Sync, Client Interview)"></textarea>
-            </div>
-
-            <input type="hidden" name="reserved_by" id="reserved_by_hidden" value="{{ current_user.display_name or current_user.username }}">
-            <input type="hidden" name="email" id="email_hidden" value="{{ current_user.email or '' }}">
-
-            <div class="d-flex justify-content-between align-items-center bg-light p-3 rounded">
-              <div id="statusBadgeContainer">
-                <span class="badge bg-secondary-subtle text-secondary border px-3 py-2" id="uiStatusBadge">
-                  <i class="bi bi-circle-fill me-1 small"></i> Waiting for selection
-                </span>
-              </div>
-              <div class="d-flex gap-2">
-                <a href="#" class="btn btn-outline-primary" id="viewCalendarBtn">
-                  <i class="bi bi-calendar3"></i> View Full Calendar
-                </a>
-                <button type="submit" class="btn btn-primary px-4 shadow-sm fw-bold" id="submitBtn" disabled>
-                  Confirm Reservation <i class="bi bi-chevron-right ms-1"></i>
-                </button>
-              </div>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
 
     <div class="col-lg-4">
-      <div class="card border-0 shadow-sm mb-4">
+      <div class="card border-0 shadow-sm mb-4" style="display:none;">
         <div class="card-body text-center py-4">
           <div class="avatar-placeholder rounded-circle bg-primary text-white d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px; font-size: 1.5rem;">
             {{ (current_user.display_name or current_user.username)[0] | upper }}
@@ -111,65 +75,7 @@
         </div>
       </div>
 
-      <div class="card border-0 shadow-sm">
-        <div class="card-header bg-white py-3">
-          <h6 class="card-title mb-0 fw-bold text-uppercase small tracking-wider">
-            <i class="bi bi-repeat me-2 text-primary"></i>Recurrence
-          </h6>
-        </div>
-        <div class="card-body">
-          <div class="mb-3">
-            <label class="form-label fw-semibold small">Frequency</label>
-            <select class="form-select form-select-sm border-dashed" name="repeat_rule" id="repeat_rule">
-              <option value="none" selected>One-time event</option>
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-            </select>
-          </div>
 
-          <div id="weeklyOptions" class="p-2 bg-light rounded mb-3" style="display:none;">
-            <label class="form-label fw-semibold small d-block mb-2 text-center">Repeat on</label>
-            <div class="d-flex justify-content-between px-1">
-              {% for day, code in [('M','MO'), ('T','TU'), ('W','WE'), ('T','TH'), ('F','FR'), ('S','SA'), ('S','SU')] %}
-              <div class="text-center">
-                <input type="checkbox" class="btn-check" id="dow{{code}}" value="{{code}}">
-                <label class="btn btn-outline-primary btn-sm rounded-circle p-0" for="dow{{code}}" style="width: 32px; height: 32px; line-height: 30px;">{{day}}</label>
-              </div>
-              {% endfor %}
-            </div>
-          </div>
-
-          <div class="mt-3 pt-3 border-top">
-            <label class="form-label fw-semibold small mb-2">Ends</label>
-            <div class="vstack gap-2">
-              <div class="form-check custom-radio-card p-2 border rounded">
-                <input class="form-check-input ms-0 me-2" type="radio" name="repeat_ends" id="endsNever" value="never" checked>
-                <label class="form-check-label small" for="endsNever">Ongoing</label>
-              </div>
-
-              <div class="form-check custom-radio-card p-2 border rounded">
-                <div class="d-flex align-items-center gap-2">
-                  <input class="form-check-input ms-0 me-2" type="radio" name="repeat_ends" id="endsOn" value="on">
-                  <label class="form-check-label small me-auto" for="endsOn">On Date</label>
-                  <input type="date" class="form-control form-control-sm w-50" id="endsOnDate" disabled>
-                </div>
-              </div>
-
-              <div class="form-check custom-radio-card p-2 border rounded">
-                <div class="d-flex align-items-center gap-2">
-                  <input class="form-check-input ms-0 me-2" type="radio" name="repeat_ends" id="endsAfter" value="after">
-                  <label class="form-check-label small me-auto" for="endsAfter">After</label>
-                  <div class="input-group input-group-sm w-50">
-                    <input type="number" min="1" class="form-control" id="endsAfterCount" disabled>
-                    <span class="input-group-text">times</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
 
@@ -184,6 +90,188 @@
     </div>
     <div class="card-body p-0 bg-dark-subtle">
       <iframe id="availabilityFrame" src="" style="width:100%; height:450px; border:0; display:block;"></iframe>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="reserveModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg modal-fullscreen-sm-down">
+    <div class="modal-content border-0 shadow-lg">
+
+      <!-- HEADER -->
+      <div class="modal-header bg-light">
+        <h5 class="modal-title fw-bold text-primary">
+          <i class="bi bi-calendar-plus me-2"></i>
+          New Reservation
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+
+      <div class="modal-body">
+
+        <!-- ROOM NAME -->
+        <div class="mb-4">
+          <label class="text-muted small fw-semibold">Room</label>
+          <div id="modalRoomLabel"
+               class="fw-bold fs-5 text-dark border rounded p-3 bg-light">
+            -
+          </div>
+        </div>
+
+        <!-- ===================== -->
+        <!-- SCHEDULE SECTION -->
+        <!-- ===================== -->
+        <div class="mb-4">
+          <h6 class="text-primary fw-bold small mb-3">Schedule</h6>
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label small">Start</label>
+              <input type="datetime-local"
+                     id="modalStartTime"
+                     class="form-control"
+                     step="1800">
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label small">End</label>
+              <input type="datetime-local"
+                     id="modalEndTime"
+                     class="form-control"
+                     step="1800">
+            </div>
+          </div>
+        </div>
+
+        <!-- ===================== -->
+        <!-- YOUR DETAILS -->
+        <!-- ===================== -->
+        <div class="mb-4">
+          <h6 class="text-primary fw-bold small mb-3">Your Details</h6>
+
+          <div class="mb-3">
+            <label class="form-label small">Reserved By</label>
+            <input type="text"
+                   class="form-control bg-light"
+                   value="{{ current_user.display_name or current_user.username }}"
+                   readonly>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label small">Email</label>
+            <input type="email"
+                   class="form-control bg-light"
+                   value="{{ current_user.email }}"
+                   readonly>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label small">Remarks</label>
+            <textarea id="modalMeetingTitle"
+                      class="form-control"
+                      maxlength="60"
+                      rows="2"
+                      placeholder="Enter meeting title (max 60 characters)">
+            </textarea>
+          </div>
+        </div>
+
+        <!-- ===================== -->
+        <!-- ROOM FEATURES -->
+        <!-- ===================== -->
+        <div class="mb-4">
+          <label class="form-label fw-semibold small">Room Features</label>
+          <div id="featuresContainer"
+               class="d-flex flex-wrap gap-2 p-2 bg-light rounded border">
+          </div>
+        </div>
+
+        <!-- ===================== -->
+        <!-- REPEAT -->
+        <!-- ===================== -->
+        <div class="mb-4">
+          <h6 class="text-primary fw-bold small mb-3">Repeat</h6>
+
+          <select class="form-select form-select-sm"
+                  id="repeat_rule">
+            <option value="none" selected>No repeat</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+        </div>
+
+        <!-- ===================== -->
+        <!-- ENDS -->
+        <!-- ===================== -->
+        <div>
+          <label class="form-label fw-semibold small mb-2">Ends</label>
+
+          <div class="vstack gap-2">
+
+            <div class="form-check">
+              <input class="form-check-input"
+                     type="radio"
+                     name="repeat_ends"
+                     id="endsNever"
+                     value="never"
+                     checked>
+              <label class="form-check-label small" for="endsNever">
+                Never (max 1 year)
+              </label>
+            </div>
+
+            <div class="form-check">
+              <input class="form-check-input"
+                     type="radio"
+                     name="repeat_ends"
+                     id="endsOn"
+                     value="on">
+              <label class="form-check-label small" for="endsOn">
+                On date
+              </label>
+              <input type="date"
+                     id="endsOnDate"
+                     class="form-control form-control-sm mt-1"
+                     disabled>
+            </div>
+
+            <div class="form-check">
+              <input class="form-check-input"
+                     type="radio"
+                     name="repeat_ends"
+                     id="endsAfter"
+                     value="after">
+              <label class="form-check-label small" for="endsAfter">
+                After
+              </label>
+              <div class="input-group input-group-sm mt-1">
+                <input type="number"
+                       id="endsAfterCount"
+                       min="1"
+                       class="form-control"
+                       disabled>
+                <span class="input-group-text">occurrences</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+
+      <!-- FOOTER -->
+      <div class="modal-footer">
+        <button class="btn btn-secondary"
+                data-bs-dismiss="modal">
+          Cancel
+        </button>
+        <button id="submitBtn"
+                class="btn btn-primary">
+          Submit
+        </button>
+      </div>
+
     </div>
   </div>
 </div>
@@ -214,550 +302,328 @@
 
 {% block scripts %}
 <script>
-/** ----- Utilities for <input type="datetime-local"> ----- **/
+document.addEventListener("DOMContentLoaded", function () {
 
-function toDatetimeLocalValue(d) {
-  // Format: YYYY-MM-DDTHH:MM (local time, no seconds)
-  const pad = (n) => String(n).padStart(2, '0');
-  const year = d.getFullYear();
-  const month = pad(d.getMonth() + 1);
-  const day = pad(d.getDate());
-  const hours = pad(d.getHours());
-  const minutes = pad(d.getMinutes());
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
-}
+    /* =========================================================
+       GLOBAL DATA
+    ========================================================== */
 
-function fromDatetimeLocalValue(val) {
-  // Accepts "YYYY-MM-DDTHH:MM" (or with seconds) as local time
-  if (!val) return null;
-  const [datePart, timePart] = val.split('T');
-  if (!datePart || !timePart) return null;
-  const [y, m, d] = datePart.split('-').map(Number);
-  const [hh, mm = '0'] = timePart.split(':');
-  const dt = new Date(y, Number(m) - 1, Number(d), Number(hh), Number(mm), 0, 0);
-  return isNaN(dt.getTime()) ? null : dt;
-}
+    const ROOMS = {{ rooms_json | safe }};
+    const modalEl = document.getElementById("reserveModal");
+    const submitBtn = document.getElementById("submitBtn");
 
-/** ----- Custom rounding: [00..14]->:00, [15..30]->:30, [31..59]->next hour ----- **/
-function roundHour_00_30_60(dt) {
-  const d = new Date(dt.getTime());
-  const m = d.getMinutes();
+    const locationFilter = document.getElementById("locationFilterHeader");
+    const roomFilter = document.getElementById("roomFilterHeader");
+    const applyBtn = document.getElementById("applyFilterBtn");
+    const iframe = document.getElementById("availabilityFrame");
 
-  if (m <= 14) {
-    // 00..14 -> :00 of same hour
-    d.setMinutes(0, 0, 0);
-  } else if (m <= 30) {
-    // 15..30 -> :30 of same hour (30 inclusive)
-    d.setMinutes(30, 0, 0);
-  } else {
-    // 31..59 -> :00 of next hour
-    d.setMinutes(0, 0, 0);
-    d.setHours(d.getHours() + 1);
-  }
-  return d;
-}
+    if (!modalEl || !submitBtn) return;
 
-/** ----- Wire up your Start/End inputs ----- **/
-(function wireDatetimeInputs() {
-  const startInput = document.getElementById('start_time');
-  const endInput   = document.getElementById('end_time');
+    /* =========================================================
+       HEADER FILTERS → IFRAME
+    ========================================================== */
 
-  function applySnap(inputEl) {
-    if (!inputEl.value) return null;
-    const dt = fromDatetimeLocalValue(inputEl.value);
-    if (!dt) return null;
-    const snapped = roundHour_00_30_60(dt);
-    const newVal = toDatetimeLocalValue(snapped);
-    if (newVal !== inputEl.value) inputEl.value = newVal;
-    return snapped;
-  }
+    if (locationFilter) {
+        locationFilter.addEventListener("change", function () {
 
-  function enforceOrder() {
-    // Ensure end >= start (optional)
-    const s = fromDatetimeLocalValue(startInput.value);
-    const e = fromDatetimeLocalValue(endInput.value);
-    if (s && e && e < s) {
-      endInput.value = toDatetimeLocalValue(s);
-    }
-  }
+            const loc = this.value;
+            roomFilter.innerHTML = `<option value="all">All Rooms</option>`;
 
-  const onCommit = () => {
-    applySnap(startInput);
-    applySnap(endInput);
-    enforceOrder();
-  };
+            const filteredRooms = ROOMS.filter(r =>
+                loc === "all" || (r.location || "General") === loc
+            );
 
-  // Round on change and blur
-  startInput.addEventListener('change', onCommit);
-  startInput.addEventListener('blur', onCommit);
-  endInput.addEventListener('change', onCommit);
-  endInput.addEventListener('blur', onCommit);
-
-  // Optional: match both spinners to 30-min steps (you already set Start to 1800)
-  if (!endInput.hasAttribute('step')) {
-    endInput.setAttribute('step', String(1800)); // 1800 sec = 30 minutes
-  }
-})();
-</script>
-
-
-<script>
-  // Rooms data from server
-  const ROOMS = {{ rooms_json | safe }};
-
-  const locationSelect = document.getElementById('locationSelect');
-  const roomSelect = document.getElementById('roomSelect');
-  const featuresBox = document.getElementById('featuresBox');
-  const form = document.getElementById('reserveV2Form');
-  const submitBtn = document.getElementById('submitBtn');
-  const viewCalendarBtn = document.getElementById('viewCalendarBtn');
-
-  let selectedLocation = null;
-  let selectedRoomName = null;
-
-  const startInput = document.getElementById('start_time');
-  const endInput = document.getElementById('end_time');
-
-  // repeat UI
-  const repeatRule = document.getElementById('repeat_rule');
-  const weeklyOptions = document.getElementById('weeklyOptions');
-  const endsNever = document.getElementById('endsNever');
-  const endsOn = document.getElementById('endsOn');
-  const endsAfter = document.getElementById('endsAfter');
-  const endsOnDate = document.getElementById('endsOnDate');
-  const endsAfterCount = document.getElementById('endsAfterCount');
-
-  function todayStr() {
-    return new Date().toISOString().split('T')[0];
-  }
-
-  function updateCalendarLink() {
-  if (!viewCalendarBtn) return;
-  const params = new URLSearchParams();
-  const loc = selectedLocation || 'all';
-  params.set('location', loc);
-  params.set('date', todayStr());
-  params.set('room', selectedRoomName || 'all');
-  // Use v2 calendar route by default
-  viewCalendarBtn.href = `/calendar_view?embed=1${params.toString()}`;
-  viewCalendarBtn.style.display = '';
-}
-
-  function populateRoomsForLocation(loc) {
-    const filtered = ROOMS.filter(r => (r.location || 'General') === loc);
-    roomSelect.innerHTML = '<option value="" selected disabled>Select room...</option>';
-
-    if (filtered.length > 0) {
-      filtered.forEach(r => {
-        const opt = document.createElement('option');
-        opt.value = String(r.id);
-        opt.textContent = r.name;
-        opt.dataset.features = r.features || '';
-        roomSelect.appendChild(opt);
-      });
-      roomSelect.disabled = false;
-    } else {
-      roomSelect.disabled = true;
+            filteredRooms.forEach(r => {
+                const opt = document.createElement("option");
+                opt.value = r.name;
+                opt.textContent = r.name;
+                roomFilter.appendChild(opt);
+            });
+        });
     }
 
-    featuresBox.value = '';
-    form.action = '#';
-    submitBtn.disabled = true;
-  }
+    if (applyBtn) {
+        applyBtn.addEventListener("click", function () {
 
-  locationSelect.addEventListener('change', () => {
-    selectedLocation = locationSelect.value || null;
-    selectedRoomName = null;
-    populateRoomsForLocation(selectedLocation);
-    updateCalendarLink();
-  });
+            const loc = locationFilter?.value || "all";
+            const room = roomFilter?.value || "all";
+            const date = new Date().toISOString().split("T")[0];
 
-  roomSelect.addEventListener('change', () => {
-    const roomId = roomSelect.value;
-    if (!roomId) return;
-
-    const selected = roomSelect.options[roomSelect.selectedIndex];
-    featuresBox.value = selected.dataset.features || '';
-    selectedRoomName = selected.textContent || null;
-
-    form.action = `/reserve_post/${roomId}`;
-    submitBtn.disabled = false;
-    updateCalendarLink();
-    if (typeof refreshAvailability === "function") refreshAvailability();
-
-    const statusBadge = document.getElementById('uiStatusBadge');
-    if (statusBadge) {
-        statusBadge.className = "badge bg-success-subtle text-success border border-success-subtle px-3 py-2";
-        statusBadge.innerHTML = `<i class="bi bi-check-circle-fill me-1"></i> Room Ready: ${selected.textContent}`;
-    }
-  });
-
-  function validateTimes() {
-    if (!startInput.value || !endInput.value) return;
-
-    if (endInput.value <= startInput.value) {
-      endInput.setCustomValidity('End must be after start');
-    } else {
-      endInput.setCustomValidity('');
-    }
-  }
-
-  startInput.addEventListener('change', validateTimes);
-  endInput.addEventListener('change', validateTimes);
-
-  repeatRule.addEventListener('change', () => {
-    weeklyOptions.style.display = (repeatRule.value === 'weekly') ? '' : 'none';
-  });
-
-  function syncEndsInputs() {
-    if (endsOnDate) endsOnDate.disabled = !endsOn.checked;
-    if (endsAfterCount) endsAfterCount.disabled = !endsAfter.checked;
-  }
-
-  [endsNever, endsOn, endsAfter].forEach(el => {
-    if (el) el.addEventListener('change', syncEndsInputs);
-  });
-  syncEndsInputs();
-   updateCalendarLink();
-  // ===============================
-  // FINAL SUBMIT HANDLER (FIXED)
-  // ===============================
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-
-    if (!roomSelect.value || !startInput.value || !endInput.value) {
-      alert('Please select a room and provide valid dates/times.');
-      return;
+            iframe.src =
+                `/calendar_view_v2?embed=1`
+                + `&date=${encodeURIComponent(date)}`
+                + `&location=${encodeURIComponent(loc)}`
+                + `&room=${encodeURIComponent(room)}`;
+        });
     }
 
-    if (!form.action || form.action === '#') {
-      alert("Room not properly selected.");
-      return;
+    /* =========================================================
+       FEATURE RENDERING
+    ========================================================== */
+
+    function parseFeatures(text) {
+        if (!text) return [];
+        return text.split(",")
+                   .map(f => f.trim())
+                   .filter(f => f.length > 0);
     }
 
+    function getFeatureIcon(name) {
+        const map = {
+            "TV": "bi-tv",
+            "Audio": "bi-volume-up",
+            "Projector": "bi-projector",
+            "Whiteboard": "bi-easel",
+            "VC": "bi-camera-video"
+        };
+        return map[name] || "bi-dot";
+    }
+
+    function renderFeatures(featureText) {
+
+        const container = document.getElementById("featuresContainer");
+        if (!container) return;
+
+        container.innerHTML = "";
+
+        const features = parseFeatures(featureText);
+
+        if (features.length === 0) {
+            container.innerHTML =
+                `<span class="text-muted small">No equipment listed</span>`;
+            return;
+        }
+
+        features.forEach(f => {
+            const badge = document.createElement("span");
+            badge.className =
+                "badge bg-primary-subtle text-primary border px-3 py-2 d-inline-flex align-items-center gap-1";
+
+            const icon = getFeatureIcon(f);
+            badge.innerHTML = `<i class="bi ${icon}"></i> ${f}`;
+            container.appendChild(badge);
+        });
+    }
+
+    /* =========================================================
+       RECURRENCE ENABLE / DISABLE
+    ========================================================== */
+
+    modalEl.addEventListener("shown.bs.modal", function () {
+
+        const endsNever = document.getElementById("endsNever");
+        const endsOn = document.getElementById("endsOn");
+        const endsAfter = document.getElementById("endsAfter");
+        const endsOnDate = document.getElementById("endsOnDate");
+        const endsAfterCount = document.getElementById("endsAfterCount");
+
+        function syncEnds() {
+            if (endsOnDate) endsOnDate.disabled = !endsOn?.checked;
+            if (endsAfterCount) endsAfterCount.disabled = !endsAfter?.checked;
+        }
+
+        [endsNever, endsOn, endsAfter].forEach(el => {
+            if (el) el.addEventListener("change", syncEnds);
+        });
+
+        syncEnds();
+    });
+
+    /* =========================================================
+       OPEN NEW RESERVATION (FROM GRID CLICK)
+    ========================================================== */
+
+    window.addEventListener("message", function (event) {
+
+      if (!event.data || !event.data.type) return;
+
+    // ===================================================
+    // OPEN NEW RESERVATION (Blank Cell Click)
+    // ===================================================
+    if (event.data.type === "OPEN_NEW_RESERVATION") {
+        console.log('OPEN_NEW_RESERVATION')
+        const roomId  = event.data.room_id;
+        const slotMin = event.data.slot_min;
+
+        const room = ROOMS.find(r => r.id == roomId);
+        if (!room) return;
+
+        const today = new Date();
+        const selectedDate = today.toISOString().split("T")[0];
+
+        const hours = String(Math.floor(slotMin / 60)).padStart(2,"0");
+        const minutes = String(slotMin % 60).padStart(2,"0");
+
+        const startValue = `${selectedDate}T${hours}:${minutes}`;
+        const endDate = new Date(startValue);
+        endDate.setMinutes(endDate.getMinutes() + 30);
+
+        document.getElementById("modalStartTime").value = startValue;
+        document.getElementById("modalEndTime").value =
+            endDate.toISOString().slice(0,16);
+
+        document.getElementById("modalMeetingTitle").value = "";
+        document.getElementById("modalRoomLabel").textContent = room.name;
+
+        renderFeatures(room.features || "");
+
+        document.getElementById("repeat_rule").value = "none";
+        document.getElementById("endsNever").checked = true;
+
+        new bootstrap.Modal(modalEl).show();
+        }
+        // ===================================================
+    // SHOW EXISTING RESERVATION
+    // ===================================================
+    if (event.data.type === "SHOW_RESERVATION") {
+
+        const res = event.data.data;
+        console.log('SHOW_RESERVATION')
+        showReservationDetails(res);
+    }
+    });
 
 
-    // Build payload manually (IMPORTANT FIX)
-    const fd = new FormData();
+    /* =========================================================
+       SUBMIT HANDLER
+    ========================================================== */
 
-    fd.append("start_time", startInput.value);
-    fd.append("end_time", endInput.value);
-    fd.append("remarks", form.querySelector('[name="remarks"]')?.value || "");
+    submitBtn.addEventListener("click", async function (e) {
 
-    // recurrence type
-    fd.append("recurrence_type", repeatRule?.value || "none");
+        e.preventDefault();
 
-    // weekly days
-    // weekly days (FIXED)
-    const selectedWeekdays = Array.from(
-      document.querySelectorAll('#weeklyOptions input[type="checkbox"]:checked')
-    ).map(cb => cb.value);
+        const startInput = document.getElementById("modalStartTime");
+        const endInput   = document.getElementById("modalEndTime");
+        const remarksInput = document.getElementById("modalMeetingTitle");
 
-    fd.append("weekdays", selectedWeekdays.join(","));
-    fd.append("weekly_interval",
-      form.querySelector('[name="weekly_interval"]')?.value || 1
-    );
+        if (!startInput.value || !endInput.value) {
+            Swal.fire("Missing Data",
+                "Please select start and end time.",
+                "warning");
+            return;
+        }
 
-    // end mode
-    let endMode = "never";
-    if (endsOn?.checked) endMode = "on";
-    if (endsAfter?.checked) endMode = "after";
+        if (endInput.value <= startInput.value) {
+            Swal.fire("Invalid Time",
+                "End must be after start.",
+                "error");
+            return;
+        }
 
-    fd.append("end_mode", endMode);
-    fd.append("end_on_date", endsOnDate?.value || "");
-    fd.append("end_after_count", endsAfterCount?.value || "");
+        const roomName =
+            document.getElementById("modalRoomLabel")?.textContent?.trim();
 
-    submitBtn.disabled = true;
-    const originalContent = submitBtn.innerHTML;
-    submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Saving...`;
+        const room = ROOMS.find(r => r.name === roomName);
 
-    try {
-          const res = await fetch(form.action, {
-            method: "POST",
-            body: fd,
-            headers: { "X-Requested-With": "XMLHttpRequest" }
-          });
+        if (!room) {
+            Swal.fire("Error", "Room not found.", "error");
+            return;
+        }
 
-          const data = await res.json();
+        const fd = new FormData();
+        fd.append("start_time", startInput.value);
+        fd.append("end_time", endInput.value);
+        fd.append("remarks", remarksInput.value || "");
 
-          // ===============================
-          // ✅ SUCCESS
-          // ===============================
-          if (res.ok && data.success) {
+        fd.append("recurrence_type",
+            document.getElementById("repeat_rule")?.value || "none");
 
-            const created = data.created_count || 0;
+        let endMode = "never";
+        if (document.getElementById("endsOn")?.checked) endMode = "on";
+        if (document.getElementById("endsAfter")?.checked) endMode = "after";
 
-            const successHtml = `
-              <div style="text-align:left; font-size:0.95rem;">
-                <div style="margin-bottom:8px;">
-                  <b style="color:#0b8a44;">✔ ${created}</b> reservation(s) successfully created.
-                </div>
-                <div style="color:#6c757d;">
-                  All selected dates were available and confirmed.
-                </div>
-              </div>
-            `;
+        fd.append("end_mode", endMode);
+        fd.append("end_on_date",
+            document.getElementById("endsOnDate")?.value || "");
+        fd.append("end_after_count",
+            document.getElementById("endsAfterCount")?.value || "");
 
-            await Swal.fire({
-              icon: "success",
-              title: "Reservation Confirmed",
-              html: successHtml,
-              confirmButtonColor: "#0047AB",
-              width: 520
+        submitBtn.disabled = true;
+        const originalText = submitBtn.innerHTML;
+        submitBtn.innerHTML =
+            `<span class="spinner-border spinner-border-sm"></span> Saving...`;
+
+        try {
+
+            const res = await fetch(`/reserve_post/${room.id}`, {
+                method: "POST",
+                body: fd,
+                headers: { "X-Requested-With": "XMLHttpRequest" }
             });
 
-            window.location.reload();
-            return;
-          }
+            const data = await res.json();
 
-          // ===============================
-          // ❌ CONFLICT (ALL OR NOTHING)
-          // ===============================
-          if (res.status === 409 && data.conflicts) {
-              let html = `
-              <style>
-                .conflict-container {
-                    text-align:left;
-                    padding: 8px 0;
-                }
-                .conflict-card {
-                    border: 1px solid #eee;
-                    border-radius: 10px;
-                    padding: 12px 14px;
-                    margin-bottom: 12px;
-                    background: #fff;
-                }
-                .conflict-row {
-                    display:flex;
-                    padding:8px 0;
-                    border-bottom:1px solid #f1f1f1;
-                }
-                .conflict-row:last-child {
-                    border-bottom:none;
-                }
-                .conflict-label {
-                    min-width:110px;
-                    font-weight:600;
-                    color:#555;
-                }
-                .conflict-value {
-                    flex:1;
-                    color:#212529;
-                }
-                .conflict-date {
-                    font-weight:700;
-                    color:#0047AB;
-                    margin-bottom:6px;
-                    font-size:0.95rem;
-                }
-                .status-badge-conflict {
-                    display:inline-block;
-                    padding:4px 10px;
-                    border-radius:16px;
-                    background:#f8d7da;
-                    color:#721c24;
-                    font-size:0.75rem;
-                    font-weight:600;
-                }
-              </style>
+            /* ======================
+               SUCCESS
+            ====================== */
+            if (res.ok && data.success) {
 
-              <div class="conflict-container">
-                <div style="margin-bottom:10px;">
-                  <b style="color:#dc3545;">
-                    ${data.conflicts.length} conflict(s) detected
-                  </b>
-                </div>
-              `;
+                await Swal.fire({
+                    icon: "success",
+                    title: "Reservation Confirmed",
+                    text: `${data.created_count || 1} reservation(s) created.`,
+                    confirmButtonColor: "#0047AB"
+                });
 
-              data.conflicts.forEach(c => {
-                html += `
-                  <div class="conflict-card">
-                    <div class="conflict-date">
-                      ${c.date}
-                    </div>
-
-                    <div class="conflict-row">
-                      <div class="conflict-label">Name:</div>
-                      <div class="conflict-value">${c.Name}</div>
-                    </div>
-
-                    <div class="conflict-row">
-                      <div class="conflict-label">Reserved By:</div>
-                      <div class="conflict-value">${c.conflict_with}</div>
-                    </div>
-
-                    <div class="conflict-row">
-                      <div class="conflict-label">Time:</div>
-                      <div class="conflict-value">
-                          ${formatTimeRange(c.time_range)}
-                      </div>
-                    </div>
-
-                    <div class="conflict-row">
-                      <div class="conflict-label">Status:</div>
-                      <div class="conflict-value">
-                        <span class="status-badge-conflict">CONFLICT</span>
-                      </div>
-                    </div>
-                  </div>
-                `;
-              });
-
-              html += `
-                  <div style="margin-top:8px; color:#6c757d;">
-                    No reservations were saved due to these conflicts.
-                  </div>
-                </div>
-              `;
-
-              await Swal.fire({
-                icon: "error",
-                title: "Reservation Conflict",
-                html: html,
-                width: 620,
-                confirmButtonColor: "#0047AB"
-              });
-
-              return;
+                location.reload();
+                return;
             }
 
-          // ===============================
-          // ⚠ OTHER FAILURE
-          // ===============================
-          throw new Error(data.message || "Unexpected system error.");
+            /* ======================
+               CONFLICT
+            ====================== */
+            if (res.status === 409 && data.conflicts) {
+
+                let html = `
+                    <div style="text-align:left;">
+                    <b style="color:#dc3545;">
+                    ${data.conflicts.length} conflict(s) detected
+                    </b><br><br>
+                `;
+
+                data.conflicts.forEach(c => {
+                    html += `
+                        <div style="margin-bottom:10px;">
+                            <b>${c.date}</b><br>
+                            ${c.conflict_with}<br>
+                            ${c.time_range}
+                        </div>
+                    `;
+                });
+
+                html += `No reservations were saved.</div>`;
+
+                await Swal.fire({
+                    icon: "error",
+                    title: "Reservation Conflict",
+                    html: html,
+                    width: 600
+                });
+
+                return;
+            }
+
+            throw new Error(data.message || "Reservation failed.");
 
         } catch (err) {
 
-          console.error("Submission error:", err);
-
-          await Swal.fire({
-            icon: "error",
-            title: "Submission Failed",
-            html: `
-              <div style="text-align:left;">
-                <div style="margin-bottom:8px;">
-                  Something went wrong while processing your reservation.
-                </div>
-                <div style="color:#dc3545;">
-                  ${err.message}
-                </div>
-              </div>
-            `,
-            confirmButtonColor: "#0047AB"
-          });
+            await Swal.fire("Error",
+                err.message || "Unexpected system error.",
+                "error");
 
         } finally {
-          submitBtn.disabled = false;
-          submitBtn.innerHTML = originalContent;
+
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalText;
         }
-  });
-</script>
-<script>
-function getSelectedDateForGrid(){
-  // Use Start date for the grid
-  const startVal = document.getElementById("start_time")?.value || "";
-  if (!startVal) return "";
+    });
+     function showReservationDetails(res) {
 
-  // datetime-local: "2026-02-19T08:00"
-  const d = new Date(startVal);
-  if (isNaN(d.getTime())) return "";
+    const isOwner =
+    res.reserved_by === CURRENT_USER.username ||
+    res.email === CURRENT_USER.email;
 
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function getSelectedRoomName(){
-  const sel = document.getElementById("roomSelect");
-  if (!sel || sel.disabled) return "all";
-  const opt = sel.options[sel.selectedIndex];
-  if (!opt || !opt.textContent || opt.value === "") return "all";
-  // opt.textContent is the room name (what calendar_view_v2 expects)
-  return opt.textContent.trim();
-}
-function snapTo30Min(hhmm) {
-  // hhmm: "17:58"
-  const [hh, mm] = hhmm.split(":").map(Number);
-  if (Number.isNaN(hh) || Number.isNaN(mm)) return "";
-
-  const total = hh * 60 + mm;
-
-  // round to nearest 30 mins (change to floor if you prefer)
-  const snapped = Math.round(total / 30) * 30;
-
-  const H = String(Math.floor(snapped / 60)).padStart(2, "0");
-  const M = String(snapped % 60).padStart(2, "0");
-  return `${H}:${M}`;
-}
-
-function refreshAvailability() {
-  const loc = document.getElementById("locationSelect")?.value || "all";
-
-  // calendar_view_v2 expects ROOM NAME (not id)
-  const roomSel = document.getElementById("roomSelect");
-  let roomName = "all";
-  if (roomSel && roomSel.value) {
-    const opt = roomSel.options[roomSel.selectedIndex];
-    if (opt && opt.textContent) roomName = opt.textContent.trim();
-  }
-
-  const startVal = document.getElementById("start_time")?.value || "";
-
-  const date = startVal && startVal.includes("T")
-    ? startVal.split("T")[0]
-    : new Date().toISOString().slice(0,10);
-
-  // ✅ FIXED SECTION
-  let focus = "";
-  if (startVal && startVal.includes("T")) {
-    const focusRaw = startVal.split("T")[1].slice(0,5); // HH:MM
-    focus = snapTo30Min(focusRaw);
-  }
-
-  const url = `/calendar_view_v2?embed=1`
-    + `&date=${encodeURIComponent(date)}`
-    + `&location=${encodeURIComponent(loc || "all")}`
-    + `&room=${encodeURIComponent(roomName)}`
-    + (focus ? `&focus=${encodeURIComponent(focus)}` : "");
-
-  const frame = document.getElementById("availabilityFrame");
-  console.log("Availability URL:", url);
-  if (frame) frame.src = url;
-}
-
-function wireAvailabilityAutoRefresh() {
-  const loc = document.getElementById("locationSelect");
-  const room = document.getElementById("roomSelect");
-  const start = document.getElementById("start_time");
-  const end = document.getElementById("end_time");
-
-  if (loc) loc.addEventListener("change", refreshAvailability);
-  if (room) room.addEventListener("change", refreshAvailability);
-
-  // datetime-local: input fires immediately when user picks time/date
-  if (start) {
-    start.addEventListener("input", refreshAvailability);
-    start.addEventListener("change", refreshAvailability);
-  }
-  if (end) {
-    end.addEventListener("input", refreshAvailability);
-    end.addEventListener("change", refreshAvailability);
-  }
-
-  refreshAvailability(); // initial load
-}
-document.addEventListener("DOMContentLoaded", wireAvailabilityAutoRefresh);
-    window.addEventListener("message", function(event) {
-
-    if (!event.data || event.data.type !== "SHOW_RESERVATION") return;
-
-    const res = event.data.data;
-
-    showParentReservationPopup(res);
-
-});
-    function showParentReservationPopup(res) {
+    const canCancel = isOwner || CURRENT_USER.isAdmin;
 
     const status = (res.status || "").toLowerCase();
 
@@ -842,10 +708,11 @@ document.addEventListener("DOMContentLoaded", wireAvailabilityAutoRefresh);
             )}
             ${divider()}
 
-            ${detailRow("Remarks:", res.remarks || "—")}
+            ${detailRow("Meeting Title:", res.remarks || "—")}
 
         </div>
 
+        ${canCancel ? `
         <div style="margin-top:30px;text-align:center;">
             <button id="cancelBtn"
                 style="
@@ -859,9 +726,14 @@ document.addEventListener("DOMContentLoaded", wireAvailabilityAutoRefresh);
                     cursor:pointer;
                 ">
                 <i class="bi bi-trash"></i>
-                Cancel Reservation
+                ${CURRENT_USER.isAdmin && !isOwner ? "Admin Override Cancel" : "Cancel Reservation"}
             </button>
         </div>
+    ` : `
+        <div style="margin-top:30px;text-align:center;color:#6c757d;font-size:13px;">
+            Only the reservation owner can cancel this booking.
+        </div>
+    `}
         `,
         didOpen: () => {
 
@@ -925,6 +797,14 @@ document.addEventListener("DOMContentLoaded", wireAvailabilityAutoRefresh);
 
         return `${formatSingle(parts[0])} – ${formatSingle(parts[1])}`;
     }
+
+});
+
+    const CURRENT_USER = {
+    username: "{{ current_user.username }}",
+    email: "{{ current_user.email }}",
+    isAdmin: {{ 'true' if current_user.is_admin() else 'false' }}
+};
 </script>
 
 <style>

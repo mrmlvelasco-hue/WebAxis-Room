@@ -1268,7 +1268,7 @@ def calendar_view_v2():
 
     location_filter = (request.args.get("location") or "all").strip()
     room_filter = (request.args.get("room") or "all").strip()
-
+    print("🧩 Filter:", room_filter)
     conn = get_db_connection()
     cur = conn.cursor()
 
@@ -1323,6 +1323,7 @@ def calendar_view_v2():
 
     cur.execute(sql, params)
     print("🧩 SQL:", sql)
+    print("🧩 PARAMS:", params)
 
     rows = cur.fetchall()
     conn.close()
@@ -3549,7 +3550,7 @@ def main_menu():
     user_info = f"{current_user.display_name or current_user.username} ({current_user.role})"
 
     return render_template(
-        "menu.html",
+        "reserve_v2.html",
         room_count=room_count,
         pending_count=pending_count,
         approved_count=approved_count,
