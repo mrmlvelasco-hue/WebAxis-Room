@@ -449,18 +449,27 @@ document.addEventListener("DOMContentLoaded", function () {
         if (!room) return;
 
         const today = new Date();
-        const selectedDate = today.toISOString().split("T")[0];
+
+        const selectedDate =
+            today.getFullYear() + "-" +
+            String(today.getMonth() + 1).padStart(2, "0") + "-" +
+            String(today.getDate()).padStart(2, "0");
 
         const hours = String(Math.floor(slotMin / 60)).padStart(2,"0");
         const minutes = String(slotMin % 60).padStart(2,"0");
 
         const startValue = `${selectedDate}T${hours}:${minutes}`;
+
         const endDate = new Date(startValue);
-        endDate.setMinutes(endDate.getMinutes() + 30);
+        endDate.setMinutes(endDate.getMinutes() + 30); // only once
 
         document.getElementById("modalStartTime").value = startValue;
         document.getElementById("modalEndTime").value =
-            endDate.toISOString().slice(0,16);
+            endDate.getFullYear() + "-" +
+            String(endDate.getMonth() + 1).padStart(2, "0") + "-" +
+            String(endDate.getDate()).padStart(2, "0") + "T" +
+            String(endDate.getHours()).padStart(2, "0") + ":" +
+            String(endDate.getMinutes()).padStart(2, "0");
 
         document.getElementById("modalMeetingTitle").value = "";
         document.getElementById("modalRoomLabel").textContent = room.name;
@@ -558,14 +567,20 @@ document.addEventListener("DOMContentLoaded", function () {
             ====================== */
             if (res.ok && data.success) {
 
-                await Swal.fire({
-                    icon: "success",
-                    title: "Reservation Confirmed",
-                    text: `${data.created_count || 1} reservation(s) created.`,
-                    confirmButtonColor: "#0047AB"
-                });
+                // Close reservation modal
+                const modalInstance = bootstrap.Modal.getInstance(
+                    document.getElementById("reserveModal")
+                );
 
-                location.reload();
+                if (modalInstance) modalInstance.hide();
+
+                // Small delay for smooth UX
+                setTimeout(() => {
+                    refreshAvailability();
+                }, 200);
+
+                await Swal.fire("Success", "Reservation created.", "success");
+
                 return;
             }
 
@@ -760,7 +775,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
                 if(d.success){
                     Swal.fire("Cancelled!", "", "success")
-                        .then(()=> location.reload());
+                        .then(()=> {
+                            refreshAvailability();
+                        });
                 }else{
                     Swal.fire("Error", d.message || "Cannot cancel", "error");
                 }
@@ -805,6 +822,28 @@ document.addEventListener("DOMContentLoaded", function () {
     email: "{{ current_user.email }}",
     isAdmin: {{ 'true' if current_user.is_admin() else 'false' }}
 };
+ function refreshAvailability() {
+    const locationFilter = document.getElementById("locationFilterHeader");
+    const roomFilter = document.getElementById("roomFilterHeader");
+
+    const loc = locationFilter?.value || "all";
+    const room = roomFilter?.value || "all";
+
+    const date = new Date().toISOString().slice(0,10);
+
+    const url =
+        `/calendar_view_v2?embed=1`
+        + `&date=${encodeURIComponent(date)}`
+        + `&location=${encodeURIComponent(loc)}`
+        + `&room=${encodeURIComponent(room)}`;
+
+    const frame = document.getElementById("availabilityFrame");
+
+    if (!frame) return;
+
+    // Smooth refresh without flicker
+    frame.contentWindow.location.replace(url);
+}
 </script>
 
 <style>
@@ -838,5 +877,6 @@ document.addEventListener("DOMContentLoaded", function () {
     font-size: 1.1rem;
     color: #6c757d;
   }
+
 </style>
 {% endblock %}
