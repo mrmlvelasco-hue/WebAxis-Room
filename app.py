@@ -692,10 +692,10 @@ def login():
 
     # If API request → return JSON
     if request.is_json:
-        return jsonify({"success": True, "redirect": url_for('main_menu')})
+        return jsonify({"success": True, "redirect": url_for('resever_v2')})
 
     # Otherwise redirect normally
-    return redirect(url_for('main_menu'))
+    return redirect(url_for('reserve_v2'))
 
 import itsdangerous
 serializer = itsdangerous.URLSafeTimedSerializer(app.secret_key)
@@ -1604,185 +1604,6 @@ def get_combined_group_rooms(room_id):
     conn.close()
     return rooms
 
-# @app.route('/reserve_post/<int:room_id>', methods=['POST'])
-# @login_required
-# def reserve_post(room_id):
-#     try:
-#         conn = get_db_connection();
-#         cur = conn.cursor()
-#
-#         # Parse payload
-#         payload = request.get_json() if request.is_json else request.form.to_dict()
-#
-#         start_time = payload.get("start_time")
-#         end_time = payload.get("end_time")
-#         remarks = payload.get("remarks", "")
-#         email = payload.get("email") or current_user.email
-#         reserved_by = payload.get("reserved_by") or current_user.display_name
-#
-#         recurrence_type = payload.get("recurrence_type", "none")
-#         weekdays = payload.get("weekdays", "")  # CSV "MO,FR"
-#         weekly_interval = int(payload.get("weekly_interval", 1))
-#
-#         end_mode = payload.get("end_mode", "never")
-#         end_on_date = payload.get("end_on_date")
-#         after_count = payload.get("end_after_count")
-#
-#         if not start_time or not end_time:
-#             return jsonify(success=False, message="Missing start/end"), 400
-#
-#         # Convert strings -> datetime
-#         start_dt = datetime.fromisoformat(start_time)
-#         end_dt = datetime.fromisoformat(end_time)
-#         base_duration = end_dt - start_dt
-#
-#         # --- Build all recurrence dates ---
-#         all_dates = []
-#         current = start_dt
-#
-#         recurrence_id = str(uuid.uuid4()) if recurrence_type != "none" else None
-#
-#         def add_if_match(dt):
-#             # Ensure dt <= end-limit rules
-#             if end_mode == "on" and dt.date() > datetime.fromisoformat(end_on_date).date():
-#                 return False
-#             return True
-#
-#         count = 0
-#         MAX_LIMIT = 370  # 1 year
-#
-#         if recurrence_type == "none":
-#             all_dates = [start_dt]
-#
-#         elif recurrence_type == "daily":
-#             while count < MAX_LIMIT:
-#                 if add_if_match(current):
-#                     all_dates.append(current)
-#                 count += 1
-#                 if end_mode == "after" and len(all_dates) >= int(after_count):
-#                     break
-#                 current += timedelta(days=1)
-#                 if end_mode == "on" and current.date() > datetime.fromisoformat(end_on_date).date():
-#                     break
-#
-#         elif recurrence_type == "weekly":
-#             weekday_map = ["MO","TU","WE","TH","FR","SA","SU"]
-#             target_days = weekdays.split(",") if weekdays else []
-#             if not target_days:
-#                 target_days = [weekday_map[start_dt.weekday()]]
-#
-#             # First: include the start date
-#             if weekday_map[start_dt.weekday()] in target_days:
-#                 all_dates.append(start_dt)
-#
-#             cur_dt = start_dt
-#             while len(all_dates) < MAX_LIMIT:
-#                 cur_dt += timedelta(days=1)
-#                 wd = weekday_map[cur_dt.weekday()]
-#
-#                 if wd in target_days:
-#                     if not add_if_match(cur_dt):
-#                         break
-#                     all_dates.append(cur_dt)
-#
-#                 if end_mode == "after" and len(all_dates) >= int(after_count):
-#                     break
-#                 if end_mode == "on" and cur_dt.date() > datetime.fromisoformat(end_on_date).date():
-#                     break
-#
-#         # MONTHLY—can add later if needed
-#         elif recurrence_type == "monthly":
-#             all_dates = [start_dt]  # TODO: support monthly rules
-#
-#         # =====================================================================
-#         # Insert reservations + auto-block for combined AXIS_HALL rooms
-#         # =====================================================================
-#         group_rooms = get_combined_group_rooms(room_id)
-#
-#         created_count = 0
-#         skipped = []
-#
-#         for dt in all_dates:
-#             new_start = dt
-#             new_end = dt + base_duration
-#
-#             # Check conflict in the main room
-#             cur.execute("""
-#                 SELECT COUNT(*)
-#                 FROM reservations
-#                 WHERE room_id=?
-#                 AND NOT (end_time <= ? OR start_time >= ?)
-#                 AND status IN ('Pending','Approved','Blocked')
-#             """, (room_id, new_start, new_end))
-#             if cur.fetchone()[0] > 0:
-#                 skipped.append(new_start.isoformat())
-#                 continue
-#
-#             # Insert main reservation
-#             cur.execute("""
-#                 INSERT INTO reservations
-#                     (room_id, reserved_by, email, start_time, end_time, status,
-#                      remarks, created_at, time_zone, recurrence_id)
-#                 VALUES (?, ?, ?, ?, ?, 'Pending', ?, GETDATE(),
-#                         'GMT+08:00 (Beijing, Singapore, Taipei)', ?)
-#             """, (
-#                 room_id,
-#                 reserved_by,
-#                 email,
-#                 new_start,
-#                 new_end,
-#                 remarks,
-#                 recurrence_id
-#             ))
-#             created_count += 1
-#
-#             # Auto-block AXIS_HALL rooms except main one
-#             for rid in group_rooms:
-#                 if rid == room_id:
-#                     continue
-#
-#                 cur.execute("""
-#                     SELECT COUNT(*) FROM reservations
-#                     WHERE room_id=? AND NOT (end_time <= ? OR start_time >= ?)
-#                     AND status IN ('Pending','Approved','Blocked')
-#                 """, (rid, new_start, new_end))
-#                 if cur.fetchone()[0] > 0:
-#                     continue  # skip conflicts
-#
-#                 cur.execute("""
-#                     INSERT INTO reservations
-#                         (room_id, reserved_by, email, start_time, end_time, status,
-#                          remarks, created_at, time_zone, recurrence_id)
-#                     VALUES (?, ?, ?, ?, ?, 'Blocked', ?, GETDATE(),
-#                             'GMT+08:00 (Beijing, Singapore, Taipei)', ?)
-#                 """, (
-#                     rid,
-#                     f"[AUTO BLOCK] {reserved_by}",
-#                     email,
-#                     new_start,
-#                     new_end,
-#                     f"Blocked by combined booking of room {room_id}",
-#                     recurrence_id
-#                 ))
-#
-#         conn.commit()
-#
-#         return jsonify(
-#             success=True,
-#             created_count=created_count,
-#             skipped=skipped,
-#             message="Recurring booking result"
-#         )
-#
-#     except Exception as e:
-#         print("⚠️ Error Post", e)
-#         try:
-#             if 'conn' in locals() and conn:
-#                 conn.rollback()
-#         except:
-#             pass
-#
-#         return jsonify(success=False, message=str(e)), 500
 
 from datetime import datetime, timedelta, timezone
 
@@ -1806,240 +1627,7 @@ def snap_to_30min_round(dt: datetime) -> datetime:
         # round up to next hour
         return dt.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
 
-# # saving of room reservation - with skipped
-# @app.route('/reserve_post/<int:room_id>', methods=['POST'])
-# @login_required
-# def reserve_post(room_id):
-#     try:
-#         conn = get_db_connection()
-#         cur = conn.cursor()
-#
-#         # Parse payload
-#         payload = request.get_json() if request.is_json else request.form.to_dict()
-#
-#         start_time = payload.get("start_time")
-#         end_time = payload.get("end_time")
-#         remarks = payload.get("remarks", "")
-#         email = payload.get("email") or getattr(current_user, "email", None)
-#         reserved_by = payload.get("reserved_by") or getattr(current_user, "display_name", "") or getattr(current_user, "username", "")
-#
-#         recurrence_type = payload.get("recurrence_type", "none")
-#         weekdays = payload.get("weekdays", "")  # CSV "MO,FR"
-#         weekly_interval = int(payload.get("weekly_interval", 1) or 1)
-#
-#         end_mode = payload.get("end_mode", "never")
-#         end_on_date = payload.get("end_on_date")
-#         after_count = payload.get("end_after_count")
-#
-#         if not start_time or not end_time:
-#             return jsonify(success=False, message="Missing start/end"), 400
-#
-#         # Convert strings -> datetime
-#         start_dt = datetime.fromisoformat(start_time)
-#         end_dt = datetime.fromisoformat(end_time)
-#
-#         # Align to :00/:30 while keeping the same variable names
-#         start_dt = snap_to_30min_round(start_dt)
-#         end_dt = snap_to_30min_round(end_dt)
-#
-#         # Compute duration (optional)
-#         base_duration = end_dt - start_dt
-#
-#         # --- Load room info (location, approval setting) ---
-#         cur.execute("SELECT id, name, location, approvals_required FROM rooms WHERE id = ?", (room_id,))
-#         row = cur.fetchone()
-#         if not row:
-#             return jsonify(success=False, message="Room not found"), 404
-#
-#         room_location = row[2] or ""
-#         approvals_required_raw = row[3]  # may be 'Auto', 'Yes', 'No' or NULL
-#
-#         # Normalize approvals_required
-#         approvals_required = str(approvals_required_raw).strip().lower() if approvals_required_raw is not None else "auto"
-#         if approvals_required not in ("auto", "yes", "no"):
-#             approvals_required = "auto"
-#
-#         # --- Fetch approvers for this location from group_approvers ---
-#         cur.execute("""
-#             SELECT approver_username
-#             FROM group_approvers
-#             WHERE group_code = ? AND is_active = 1
-#         """, (room_location,))
-#         approver_rows = cur.fetchall()
-#         approvers = [r[0] for r in approver_rows] if approver_rows else []
-#
-#         # Helper: determine status for a single created reservation
-#         def decide_status():
-#             # approvals_required: "no" | "yes" | "auto"
-#             if approvals_required == "no":
-#                 return "Approved"
-#             if approvals_required == "yes":
-#                 # always pending for manual approval (route to approvers or admin)
-#                 return "Pending"
-#             # auto
-#             if approvals_required == "auto":
-#                 return "Pending" if approvers else "Approved"
-#             # fallback
-#             return "Pending"
-#
-#         # --- Build recurrence dates ---
-#         all_dates = []
-#         current = start_dt
-#
-#         recurrence_id = str(uuid.uuid4()) if recurrence_type != "none" else None
-#
-#         def add_if_match(dt):
-#             if end_mode == "on" and end_on_date:
-#                 try:
-#                     end_limit = datetime.fromisoformat(end_on_date).date()
-#                 except Exception:
-#                     return False
-#                 return dt.date() <= end_limit
-#             return True
-#
-#         count = 0
-#         MAX_LIMIT = 370  # about 1 year
-#
-#         if recurrence_type == "none":
-#             all_dates = [start_dt]
-#
-#         elif recurrence_type == "daily":
-#             while count < MAX_LIMIT:
-#                 if add_if_match(current):
-#                     all_dates.append(current)
-#                 count += 1
-#                 if end_mode == "after" and after_count and len(all_dates) >= int(after_count):
-#                     break
-#                 current += timedelta(days=1)
-#                 if end_mode == "on" and end_on_date and current.date() > datetime.fromisoformat(end_on_date).date():
-#                     break
-#
-#         elif recurrence_type == "weekly":
-#             weekday_map = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]
-#             target_days = [d for d in (weekdays.split(",") if weekdays else []) if d]
-#             if not target_days:
-#                 target_days = [weekday_map[start_dt.weekday()]]
-#
-#             # include start date if it matches
-#             if weekday_map[start_dt.weekday()] in target_days:
-#                 all_dates.append(start_dt)
-#
-#             cur_dt = start_dt
-#             while len(all_dates) < MAX_LIMIT:
-#                 cur_dt += timedelta(days=1)
-#                 wd = weekday_map[cur_dt.weekday()]
-#                 if wd in target_days:
-#                     if not add_if_match(cur_dt):
-#                         break
-#                     all_dates.append(cur_dt)
-#
-#                 if end_mode == "after" and after_count and len(all_dates) >= int(after_count):
-#                     break
-#                 if end_mode == "on" and end_on_date and cur_dt.date() > datetime.fromisoformat(end_on_date).date():
-#                     break
-#
-#         elif recurrence_type == "monthly":
-#             # minimal support: keep just the single start date for now
-#             all_dates = [start_dt]
-#
-#         # =====================================================================
-#         # Insert reservations + auto-block for combined group rooms
-#         # =====================================================================
-#         group_rooms = get_combined_group_rooms(room_id)  # keep your helper
-#
-#         created_count = 0
-#         skipped = []
-#
-#         for dt in all_dates:
-#             new_start = dt
-#             new_end = dt + base_duration
-#
-#             # conflict check for the main room
-#             cur.execute("""
-#                 SELECT COUNT(*)
-#                 FROM reservations
-#                 WHERE room_id=?
-#                   AND  start_time <= ?  AND end_time >= ?
-#                   AND status IN ('Pending','Approved','Blocked')
-#             """, (room_id, new_start, new_end))
-#             if cur.fetchone()[0] > 0:
-#                 skipped.append(new_start.isoformat())
-#                 continue
-#
-#             # decide status based on approver presence and room setting
-#             status_to_use = decide_status()  # "Pending" or "Approved"
-#
-#             # Insert main reservation (status varies)
-#             cur.execute("""
-#                 INSERT INTO reservations
-#                     (room_id, reserved_by, email, start_time, end_time, status,
-#                      remarks, created_at, time_zone, recurrence_id)
-#                 VALUES (?, ?, ?, ?, ?, ?, ?, GETDATE(), 'GMT+08:00 (Beijing, Singapore, Taipei)', ?)
-#             """, (
-#                 room_id,
-#                 reserved_by,
-#                 email,
-#                 new_start,
-#                 new_end,
-#                 status_to_use,
-#                 remarks,
-#                 recurrence_id
-#             ))
-#             created_count += 1
-#
-#             # Optional: If status is Pending and approvers is empty for "yes", you may want to notify admin here.
-#             # (You said you have admin users — implement notification outside this function.)
-#
-#             # Auto-block combined group rooms (same as before)
-#             for rid in group_rooms:
-#                 if rid == room_id:
-#                     continue
-#
-#                 cur.execute("""
-#                     SELECT COUNT(*) FROM reservations
-#                     WHERE room_id=? AND NOT (end_time <= ? OR start_time >= ?)
-#                     AND status IN ('Pending','Approved','Blocked')
-#                 """, (rid, new_start, new_end))
-#                 if cur.fetchone()[0] > 0:
-#                     continue  # skip conflicts
-#
-#                 cur.execute("""
-#                     INSERT INTO reservations
-#                         (room_id, reserved_by, email, start_time, end_time, status,
-#                          remarks, created_at, time_zone, recurrence_id)
-#                     VALUES (?, ?, ?, ?, ?, 'Blocked', ?, GETDATE(),
-#                             'GMT+08:00 (Beijing, Singapore, Taipei)', ?)
-#                 """, (
-#                     rid,
-#                     f"[AUTO BLOCK] {reserved_by}",
-#                     email,
-#                     new_start,
-#                     new_end,
-#                     f"Blocked by combined booking of room {room_id}",
-#                     recurrence_id
-#                 ))
-#
-#         conn.commit()
-#         conn.close()
-#
-#         return jsonify(
-#             success=True,
-#             created_count=created_count,
-#             skipped=skipped,
-#             message="Recurring booking result"
-#         )
-#
-#     except Exception as e:
-#         print("⚠️ Error Post", e)
-#         try:
-#             if 'conn' in locals() and conn:
-#                 conn.rollback()
-#                 conn.close()
-#         except:
-#             pass
-#
-#         return jsonify(success=False, message=str(e)), 500
-# Savine of reservation room
+
 @app.route('/reserve_post/<int:room_id>', methods=['POST'])
 @login_required
 def reserve_post(room_id):
@@ -2099,6 +1687,13 @@ def reserve_post(room_id):
         all_dates = []
         current = start_dt
         recurrence_id = str(uuid.uuid4()) if recurrence_type != "none" else None
+
+        def add_if_match(dt):
+            # Ensure dt <= end-limit rules
+            if end_mode == "on" and dt.date() > datetime.fromisoformat(end_on_date).date():
+                return False
+            return True
+
         MAX_LIMIT = 370
         count = 0
 
@@ -2114,7 +1709,59 @@ def reserve_post(room_id):
                 current += timedelta(days=1)
                 if end_mode == "on" and end_on_date and current.date() > datetime.fromisoformat(end_on_date).date():
                     break
+        elif recurrence_type == "weekly":
+            weekday_map = ["MO","TU","WE","TH","FR","SA","SU"]
+            target_days = weekdays.split(",") if weekdays else []
+            if not target_days:
+                target_days = [weekday_map[start_dt.weekday()]]
 
+            # First: include the start date
+            if weekday_map[start_dt.weekday()] in target_days:
+                all_dates.append(start_dt)
+
+            cur_dt = start_dt
+            while len(all_dates) < MAX_LIMIT:
+                cur_dt += timedelta(days=1)
+                wd = weekday_map[cur_dt.weekday()]
+
+                if wd in target_days:
+                    if not add_if_match(cur_dt):
+                        break
+                    all_dates.append(cur_dt)
+
+                if end_mode == "after" and len(all_dates) >= int(after_count):
+                    break
+                if end_mode == "on" and cur_dt.date() > datetime.fromisoformat(end_on_date).date():
+                    break
+
+        # MONTHLY—can add later if needed
+        elif recurrence_type == "monthly":
+            # all_dates = [start_dt]  # TODO: support monthly rules
+
+            interval = int(payload.get("weekly_interval", 1) or 1)
+            current = start_dt
+
+            while count < MAX_LIMIT:
+                if not add_if_match(current):
+                    break
+
+                all_dates.append(current)
+                count += 1
+
+                if end_mode == "after" and after_count and len(all_dates) >= int(after_count):
+                    break
+
+                # Move forward by interval months
+                month = current.month - 1 + interval
+                year = current.year + month // 12
+                month = month % 12 + 1
+
+                day = min(current.day, 28)  # safe for February
+                current = current.replace(year=year, month=month, day=day)
+
+                if end_mode == "on" and end_on_date:
+                    if current.date() > datetime.fromisoformat(end_on_date).date():
+                        break
         # (weekly/monthly logic unchanged – keep your existing logic)
 
         group_rooms = get_combined_group_rooms(room_id)

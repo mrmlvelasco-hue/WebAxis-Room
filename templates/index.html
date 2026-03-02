@@ -468,10 +468,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const monthlyOptions = document.getElementById('monthlyOptions');
   const locationFilter = document.getElementById('locationFilter');
   const viewDate = document.getElementById('viewDate');
-const loggedUser = {
-    name: "{{ current_user.display_name or current_user.username }}",
-    email: "{{ current_user.email or '' }}"
-};
+    const loggedUser = {
+        name: "{{ current_user.display_name or current_user.username }}",
+        email: "{{ current_user.email or '' }}"
+    };
   // Persist date and location (keeps prior behavior)
   if (localStorage.getItem('selectedDate')) viewDate.value = localStorage.getItem('selectedDate');
   viewDate.addEventListener('change', () => {
