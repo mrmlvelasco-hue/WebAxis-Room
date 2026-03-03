@@ -22,7 +22,7 @@
       <a id="viewFullCalendarBtn" href="/calendar_view" class="btn btn-white border shadow-sm btn-sm px-3">
         <i class="bi bi-calendar3 me-1 text-primary"></i> Full Calendar
       </a>
-      <button id="openReserveBtn" class="btn btn-primary btn-sm px-3 shadow-sm">
+      <button id="openReserveBtn" class="btn btn-primary btn-sm px-3 shadow-sm" >
         <i class="bi bi-plus-lg me-1"></i> Quick Reserve
       </button>
     </div>
@@ -123,14 +123,32 @@
             <h6 class="fw-bold small mb-3 text-primary text-uppercase">1. Schedule</h6>
 
             <div class="row g-3 mb-4">
-              <div class="col-6">
+
+              <!-- DATE -->
+              <div class="col-12 col-md-4">
+                <label class="form-label small fw-semibold text-secondary">Date</label>
+                <input type="date"
+                       id="modalDate"
+                       class="form-control border-2 shadow-sm-hover"
+                       required>
+              </div>
+
+              <!-- START TIME -->
+              <div class="col-6 col-md-4">
                 <label class="form-label small fw-semibold text-secondary">Start Time</label>
-                <input type="datetime-local" id="modalStartTime" class="form-control border-2 shadow-sm-hover" step="1800">
+                <select id="modalStartTime"
+                        class="form-select border-2 shadow-sm-hover"
+                        required></select>
               </div>
-              <div class="col-6">
+
+              <!-- END TIME -->
+              <div class="col-6 col-md-4">
                 <label class="form-label small fw-semibold text-secondary">End Time</label>
-                <input type="datetime-local" id="modalEndTime" class="form-control border-2 shadow-sm-hover" step="1800">
+                <select id="modalEndTime"
+                        class="form-select border-2 shadow-sm-hover"
+                        required></select>
               </div>
+
             </div>
 
             <h6 class="fw-bold small mb-3 text-primary text-uppercase">2. Recurrence</h6>
@@ -350,7 +368,131 @@
     endInput.setAttribute('step', String(1800)); // 1800 sec = 30 minutes
   }
 })();
+function generateModalTimeOptions() {
 
+    const startSelect = document.getElementById("modalStartTime");
+    const endSelect   = document.getElementById("modalEndTime");
+
+    startSelect.innerHTML = "";
+    endSelect.innerHTML   = "";
+
+    for (let hour = 6; hour <= 20; hour++) {
+
+        ["00", "30"].forEach(min => {
+
+            if (hour === 20 && min === "30") return;
+
+            const value = `${String(hour).padStart(2,'0')}:${min}`;
+
+            startSelect.add(new Option(formatTime(value), value));
+            endSelect.add(new Option(formatTime(value), value));
+        });
+    }
+}
+
+function formatTime(timeStr) {
+    const [h, m] = timeStr.split(":");
+    const hour = parseInt(h);
+    const ampm = hour >= 12 ? "PM" : "AM";
+    const hour12 = hour % 12 || 12;
+    return `${hour12}:${m} ${ampm}`;
+}
+    const startInput = document.getElementById("modalStartTime");
+const endInput   = document.getElementById("modalEndTime");
+
+const MAX_DURATION_MINUTES = 1440; // 4 hours
+
+function updateEndTimeOptions() {
+
+    const startVal = startInput.value;
+    if (!startVal) return;
+
+    const [sh, sm] = startVal.split(":").map(Number);
+    const startMinutes = sh * 60 + sm;
+
+    endInput.innerHTML = ""; // 🔥 clear everything
+
+    // Build only valid options
+    for (let i = 30; i <= MAX_DURATION_MINUTES; i += 30) {
+
+        const totalMinutes = startMinutes + i;
+
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+
+        // stop if past 20:00 (your system limit)
+        if (hours > 20 || (hours === 20 && minutes > 0)) break;
+
+        const value =
+            String(hours).padStart(2, "0") + ":" +
+            String(minutes).padStart(2, "0");
+
+        const durationHours = i / 60;
+
+        let label;
+        if (durationHours < 1) {
+            label = `${i} mins`;
+        } else {
+            label = `${durationHours % 1 === 0 ? durationHours : durationHours.toFixed(1)} hours`;
+        }
+
+        const option = new Option(
+            `${formatTime(value)} (${label})`,
+            value
+        );
+
+        endInput.add(option);
+    }
+
+    // Auto select first option (30 mins)
+    if (endInput.options.length > 0) {
+        endInput.selectedIndex = 0;
+
+        // 🔥 Auto scroll to first
+        setTimeout(() => {
+            endInput.options[0].scrollIntoView({ block: "nearest" });
+        }, 0);
+    }
+}
+
+startInput.addEventListener("change", updateEndTimeOptions);
+    function updateEndDurations() {
+
+    const startVal = startInput.value;
+    if (!startVal) return;
+
+    const [sh, sm] = startVal.split(":").map(Number);
+    const startMinutes = sh * 60 + sm;
+
+    Array.from(endInput.options).forEach((opt) => {
+
+        if (opt.disabled) {
+            opt.textContent = formatTime(opt.value);
+            return;
+        }
+
+        const [eh, em] = opt.value.split(":").map(Number);
+        const endMinutes = eh * 60 + em;
+
+        const diff = endMinutes - startMinutes;
+
+        if (diff <= 0) {
+            opt.textContent = formatTime(opt.value);
+            return;
+        }
+
+        const hours = diff / 60;
+
+        let label;
+        if (hours < 1) {
+            label = `${diff} mins`;
+        } else {
+            label = `${hours % 1 === 0 ? hours : hours.toFixed(1)} hours`;
+        }
+
+        opt.textContent = `${formatTime(opt.value)} (${label})`;
+    });
+}
 </script>
 <script>
 document.addEventListener("DOMContentLoaded", function () {
@@ -375,7 +517,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const date1 = new Date().toISOString().split("T")[0];
     //const viewDateInput = document.getElementById("viewDate");
     //const selectedDate = viewDateInput?.value;
-
+    document.getElementById("openReserveBtn").style.display = "none";
     document.getElementById("viewDate").value = new Date().toISOString().split("T")[0];
     refreshAvailability();
     document.getElementById("roomFilterHeader").disabled = true;
@@ -385,7 +527,7 @@ document.addEventListener("DOMContentLoaded", function () {
     /* =========================================================
        HEADER FILTERS → IFRAME
     ========================================================== */
-
+    generateModalTimeOptions();
     if (locationFilter) {
         locationFilter.addEventListener("change", function () {
 
@@ -524,54 +666,55 @@ document.addEventListener("DOMContentLoaded", function () {
     // OPEN NEW RESERVATION (Blank Cell Click)
     // ===================================================
     if (event.data.type === "OPEN_NEW_RESERVATION") {
-        console.log('OPEN_NEW_RESERVATION')
+
+        console.log("OPEN_NEW_RESERVATION");
+
         const roomId  = event.data.room_id;
         const slotMin = event.data.slot_min;
 
         const room = ROOMS.find(r => r.id == roomId);
         if (!room) return;
+
         const viewDateInput = document.getElementById("viewDate");
         const selectedDate = viewDateInput?.value;
+        if (!selectedDate) return;
 
-        const today = new Date();
+        /* ===============================
+           AUTO CHECK WEEKDAY (UNCHANGED)
+        ================================ */
+        const dateObj = new Date(selectedDate);
+        const weekdayCode = getJsWeekday(dateObj);
 
-        //const selectedDate =
-        //    today.getFullYear() + "-" +
-        //    String(today.getMonth() + 1).padStart(2, "0") + "-" +
-        //    String(today.getDate()).padStart(2, "0");
+        document.querySelectorAll(".wkday")
+            .forEach(cb => cb.checked = false);
 
-        if (selectedDate) {
-            const dateObj = new Date(selectedDate);
-            const weekdayCode = getJsWeekday(dateObj);
+        const match = document.querySelector(`.wkday[value="${weekdayCode}"]`);
+        if (match) match.checked = true;
 
-            // Clear all first
-            document.querySelectorAll(".wkday")
-                .forEach(cb => cb.checked = false);
-
-            // Auto-check selected day
-            const match = document.querySelector(
-                `.wkday[value="${weekdayCode}"]`
-            );
-
-            if (match) match.checked = true;
-        }
-
-        const hours = String(Math.floor(slotMin / 60)).padStart(2,"0");
+        /* ===============================
+           CONVERT SLOT MINUTES → HH:MM
+        ================================ */
+        const hours   = String(Math.floor(slotMin / 60)).padStart(2,"0");
         const minutes = String(slotMin % 60).padStart(2,"0");
 
-        const startValue = `${selectedDate}T${hours}:${minutes}`;
+        const startTime = `${hours}:${minutes}`;
 
-        const endDate = new Date(startValue);
-        endDate.setMinutes(endDate.getMinutes() + 30); // only once
+        // End = +30 mins
+        const endDate = new Date(`${selectedDate}T${startTime}`);
+        endDate.setMinutes(endDate.getMinutes() + 30);
 
-        document.getElementById("modalStartTime").value = startValue;
-        document.getElementById("modalEndTime").value =
-            endDate.getFullYear() + "-" +
-            String(endDate.getMonth() + 1).padStart(2, "0") + "-" +
-            String(endDate.getDate()).padStart(2, "0") + "T" +
-            String(endDate.getHours()).padStart(2, "0") + ":" +
-            String(endDate.getMinutes()).padStart(2, "0");
+        const endTime =
+            String(endDate.getHours()).padStart(2,"0") + ":" +
+            String(endDate.getMinutes()).padStart(2,"0");
 
+        /* ===============================
+           SET MODAL FIELDS (NEW WAY)
+        ================================ */
+
+        document.getElementById("modalDate").value = selectedDate;
+        document.getElementById("modalStartTime").value = startTime;
+        document.getElementById("modalEndTime").value   = endTime;
+        updateEndTimeOptions();
         document.getElementById("modalMeetingTitle").value = "";
         document.getElementById("modalRoomLabel").textContent = room.name;
 
@@ -581,7 +724,7 @@ document.addEventListener("DOMContentLoaded", function () {
         document.getElementById("endsNever").checked = true;
 
         new bootstrap.Modal(modalEl).show();
-        }
+    }
         // ===================================================
     // SHOW EXISTING RESERVATION
     // ===================================================
@@ -606,6 +749,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const endInput   = document.getElementById("modalEndTime");
         const remarksInput = document.getElementById("modalMeetingTitle");
 
+
         if (!startInput.value || !endInput.value) {
             Swal.fire("Missing Data",
                 "Please select start and end time.",
@@ -613,10 +757,13 @@ document.addEventListener("DOMContentLoaded", function () {
             return;
         }
 
-        if (endInput.value <= startInput.value) {
-            Swal.fire("Invalid Time",
-                "End must be after start.",
-                "error");
+        function toMinutes(t) {
+            const [h, m] = t.split(":").map(Number);
+            return h * 60 + m;
+        }
+
+        if (toMinutes(endInput.value) <= toMinutes(startInput.value)) {
+            Swal.fire("Invalid Time", "End must be after start.", "error");
             return;
         }
 
@@ -633,8 +780,21 @@ document.addEventListener("DOMContentLoaded", function () {
 
 
         const fd = new FormData();
-        fd.append("start_time", startInput.value);
-        fd.append("end_time", endInput.value);
+        //fd.append("start_time", startInput.value);
+        //fd.append("end_time", endInput.value);
+        const dateInput = document.getElementById("modalDate");
+
+        if (!dateInput.value) {
+            Swal.fire("Missing Date", "Please select a date.", "warning");
+            return;
+        }
+
+        const startCombined = `${dateInput.value}T${startInput.value}`;
+        const endCombined   = `${dateInput.value}T${endInput.value}`;
+
+        fd.append("start_time", startCombined);
+        fd.append("end_time", endCombined);
+
         fd.append("remarks", remarksInput.value || "");
 
         fd.append("recurrence_type",document.getElementById("repeat_rule")?.value || "none");
