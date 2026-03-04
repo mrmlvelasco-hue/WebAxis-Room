@@ -1658,6 +1658,11 @@ def reserve_post(room_id):
         end_dt = snap_to_30min_round(datetime.fromisoformat(end_time))
         base_duration = end_dt - start_dt
 
+        from dateutil.relativedelta import relativedelta
+
+        MAX_MONTHS = 4
+        max_allowed_date = start_dt + relativedelta(months=MAX_MONTHS)
+
         # ---- ROOM INFO ----
         cur.execute("SELECT id, name, location, approvals_required FROM rooms WHERE id = ?", (room_id,))
         row = cur.fetchone()
@@ -1694,21 +1699,31 @@ def reserve_post(room_id):
                 return False
             return True
 
-        MAX_LIMIT = 370
         count = 0
+        MAX_LIMIT = 200  # safety cap only (not time-based)
+
+        if end_mode == "on" and end_on_date:
+            selected_end = datetime.fromisoformat(end_on_date)
+            if selected_end > max_allowed_date:
+                return jsonify(
+                    success=False,
+                    message="Recurring reservations cannot exceed 4 months."
+                ), 400
 
         if recurrence_type == "none":
             all_dates = [start_dt]
 
+
         elif recurrence_type == "daily":
-            while count < MAX_LIMIT:
+            while current.date() <= max_allowed_date.date():
                 all_dates.append(current)
                 count += 1
                 if end_mode == "after" and after_count and len(all_dates) >= int(after_count):
                     break
                 current += timedelta(days=1)
-                if end_mode == "on" and end_on_date and current.date() > datetime.fromisoformat(end_on_date).date():
-                    break
+                if end_mode == "on" and end_on_date:
+                    if current.date() > datetime.fromisoformat(end_on_date).date():
+                        break
         elif recurrence_type == "weekly":
             weekday_map = ["MO","TU","WE","TH","FR","SA","SU"]
             target_days = weekdays.split(",") if weekdays else []
