@@ -4,24 +4,8 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="e38152d8-cf4c-4200-8245-858a548afff2" name="Changes" comment="Room 02/23/2026 Home laptop V2">
-      <change afterPath="$PROJECT_DIR$/static/js/reserve_main.js" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/static/js/reserve_quick.js" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/static/js/reserve_submit.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.env" beforeDir="false" afterPath="$PROJECT_DIR$/.env" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/WebAXIS Room.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/WebAXIS Room.iml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_2_24_2026_6_54_PM_[Changes]/shelved.patch" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_2_24_2026_6_54_PM__Changes_.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_2_25_2026_8_49_AM_[Changes]/shelved.patch" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_2_25_2026_8_49_AM__Changes_.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_2_26_2026_9_43_PM_[Changes]/shelved.patch" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_2_26_2026_9_43_PM__Changes_.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_2_27_2026_9_59_AM_[Changes]/shelved.patch" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_2_27_2026_9_59_AM__Changes_.xml" beforeDir="false" />
+    <list default="true" id="e38152d8-cf4c-4200-8245-858a548afff2" name="Changes" comment="Room 03/10/2026 Home laptop V2">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/templates/calendar_view_v2_embed.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/calendar_view_v2_embed.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/templates/reserve_v2.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/reserve_v2.html" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -222,7 +206,15 @@
       <option name="project" value="LOCAL" />
       <updated>1771601194067</updated>
     </task>
-    <option name="localTasksCounter" value="11" />
+    <task id="LOCAL-00011" summary="Room 03/10/2026 Home laptop V2">
+      <option name="closed" value="true" />
+      <created>1773152920806</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1773152920806</updated>
+    </task>
+    <option name="localTasksCounter" value="12" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -248,7 +240,8 @@
     <MESSAGE value="Room 12/01/2025 office" />
     <MESSAGE value="Room 02/19/2026 Home laptop V2" />
     <MESSAGE value="Room 02/20/2026 Home laptop V2" />
-    <option name="LAST_COMMIT_MESSAGE" value="Room 02/20/2026 Home laptop V2" />
+    <MESSAGE value="Room 03/10/2026 Home laptop V2" />
+    <option name="LAST_COMMIT_MESSAGE" value="Room 03/10/2026 Home laptop V2" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
