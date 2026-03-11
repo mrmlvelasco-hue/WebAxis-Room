@@ -177,8 +177,8 @@ function paintReservation(ev){
             const remarkText = ev.remarks || "";
 
             div.textContent =
-                remarkText.length > 15
-                    ? remarkText.substring(0, 15) + "..."
+                remarkText.length > 10
+                    ? remarkText.substring(0, 10) + "..."
                     : remarkText;
 
             cell.appendChild(div);
@@ -441,7 +441,7 @@ overflow: auto;
 
   /* Fixed Columns with better depth */
   /*.cal-time-head, .cal-slot-cell { min-width: 85px; width: 85px; }*/
-  .cal-time-head,.cal-slot-cell {width: 130px;min-width: 130px;max-width: 130px;}
+  .cal-time-head,.cal-slot-cell {width: 90px;min-width: 90px;max-width: 90px;}
   .cal-col-room, .cal-col-features, .cal-col-cap { position: sticky; background: var(--frozen-bg); z-index: 6; }
 
   .cal-col-room { left: 0; min-width: 200px; width: 200px; z-index: 8; box-shadow: 2px 0 5px -2px rgba(0,0,0,0.05); }
@@ -514,7 +514,7 @@ td.cal-slot-cell.cal-booked-start {
   justify-content: flex-start;   /* left align */
 
   height: 100%;
-  padding-left: 6px;
+  padding-left: 1px;
 
   white-space: nowrap;
   overflow: hidden;

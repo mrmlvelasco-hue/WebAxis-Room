@@ -4,8 +4,13 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="e38152d8-cf4c-4200-8245-858a548afff2" name="Changes" comment="Room 03/10/2026 Home laptop V2">
+    <list default="true" id="e38152d8-cf4c-4200-8245-858a548afff2" name="Changes" comment="Room 03/04/2026 Office laptop V2">
+      <change beforePath="$PROJECT_DIR$/.env" beforeDir="false" afterPath="$PROJECT_DIR$/.env" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/WebAXIS Room.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/WebAXIS Room.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/calendar_view_v2_embed.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/calendar_view_v2_embed.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/templates/reserve_v2.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/reserve_v2.html" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -34,7 +39,7 @@
   <component name="GithubPullRequestsUISettings">{
   &quot;selectedUrlAndAccountId&quot;: {
     &quot;url&quot;: &quot;https://github.com/mrmlvelasco-hue/WebAxis-Room.git&quot;,
-    &quot;accountId&quot;: &quot;5cb6a370-6101-4134-8beb-5de7ec3dd091&quot;
+    &quot;accountId&quot;: &quot;2983f355-5b3f-42cc-95eb-38a80702a70b&quot;
   }
 }</component>
   <component name="ProjectColorInfo">{
@@ -88,7 +93,7 @@
         <env name="PYTHONUNBUFFERED" value="1" />
       </envs>
       <option name="SDK_HOME" value="" />
-      <option name="SDK_NAME" value="Python 3.13 (WebAXIS Room)" />
+      <option name="SDK_NAME" value="Python 3.13 (WebAxis-Room)" />
       <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
       <option name="IS_MODULE_SDK" value="false" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
@@ -111,7 +116,7 @@
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-python-sdk-b3d66beaba9a-c6efb3732140-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-252.26199.168" />
+        <option value="bundled-python-sdk-7e47963ff851-f0eec537fc84-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-252.23892.515" />
       </set>
     </attachedChunks>
   </component>
@@ -206,15 +211,55 @@
       <option name="project" value="LOCAL" />
       <updated>1771601194067</updated>
     </task>
-    <task id="LOCAL-00011" summary="Room 03/10/2026 Home laptop V2">
+    <task id="LOCAL-00011" summary="Room 02/24/2026 Home laptop V2">
       <option name="closed" value="true" />
-      <created>1773152920806</created>
+      <created>1772013368710</created>
       <option name="number" value="00011" />
       <option name="presentableId" value="LOCAL-00011" />
       <option name="project" value="LOCAL" />
-      <updated>1773152920806</updated>
+      <updated>1772013368710</updated>
     </task>
-    <option name="localTasksCounter" value="12" />
+    <task id="LOCAL-00012" summary="Room 02/27/2026 Office laptop V2">
+      <option name="closed" value="true" />
+      <created>1772184844577</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1772184844577</updated>
+    </task>
+    <task id="LOCAL-00013" summary="Room 03/01/2026 Office laptop V2">
+      <option name="closed" value="true" />
+      <created>1772299702624</created>
+      <option name="number" value="00013" />
+      <option name="presentableId" value="LOCAL-00013" />
+      <option name="project" value="LOCAL" />
+      <updated>1772299702624</updated>
+    </task>
+    <task id="LOCAL-00014" summary="Room 03/01/2026 Office laptop V2">
+      <option name="closed" value="true" />
+      <created>1772373020691</created>
+      <option name="number" value="00014" />
+      <option name="presentableId" value="LOCAL-00014" />
+      <option name="project" value="LOCAL" />
+      <updated>1772373020691</updated>
+    </task>
+    <task id="LOCAL-00015" summary="Room 03/02/2026 Office laptop V2">
+      <option name="closed" value="true" />
+      <created>1772444921875</created>
+      <option name="number" value="00015" />
+      <option name="presentableId" value="LOCAL-00015" />
+      <option name="project" value="LOCAL" />
+      <updated>1772444921875</updated>
+    </task>
+    <task id="LOCAL-00016" summary="Room 03/03/2026 Office laptop V2">
+      <option name="closed" value="true" />
+      <created>1772531538406</created>
+      <option name="number" value="00016" />
+      <option name="presentableId" value="LOCAL-00016" />
+      <option name="project" value="LOCAL" />
+      <updated>1772531538406</updated>
+    </task>
+    <option name="localTasksCounter" value="17" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -240,15 +285,24 @@
     <MESSAGE value="Room 12/01/2025 office" />
     <MESSAGE value="Room 02/19/2026 Home laptop V2" />
     <MESSAGE value="Room 02/20/2026 Home laptop V2" />
-    <MESSAGE value="Room 03/10/2026 Home laptop V2" />
-    <option name="LAST_COMMIT_MESSAGE" value="Room 03/10/2026 Home laptop V2" />
+    <MESSAGE value="Room 02/24/2026 Home laptop V2" />
+    <MESSAGE value="Room 02/27/2026 Office laptop V2" />
+    <MESSAGE value="Room 03/01/2026 Office laptop V2" />
+    <MESSAGE value="Room 03/02/2026 Office laptop V2" />
+    <MESSAGE value="Room 03/03/2026 Office laptop V2" />
+    <option name="LAST_COMMIT_MESSAGE" value="Room 03/03/2026 Office laptop V2" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
       <breakpoints>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/app.py</url>
-          <line>728</line>
+          <line>482</line>
+          <option name="timeStamp" value="7" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/app.py</url>
+          <line>846</line>
           <option name="timeStamp" value="14" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
@@ -258,31 +312,26 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/app.py</url>
-          <line>2210</line>
-          <option name="timeStamp" value="28" />
+          <line>1949</line>
+          <option name="timeStamp" value="30" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/app.py</url>
-          <line>1250</line>
-          <option name="timeStamp" value="33" />
+          <line>1661</line>
+          <option name="timeStamp" value="34" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/app.py</url>
-          <line>834</line>
-          <option name="timeStamp" value="40" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/app.py</url>
-          <line>1400</line>
-          <option name="timeStamp" value="44" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/app.py</url>
-          <line>1381</line>
-          <option name="timeStamp" value="45" />
+          <line>886</line>
+          <option name="timeStamp" value="35" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>
+    <watches-manager>
+      <configuration name="PythonConfigurationType">
+        <watch expression="all_dates" />
+      </configuration>
+    </watches-manager>
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/WebAXIS_Room$app.coverage" NAME="app Coverage Results" MODIFIED="1762697729366" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />

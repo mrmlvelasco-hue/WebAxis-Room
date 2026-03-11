@@ -203,7 +203,7 @@
                 <div class="vstack gap-2">
                   <div class="form-check custom-option">
                     <input class="form-check-input" type="radio" name="repeat_ends" id="endsNever" value="never" checked>
-                    <label class="form-check-label small" for="endsNever">Until 3 Months</label>
+                    <label class="form-check-label small" for="endsNever">Until {{ MAX_RECUR_MONTHS }} Months</label>
                   </div>
 
                   <div class="d-flex align-items-center gap-2">
@@ -292,6 +292,7 @@
 <script>
     const TIMELINE_START_HOUR = {{ TIMELINE_START_HOUR }};
     const TIMELINE_END_HOUR   = {{ TIMELINE_END_HOUR }};
+    const MAX_RECUR_MONTHS   = {{ MAX_RECUR_MONTHS }};
     function toDatetimeLocalValue(d) {
   // Format: YYYY-MM-DDTHH:MM (local time, no seconds)
   const pad = (n) => String(n).padStart(2, '0');
@@ -504,7 +505,9 @@ modalDateInput.addEventListener("change", function() {
 
     const startDateObj = new Date(selectedDate);
     const maxDate = new Date(startDateObj);
-    maxDate.setMonth(maxDate.getMonth() + 4);
+    const MAX_RECUR_MONTHS   = {{ MAX_RECUR_MONTHS }};
+    console.log(MAX_RECUR_MONTHS);
+    maxDate.setMonth(maxDate.getMonth() + MAX_RECUR_MONTHS);
 
     const maxDateStr = maxDate.toISOString().split("T")[0];
 
@@ -590,10 +593,10 @@ document.addEventListener("DOMContentLoaded", function () {
     }
     // hide recurrence UI where applicable
       if (recType){
-        recType.addEventListener('change', () => {
-          weeklyOptions.style.display = recType.value === 'weekly' ? 'block' : 'none';
-          monthlyOptions.style.display = recType.value === 'monthly' ? 'block' : 'none';
-        });
+            recType.addEventListener('change', () => {
+            weeklyOptions.style.display = recType.value === 'weekly' ? 'block' : 'none';
+            monthlyOptions.style.display = recType.value === 'monthly' ? 'block' : 'none';
+      });
       }
 
        function validateTimes() {
@@ -692,7 +695,8 @@ document.addEventListener("DOMContentLoaded", function () {
     if (event.data.type === "OPEN_NEW_RESERVATION") {
 
         console.log("OPEN_NEW_RESERVATION");
-
+        const MAX_RECUR_MONTHS   = {{ MAX_RECUR_MONTHS }};
+        console.log(MAX_RECUR_MONTHS);
         const roomId  = event.data.room_id;
         const slotMin = event.data.slot_min;
 
@@ -741,7 +745,8 @@ document.addEventListener("DOMContentLoaded", function () {
         const startDateObj = new Date(selectedDate);
 
         const maxDate = new Date(startDateObj);
-        maxDate.setMonth(maxDate.getMonth() + 4);
+
+        maxDate.setMonth(maxDate.getMonth() + MAX_RECUR_MONTHS);
 
         const maxDateStr = maxDate.toISOString().split("T")[0];
 
@@ -753,7 +758,8 @@ document.addEventListener("DOMContentLoaded", function () {
         updateEndTimeOptions();
         document.getElementById("modalMeetingTitle").value = "";
         document.getElementById("modalRoomLabel").textContent = room.name;
-
+        console.log(MAX_RECUR_MONTHS + " Months recurring");
+        console.log(maxDateStr + " Max Date");
         renderFeatures(room.features || "");
 
         document.getElementById("repeat_rule").value = "none";
@@ -844,15 +850,44 @@ document.addEventListener("DOMContentLoaded", function () {
             "weekly_interval",
             document.getElementById("weeklyInterval")?.value || 1
         );
+        //let endMode = "never";
+        //if (document.getElementById("endsOn")?.checked) endMode = "on";
+        //if (document.getElementById("endsAfter")?.checked) endMode = "after";
+
+        //fd.append("end_mode", endMode);
+        //fd.append("end_on_date",
+        //    document.getElementById("endsOnDate")?.value || "");
+        //fd.append("end_after_count",
+        //    document.getElementById("endsAfterCount")?.value || "");
         let endMode = "never";
-        if (document.getElementById("endsOn")?.checked) endMode = "on";
-        if (document.getElementById("endsAfter")?.checked) endMode = "after";
+        let endOnDate = document.getElementById("endsOnDate")?.value || "";
+
+        if (document.getElementById("endsOn")?.checked) {
+            endMode = "on";
+        }
+
+        if (document.getElementById("endsAfter")?.checked) {
+            endMode = "after";
+        }
+
+        // 🔥 Convert "never" to MAX_RECUR_MONTHS limit
+        if (endMode === "never") {
+
+            const startDate = new Date(dateInput.value);
+            const maxDate = new Date(startDate);
+
+            maxDate.setMonth(maxDate.getMonth() + MAX_RECUR_MONTHS);
+
+            endOnDate = maxDate.toISOString().split("T")[0];
+
+            endMode = "on"; // force backend to treat as end date
+        }
 
         fd.append("end_mode", endMode);
-        fd.append("end_on_date",
-            document.getElementById("endsOnDate")?.value || "");
+        fd.append("end_on_date", endOnDate);
         fd.append("end_after_count",
             document.getElementById("endsAfterCount")?.value || "");
+
 
         submitBtn.disabled = true;
         const originalText = submitBtn.innerHTML;

@@ -1191,12 +1191,14 @@ def reserve_v2():
         locations_set.add(r[2] or "General")
     TIMELINE_START_HOUR = int(os.getenv("TIMELINE_START_HOUR", 6))
     TIMELINE_END_HOUR = int(os.getenv("TIMELINE_END_HOUR", 22))
+    MAX_RECUR_MONTHS = int(os.getenv("MAX_RECUR_MONTHS", 4))
     return render_template(
         "reserve_v2.html",
         locations=sorted(locations_set),
         rooms_json=json.dumps(rooms),
         TIMELINE_START_HOUR=TIMELINE_START_HOUR,
-        TIMELINE_END_HOUR=TIMELINE_END_HOUR
+        TIMELINE_END_HOUR=TIMELINE_END_HOUR,
+        MAX_RECUR_MONTHS=MAX_RECUR_MONTHS
     )
 
 
@@ -1262,6 +1264,7 @@ def calendar_view_v2():
     """
     TIMELINE_START_HOUR = int(os.getenv("TIMELINE_START_HOUR", 6))
     TIMELINE_END_HOUR = int(os.getenv("TIMELINE_END_HOUR", 20))
+    MAX_RECUR_MONTHS = int(os.getenv("MAX_RECUR_MONTHS", 4))
     from datetime import datetime
 
     # date
@@ -1364,7 +1367,8 @@ def calendar_view_v2():
         rooms=rooms,
         time_slots=time_slots,
         TIMELINE_START_HOUR=TIMELINE_START_HOUR,
-        TIMELINE_END_HOUR=TIMELINE_END_HOUR
+        TIMELINE_END_HOUR=TIMELINE_END_HOUR,
+        MAX_RECUR_MONTHS=MAX_RECUR_MONTHS
     )
 
 @app.route("/api/reservations_v2_day")
