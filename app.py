@@ -1189,11 +1189,14 @@ def reserve_v2():
             "features": r[3] or ""
         })
         locations_set.add(r[2] or "General")
-
+    TIMELINE_START_HOUR = int(os.getenv("TIMELINE_START_HOUR", 6))
+    TIMELINE_END_HOUR = int(os.getenv("TIMELINE_END_HOUR", 22))
     return render_template(
         "reserve_v2.html",
         locations=sorted(locations_set),
-        rooms_json=json.dumps(rooms)
+        rooms_json=json.dumps(rooms),
+        TIMELINE_START_HOUR=TIMELINE_START_HOUR,
+        TIMELINE_END_HOUR=TIMELINE_END_HOUR
     )
 
 
@@ -1257,6 +1260,8 @@ def calendar_view_v2():
       - room: room name filter (optional)
       - date: YYYY-MM-DD (default: today)
     """
+    TIMELINE_START_HOUR = int(os.getenv("TIMELINE_START_HOUR", 6))
+    TIMELINE_END_HOUR = int(os.getenv("TIMELINE_END_HOUR", 20))
     from datetime import datetime
 
     # date
@@ -1338,11 +1343,14 @@ def calendar_view_v2():
             "features": str(r.features) if r.features else ""
         })
 
-    # 30-minute slots 06:00 to 20:00 (like Excel mock)
+    # 30-minute slots based on ENV configuration
     time_slots = []
-    for h in range(6, 21):
+
+    for h in range(TIMELINE_START_HOUR, TIMELINE_END_HOUR + 1):
+
         time_slots.append(f"{h:02d}:00")
-        if h != 20:
+
+        if h != TIMELINE_END_HOUR:
             time_slots.append(f"{h:02d}:30")
 
     embed = (request.args.get("embed") or "").strip() == "1"
@@ -1355,6 +1363,8 @@ def calendar_view_v2():
         locations=locations,
         rooms=rooms,
         time_slots=time_slots,
+        TIMELINE_START_HOUR=TIMELINE_START_HOUR,
+        TIMELINE_END_HOUR=TIMELINE_END_HOUR
     )
 
 @app.route("/api/reservations_v2_day")
@@ -1634,14 +1644,15 @@ def reserve_post(room_id):
     try:
         conn = get_db_connection()
         cur = conn.cursor()
-
+        MAX_RECUR_MONTHS = int(os.getenv("MAX_RECUR_MONTHS", 4))
         payload = request.get_json() if request.is_json else request.form.to_dict()
 
         start_time = payload.get("start_time")
         end_time = payload.get("end_time")
         remarks = payload.get("remarks", "")
         email = payload.get("email") or getattr(current_user, "email", None)
-        reserved_by = payload.get("reserved_by") or getattr(current_user, "display_name", "") or getattr(current_user, "username", "")
+        reserved_by = payload.get("reserved_by") or getattr(current_user, "display_name", "") or getattr(current_user,
+                                                                                                         "username", "")
 
         recurrence_type = payload.get("recurrence_type", "none")
         weekdays = payload.get("weekdays", "")
@@ -1658,10 +1669,18 @@ def reserve_post(room_id):
         end_dt = snap_to_30min_round(datetime.fromisoformat(end_time))
         base_duration = end_dt - start_dt
 
-        from dateutil.relativedelta import relativedelta
+        # from dateutil.relativedelta import relativedelta
 
-        MAX_MONTHS = 4
-        max_allowed_date = start_dt + relativedelta(months=MAX_MONTHS)
+        max_allowed_date = start_dt + relativedelta(months=MAX_RECUR_MONTHS)
+
+        if end_mode == "on" and end_on_date:
+            selected_end = datetime.fromisoformat(end_on_date)
+
+            if selected_end > max_allowed_date:
+                return jsonify(
+                    success=False,
+                    message=f"Recurring reservations cannot exceed {MAX_RECUR_MONTHS} months."
+                ), 400
 
         # ---- ROOM INFO ----
         cur.execute("SELECT id, name, location, approvals_required FROM rooms WHERE id = ?", (room_id,))
@@ -1707,7 +1726,7 @@ def reserve_post(room_id):
             if selected_end > max_allowed_date:
                 return jsonify(
                     success=False,
-                    message="Recurring reservations cannot exceed 4 months."
+                    message=f"Recurring reservations cannot exceed {MAX_RECUR_MONTHS} months."
                 ), 400
 
         if recurrence_type == "none":
@@ -1725,7 +1744,7 @@ def reserve_post(room_id):
                     if current.date() > datetime.fromisoformat(end_on_date).date():
                         break
         elif recurrence_type == "weekly":
-            weekday_map = ["MO","TU","WE","TH","FR","SA","SU"]
+            weekday_map = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]
             target_days = weekdays.split(",") if weekdays else []
             if not target_days:
                 target_days = [weekday_map[start_dt.weekday()]]
@@ -1749,7 +1768,7 @@ def reserve_post(room_id):
                 if end_mode == "on" and cur_dt.date() > datetime.fromisoformat(end_on_date).date():
                     break
 
-        # MONTHLY—can add later if needed
+        # MONTHLYâ€”can add later if needed
         elif recurrence_type == "monthly":
             # all_dates = [start_dt]  # TODO: support monthly rules
 
@@ -1777,12 +1796,12 @@ def reserve_post(room_id):
                 if end_mode == "on" and end_on_date:
                     if current.date() > datetime.fromisoformat(end_on_date).date():
                         break
-        # (weekly/monthly logic unchanged – keep your existing logic)
+        # (weekly/monthly logic unchanged â€“ keep your existing logic)
 
         group_rooms = get_combined_group_rooms(room_id)
 
         # =========================================================
-        # 🔴 ALL-OR-NOTHING VALIDATION PHASE
+        # ðŸ”´ ALL-OR-NOTHING VALIDATION PHASE
         # =========================================================
 
         conflicts = []
@@ -1840,7 +1859,7 @@ def reserve_post(room_id):
                     })
                     break
 
-        # 🚫 If any conflicts → return detailed response
+        # ðŸš« If any conflicts â†’ return detailed response
         if conflicts:
             conn.rollback()
             conn.close()
@@ -1853,7 +1872,7 @@ def reserve_post(room_id):
             ), 409
 
         # =========================================================
-        # 🟢 INSERT PHASE (ONLY IF ZERO CONFLICTS)
+        # ðŸŸ¢ INSERT PHASE (ONLY IF ZERO CONFLICTS)
         # =========================================================
 
         status_to_use = decide_status()
@@ -2009,7 +2028,7 @@ def api_cancel_reservation(res_id):
                     rev.id = ?
                     AND r.is_combined = 1
                     AND crev.reserved_by LIKE '%' + rev.reserved_by + '%'
-                    AND crev.status in ('Blocked','Pending','Approved');
+                    AND crev.status = 'Blocked';
 
         """, (res_id))
 

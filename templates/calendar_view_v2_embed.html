@@ -11,7 +11,8 @@
 
 <body class="p-0 m-0 bg-white" style="font-family: 'Inter', sans-serif; color: #1e293b;">
 
-  <div class="px-3 py-2 bg-light border-bottom d-flex align-items-center justify-content-between">
+  <div class="px-3 py-2 bg-light border-bottom d-flex align-items-center justify-content-between d-none"
+     id="GridHeaderTitle">
     <div class="d-flex align-items-center">
       <span class="badge bg-primary-subtle text-primary border border-primary-subtle me-2 px-2 py-1">
         <i class="bi bi-calendar-event"></i>
@@ -63,7 +64,6 @@
   </div>
 
 <script>
-
 /* =========================================================
    CALENDAR V2 – PRO VERSION
    ✔ Solid coloring
@@ -73,8 +73,8 @@
    ✔ Instant popup
 ========================================================= */
 
-const GRID_START_MIN = 6 * 60;
-const GRID_END_MIN   = 20 * 60;
+const GRID_START_MIN = {{ TIMELINE_START_HOUR }} * 60;
+const GRID_END_MIN   = {{ TIMELINE_END_HOUR }} * 60;
 const SLOT_MINUTES   = 30;
 
 /* =============================
@@ -111,7 +111,7 @@ function formatSlotKey(roomId, slotMin){
 
 function clearGrid(){
     reservationMap = {};
-
+    document.getElementById("GridHeaderTitle").style.display = "none";
     document.querySelectorAll(".cal-slot-cell").forEach(td=>{
         td.classList.remove("cal-booked","cal-booked-start","cal-booked-end");
         td.innerHTML = "";
@@ -154,29 +154,39 @@ function paintReservation(ev){
         cell.dataset.roomId = ev.room_id;
         cell.dataset.slotMin = slotMin;
 
+        /* Tooltip */
+        cell.title =
+            "Room: " + ev.room + "\n" +
+            "Reserved By: " + ev.reserved_by + "\n" +
+            "Time: " + ev.start + " - " + ev.end + "\n" +
+            "Title: " + (ev.remarks || "No title");
+
         /* ----- Color by status ----- */
         const status = (ev.status || "").toLowerCase();
         console.log("Painting:", ev.room_id, slotMin);
-<!--        if(status === "approved" || status === "booked"){-->
-<!--            cell.style.backgroundColor = "#d4edda";-->
-<!--        }-->
-<!--        else if(status === "pending"){-->
-<!--            cell.style.backgroundColor = "#fff3cd";-->
-<!--        }-->
-<!--        else if(status === "blocked"){-->
-<!--            cell.style.backgroundColor = "#f8d7da";-->
-<!--        }-->
+
 
         /* ----- Store reservation in map ----- */
         reservationMap[formatSlotKey(ev.room_id, slotMin)] = ev;
 
-        /* ----- Show remarks only on first cell ----- */
-        if(i === startIdx){
+        if(ev.remarks){
+
             const div = document.createElement("div");
             div.className = "cal-remarks";
-            div.textContent = ev.remarks || "";
+
+            const remarkText = ev.remarks || "";
+
+            div.textContent =
+                remarkText.length > 15
+                    ? remarkText.substring(0, 15) + "..."
+                    : remarkText;
+
             cell.appendChild(div);
+
+            // tooltip for full text
+            cell.title = ev.remarks;
         }
+
     }
 }
 
@@ -430,7 +440,8 @@ overflow: auto;
   }
 
   /* Fixed Columns with better depth */
-  .cal-time-head, .cal-slot-cell { min-width: 85px; width: 85px; }
+  /*.cal-time-head, .cal-slot-cell { min-width: 85px; width: 85px; }*/
+  .cal-time-head,.cal-slot-cell {width: 130px;min-width: 130px;max-width: 130px;}
   .cal-col-room, .cal-col-features, .cal-col-cap { position: sticky; background: var(--frozen-bg); z-index: 6; }
 
   .cal-col-room { left: 0; min-width: 200px; width: 200px; z-index: 8; box-shadow: 2px 0 5px -2px rgba(0,0,0,0.05); }
@@ -497,21 +508,20 @@ td.cal-slot-cell.cal-booked-start {
   text-overflow: ellipsis;
   font-size: 12px;
 }
-    .cal-remarks {
+ .cal-remarks {
   display: flex;
-  justify-content: center;
   align-items: center;
+  justify-content: flex-start;   /* left align */
+
   height: 100%;
+  padding-left: 6px;
 
-  text-align: center;
-  padding: 0 4px;
-
-  /* limit based on cell size */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 
   font-size: 12px;
+  text-align: left;
 }
     .clickable-slot {
     cursor: pointer;

@@ -5,7 +5,7 @@
 <div class="container-fluid py-4">
 
   <div class="d-flex justify-content-between align-items-end mb-4 flex-wrap gap-3">
-    <div>
+    <div id="ReservationHeader">>
       <nav aria-label="breadcrumb">
         <ol class="breadcrumb mb-1">
           <li class="breadcrumb-item small"><a href="#" class="text-decoration-none">Dashboard</a></li>
@@ -15,10 +15,10 @@
       <h2 class="h3 mb-0 fw-bold text-dark">
         <i class="bi bi-calendar2-check text-primary me-2"></i>Reserve Room
       </h2>
-      <p class="text-muted small mb-0">Schedule meetings and manage real-time room availability.</p>
+      <p class="text-muted small mb-0" id="GridTitle">Schedule meetings and manage real-time room availability.</p>
     </div>
 
-    <div class="d-flex gap-2">
+    <div class="d-flex gap-2 ms-auto">
       <a id="viewFullCalendarBtn" href="/calendar_view" class="btn btn-white border shadow-sm btn-sm px-3">
         <i class="bi bi-calendar3 me-1 text-primary"></i> Full Calendar
       </a>
@@ -72,7 +72,7 @@
         <span class="badge bg-primary-subtle text-primary p-2 me-2 rounded-3">
           <i class="bi bi-grid-3x3-gap-fill"></i>
         </span>
-        <h6 class="mb-0 fw-bold">Live Availability Grid</h6>
+        <h6 class="mb-0 fw-bold">Room Availability</h6>
       </div>
       <button type="button" class="btn btn-sm btn-outline-primary border-0 rounded-pill" onclick="refreshAvailability()">
         <i class="bi bi-arrow-clockwise me-1"></i> Sync View
@@ -290,6 +290,8 @@
 
 {% block scripts %}
 <script>
+    const TIMELINE_START_HOUR = {{ TIMELINE_START_HOUR }};
+    const TIMELINE_END_HOUR   = {{ TIMELINE_END_HOUR }};
     function toDatetimeLocalValue(d) {
   // Format: YYYY-MM-DDTHH:MM (local time, no seconds)
   const pad = (n) => String(n).padStart(2, '0');
@@ -376,11 +378,11 @@ function generateModalTimeOptions() {
     startSelect.innerHTML = "";
     endSelect.innerHTML   = "";
 
-    for (let hour = 6; hour <= 20; hour++) {
+    for (let hour = TIMELINE_START_HOUR; hour <= TIMELINE_END_HOUR; hour++) {
 
         ["00", "30"].forEach(min => {
 
-            if (hour === 20 && min === "30") return;
+            if (hour === TIMELINE_END_HOUR && min === "30") return;
 
             const value = `${String(hour).padStart(2,'0')}:${min}`;
 
@@ -397,10 +399,10 @@ function formatTime(timeStr) {
     const hour12 = hour % 12 || 12;
     return `${hour12}:${m} ${ampm}`;
 }
-    const startInput = document.getElementById("modalStartTime");
+const startInput = document.getElementById("modalStartTime");
 const endInput   = document.getElementById("modalEndTime");
 
-const MAX_DURATION_MINUTES = 1440; // 4 hours
+const MAX_DURATION_MINUTES = 240; // 4 hours
 
 function updateEndTimeOptions() {
 
@@ -421,7 +423,7 @@ function updateEndTimeOptions() {
         const minutes = totalMinutes % 60;
 
         // stop if past 20:00 (your system limit)
-        if (hours > 20 || (hours === 20 && minutes > 0)) break;
+        if (hours > TIMELINE_END_HOUR || (hours === TIMELINE_END_HOUR && minutes > 0)) break;
 
         const value =
             String(hours).padStart(2, "0") + ":" +
@@ -512,6 +514,7 @@ modalDateInput.addEventListener("change", function() {
 });
 </script>
 <script>
+
 document.addEventListener("DOMContentLoaded", function () {
 
     /* =========================================================
@@ -535,6 +538,9 @@ document.addEventListener("DOMContentLoaded", function () {
     //const viewDateInput = document.getElementById("viewDate");
     //const selectedDate = viewDateInput?.value;
     document.getElementById("openReserveBtn").style.display = "none";
+    document.getElementById("GridTitle").style.visibility = "none";
+    document.getElementById("ReservationHeader").style.display = "none";
+
     document.getElementById("viewDate").value = new Date().toISOString().split("T")[0];
     refreshAvailability();
     document.getElementById("roomFilterHeader").disabled = true;
