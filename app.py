@@ -14,8 +14,6 @@ from dateutil.relativedelta import relativedelta
 
 import uuid
 
-
-
 from flask_login import (
     LoginManager, UserMixin,
     login_user, logout_user, login_required, current_user
@@ -664,8 +662,8 @@ def login():
     ad_ok = False
 
     if AD_SERVER:
-        ad_ok = True
-        # ad_ok = authenticate_ldap(username, password)
+        # ad_ok = True
+        ad_ok = authenticate_ldap(username, password)
 
     if ad_ok:
         conn = get_db_connection()
@@ -685,16 +683,28 @@ def login():
 
     if not user:
         log_audit("LOGIN_FAILED", f"Failed login for {username}")
-        return jsonify({"success": False, "message": "Invalid credentials"}), 401
 
+        if request.is_json:
+            return jsonify({
+                "success": False,
+                "message": "Invalid username or password"
+            }), 401
+        else:
+            flash("Invalid username or password", "danger")
+            return redirect(url_for("login"))
+
+    # ------------------------------
+    # SUCCESS LOGIN
+    # ------------------------------
     login_user(user, remember=remember)
     log_audit("LOGIN_SUCCESS", f"User {user.username} logged in")
 
-    # If API request → return JSON
     if request.is_json:
-        return jsonify({"success": True, "redirect": url_for('resever_v2')})
+        return jsonify({
+            "success": True,
+            "redirect": url_for('reserve_v2')
+        })
 
-    # Otherwise redirect normally
     return redirect(url_for('reserve_v2'))
 
 import itsdangerous

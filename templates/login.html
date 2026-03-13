@@ -5,35 +5,107 @@
 <div class="login-card text-center shadow-lg">
   <img src="{{ url_for('static', filename='img/pcppi_logo.png') }}" alt="PCPPI Logo" class="login-logo mb-3">
 
-  <h2 class="fw-bold text-primary mb-1">WebAXIS RoomSys</h2>
   <p class="text-muted mb-4 fw-semibold">PCPPI Room Reservation Portal</p>
 
-  <form method="POST" action="{{ url_for('login') }}">
-    <div class="mb-3 text-start">
-      <label for="username" class="form-label fw-bold text-dark">Domain Username</label>
-      <input type="text" name="username" id="username"
-             class="form-control form-control-lg fw-semibold"
-             placeholder="e.g. mlvelasco" required>
-    </div>
+  <form id="loginForm">
 
-    <div class="mb-3 text-start">
-      <label for="password" class="form-label fw-bold text-dark">Password</label>
-      <input type="password" name="password" id="password"
-             class="form-control form-control-lg fw-semibold" required>
-    </div>
+  <div class="mb-3 text-start">
+    <label class="form-label fw-bold text-dark">Domain Username</label>
+    <input type="text" id="username"
+           class="form-control form-control-lg fw-semibold"
+           placeholder="e.g. mlvelasco" required>
+  </div>
 
-    <div class="form-check mb-4 text-start">
-      <input type="checkbox" class="form-check-input" id="remember" name="remember">
-      <label class="form-check-label text-dark" for="remember">Remember me on this device</label>
-    </div>
+  <div class="mb-3 text-start">
+    <label class="form-label fw-bold text-dark">Password</label>
+    <input type="password" id="password"
+           class="form-control form-control-lg fw-semibold" required>
+  </div>
 
-    <button type="submit" class="btn btn-primary w-100 py-3 fw-bold">
-      <i class="bi bi-box-arrow-in-right me-2"></i> Sign In
-    </button>
-  </form>
+  <button id="loginBtn" type="submit" class="btn btn-primary w-100 py-3 fw-bold">
+    <i class="bi bi-box-arrow-in-right me-2"></i> Sign In
+  </button>
+
+</form>
 
   <div class="text-light small mt-4 opacity-75">
     <i class="bi bi-shield-lock"></i> Secured by <strong>Active Directory</strong>
   </div>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", function(){
+
+const form = document.getElementById("loginForm");
+const btn = document.getElementById("loginBtn");
+
+console.log("Script loaded");
+
+form.addEventListener("submit", async function(e){
+
+
+    e.preventDefault();
+
+    const username = document.getElementById("username").value.trim();
+    const password = document.getElementById("password").value.trim();
+
+    if(!username || !password){
+        Swal.fire({
+            icon: "warning",
+            title: "Missing Information",
+            text: "Please enter username and password"
+        });
+        return;
+    }
+
+    btn.disabled = true;
+
+    Swal.fire({
+        title: "Signing in...",
+        html: "Authenticating with Active Directory",
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading()
+    });
+
+    try{
+
+        const res = await fetch("/login", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            },
+            body: JSON.stringify({username,password})
+        });
+
+        const data = await res.json();
+
+        if(data.success){
+            window.location.href = data.redirect;
+        }else{
+            Swal.fire({
+                icon: "error",
+                title: "Login Failed",
+                text: data.message
+            });
+
+            btn.disabled = false;
+        }
+
+    }catch(err){
+
+        Swal.fire({
+            icon: "error",
+            title: "System Error",
+            text: "Unable to connect to server"
+        });
+
+        btn.disabled = false;
+    }
+
+});
+
+});
+</script>
 {% endblock %}
