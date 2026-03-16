@@ -35,10 +35,15 @@ AD_USE_SSL = os.getenv("AD_USE_SSL", "no").lower() == "yes"
 AD_USER_DOMAIN = os.getenv("AD_USER_DOMAIN", "")
 AD_TEST_USER = os.getenv("AD_TEST_USER")
 AD_TEST_PASS = os.getenv("AD_TEST_PASS")
-FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY")
+
+SHARED_SECRET_KEY  = os.getenv("SHARED_SECRET_KEY")
 
 app = Flask(__name__)
-app.secret_key = FLASK_SECRET_KEY or os.urandom(24)
+
+if not SHARED_SECRET_KEY:
+    raise RuntimeError("SHARED_SECRET_KEY is not set in environment variables")
+
+app.secret_key = SHARED_SECRET_KEY
 app.permanent_session_lifetime = timedelta(days=7)
 NATIONAL_ADMINS = ['admin', 'systemadmin']  # add more if needed
 
@@ -710,41 +715,163 @@ def login():
 import itsdangerous
 serializer = itsdangerous.URLSafeTimedSerializer(app.secret_key)
 
+# @app.route('/sso-login')
+# def sso_login():
+#
+#     token = request.args.get("token")
+#
+#     if not token:
+#         return "SSO Error: Missing authentication token.", 400
+#
+#     # --- Decode Token ---
+#     try:
+#         data = serializer.loads(token, max_age=60)
+#         username = data.get("username")
+#
+#     except Exception:
+#         return "SSO Error: Invalid or expired token.", 401
+#
+#     if not username:
+#         return "SSO Error: Username not found in token.", 401
+#
+#     # --- Check if user exists ---
+#     conn = get_db_connection()
+#     cursor = conn.cursor()
+#
+#     cursor.execute("""
+#         SELECT id, username, email, display_name, role
+#         FROM dbo.users
+#         WHERE username = ?
+#     """, (username,))
+#
+#     row = cursor.fetchone()
+#     conn.close()
+#
+#     if not row:
+#         return f"""
+#         SSO Login Failed
+#
+#         User '{username}' is not registered in the Room Reservation System.
+#
+#         Please contact the system administrator to request access.
+#         """, 403
+#
+#     # --- Login user ---
+#     uid, uname, email, display_name, role = row
+#     user = User(uid, uname, email, display_name, role)
+#
+#     login_user(user)
+#
+#     return redirect(url_for("reserve_v2"))
+import base64
+import json
+import hmac
+import hashlib
+import time
+import os
+
+USED_NONCES = set()
+
+SSO_TOKEN_EXPIRY = int(os.getenv("SSO_TOKEN_EXPIRY", "60"))
+SHARED_SECRET_KEY = os.getenv("SHARED_SECRET_KEY")
+
 @app.route('/sso-login')
 def sso_login():
+
     token = request.args.get("token")
 
     if not token:
-        return "Missing token", 400
+        return render_template(
+            "sso_error.html",
+            title="Authentication Error",
+            message="Missing authentication token."
+        ), 400
 
+    # --- Decode token ---
     try:
-        # Token expires after 60 seconds
-        data = serializer.loads(token, max_age=60)
-        username = data.get("username")
-
+        decoded = base64.b64decode(token).decode()
+        payload, signature = decoded.rsplit(".", 1)
     except Exception:
-        return "Invalid or expired token", 401
+        return render_template(
+            "sso_error.html",
+            title="Authentication Error",
+            message="Invalid token format."
+        ), 401
 
-    # Load user from DB
+    # --- Verify signature ---
+    expected_sig = base64.b64encode(
+        hmac.new(
+            SHARED_SECRET_KEY.encode(),
+            payload.encode(),
+            hashlib.sha256
+        ).digest()
+    ).decode()
+
+    if not hmac.compare_digest(signature, expected_sig):
+        return render_template(
+            "sso_error.html",
+            title="Authentication Error",
+            message="Invalid token signature."
+        ), 401
+
+    # --- Parse payload ---
+    try:
+        data = json.loads(payload)
+        username = data.get("username")
+        ts = data.get("ts")
+        nonce = data.get("nonce")
+    except Exception:
+        return render_template(
+            "sso_error.html",
+            title="Authentication Error",
+            message="Invalid token payload."
+        ), 401
+
+    # --- Token expiration check ---
+    if not ts or abs(time.time() - ts) > SSO_TOKEN_EXPIRY:
+        return render_template(
+            "sso_error.html",
+            title="Session Expired",
+            message="Your login session has expired. Please return to the portal."
+        ), 401
+
+    # --- Replay protection ---
+    if nonce in USED_NONCES:
+        return render_template(
+            "sso_error.html",
+            title="Security Warning",
+            message="This login token has already been used."
+        ), 401
+
+    USED_NONCES.add(nonce)
+
+    # --- Check if user exists ---
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute(
-        "SELECT id, username, email, display_name, role FROM dbo.users WHERE username = ?",
-        (username,)
-    )
+
+    cursor.execute("""
+        SELECT id, username, email, display_name, role
+        FROM dbo.users
+        WHERE username = ?
+    """, (username,))
+
     row = cursor.fetchone()
     conn.close()
 
     if not row:
-        return "User not found", 404
+        return render_template(
+            "sso_error.html",
+            title="Access Denied",
+            message=f"User '{username}' is not registered in the Room Reservation System."
+        ), 403
 
+    # --- Login user ---
     uid, uname, email, display_name, role = row
     user = User(uid, uname, email, display_name, role)
 
     login_user(user)
-    log_audit("SSO_LOGIN", f"SSO login for {user.username}")
 
-    return redirect(url_for("main_menu"))
+    return redirect(url_for("reserve_v2"))
 
 @app.route('/logout')
 @login_required
