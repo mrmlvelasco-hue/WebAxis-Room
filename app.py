@@ -710,28 +710,52 @@ def login():
 import itsdangerous
 serializer = itsdangerous.URLSafeTimedSerializer(app.secret_key)
 
+import base64
+import hmac
+import hashlib
+import json
+
+SECRET_KEY = "SHARED_SECRET_KEY"
+
 @app.route('/sso-login')
 def sso_login():
+
     token = request.args.get("token")
 
     if not token:
         return "Missing token", 400
 
     try:
-        # Token expires after 60 seconds
-        data = serializer.loads(token, max_age=60)
+        decoded = base64.b64decode(token).decode()
+        payload, signature = decoded.rsplit(".", 1)
+
+        expected_signature = base64.b64encode(
+            hmac.new(
+                SECRET_KEY.encode(),
+                payload.encode(),
+                hashlib.sha256
+            ).digest()
+        ).decode()
+
+        if not hmac.compare_digest(signature, expected_signature):
+            return "Invalid token", 401
+
+        data = json.loads(payload)
         username = data.get("username")
 
-    except Exception:
-        return "Invalid or expired token", 401
+    except Exception as e:
+        print("SSO error:", e)
+        return "Invalid token format", 401
 
-    # Load user from DB
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute(
-        "SELECT id, username, email, display_name, role FROM dbo.users WHERE username = ?",
-        (username,)
-    )
+
+    cursor.execute("""
+        SELECT id, username, email, display_name, role
+        FROM dbo.users
+        WHERE username = ?
+    """, (username,))
+
     row = cursor.fetchone()
     conn.close()
 
@@ -742,9 +766,8 @@ def sso_login():
     user = User(uid, uname, email, display_name, role)
 
     login_user(user)
-    log_audit("SSO_LOGIN", f"SSO login for {user.username}")
 
-    return redirect(url_for("main_menu"))
+    return redirect(url_for("reserve_v2"))
 
 @app.route('/logout')
 @login_required
