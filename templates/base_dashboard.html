@@ -46,13 +46,14 @@
                 <span class="link-text">Dashboard</span>
             </a>
         </li>
-
+         {% if current_user.is_admin() %}
         <li>
             <a href="{{ url_for('room_list') }}" class="nav-link {% if request.endpoint == 'room_list' %}active{% endif %}">
                 <i class="bi bi-door-open me-2"></i>
                 <span class="link-text">Rooms</span>
             </a>
         </li>
+        {% endif %}
         <li>
                 <a href="{{ url_for('reserve_v2') }}"
                    class="nav-link {% if request.endpoint == 'reserve_v2' %}active{% endif %}">
@@ -75,9 +76,7 @@
                 <span class="link-text">Users</span>
             </a>
         </li>
-        {% endif %}
 
-        {% if current_user %}
         <li>
             <a href="{{ url_for('room_maintenance') }}" class="nav-link {% if request.endpoint == 'room_maintenance' %}active{% endif %}">
                 <i class="bi bi-gear me-2"></i>
@@ -97,14 +96,20 @@
 </li>
 
 
-        {% endif %}
+
 
         <li class="mt-auto">
-            <a href="{{ url_for('logout') }}" class="nav-link">
-                <i class="bi bi-box-arrow-right me-2"></i>
-                <span class="link-text">Logout</span>
-            </a>
-        </li>
+    <a href="#" id="logoutBtn" class="nav-link">
+    <i class="bi bi-box-arrow-right me-2"></i>
+    <span class="link-text">Logout</span>
+</a>
+</li>
+
+  {% endif %}
+
+           {% if current_user %}
+
+        {% endif %}
     </ul>
 </div>
 
@@ -138,8 +143,10 @@
      ======================== -->
 {% with messages = get_flashed_messages(with_categories=true) %}
 {% if messages %}
+
 <script>
 document.addEventListener("DOMContentLoaded", function () {
+
     {% for category, message in messages %}
     Swal.fire({
         icon: "{{ 'success' if category=='success' else ('error' if category=='danger' else category) }}",
@@ -379,7 +386,30 @@ document.addEventListener("DOMContentLoaded", function () {
 
 });
 </script>
+<script>
+document.getElementById("logoutBtn").addEventListener("click", function (e) {
+    e.preventDefault();
 
+       Swal.fire({
+        title: "Logout?",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonText: "Logout"
+    }).then((result) => {
+        if (result.isConfirmed) {
+
+            // Reset sidebar state
+            localStorage.removeItem("sidebarState");
+
+            // Redirect
+            window.location.href = "/logout";
+            window.close();
+
+
+        }
+    });
+});
+</script>
 {% block scripts %}{% endblock %}
 </body>
 <style>
