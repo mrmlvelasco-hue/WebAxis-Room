@@ -3,6 +3,12 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 from dotenv import load_dotenv
 import os
 import pyodbc
+import base64
+import json
+import hmac
+import hashlib
+import time
+# import os
 from datetime import datetime, timedelta, timezone, date, time as datetime_time
 import webbrowser
 import threading
@@ -715,60 +721,8 @@ def login():
 import itsdangerous
 serializer = itsdangerous.URLSafeTimedSerializer(app.secret_key)
 
-# @app.route('/sso-login')
-# def sso_login():
-#
-#     token = request.args.get("token")
-#
-#     if not token:
-#         return "SSO Error: Missing authentication token.", 400
-#
-#     # --- Decode Token ---
-#     try:
-#         data = serializer.loads(token, max_age=60)
-#         username = data.get("username")
-#
-#     except Exception:
-#         return "SSO Error: Invalid or expired token.", 401
-#
-#     if not username:
-#         return "SSO Error: Username not found in token.", 401
-#
-#     # --- Check if user exists ---
-#     conn = get_db_connection()
-#     cursor = conn.cursor()
-#
-#     cursor.execute("""
-#         SELECT id, username, email, display_name, role
-#         FROM dbo.users
-#         WHERE username = ?
-#     """, (username,))
-#
-#     row = cursor.fetchone()
-#     conn.close()
-#
-#     if not row:
-#         return f"""
-#         SSO Login Failed
-#
-#         User '{username}' is not registered in the Room Reservation System.
-#
-#         Please contact the system administrator to request access.
-#         """, 403
-#
-#     # --- Login user ---
-#     uid, uname, email, display_name, role = row
-#     user = User(uid, uname, email, display_name, role)
-#
-#     login_user(user)
-#
-#     return redirect(url_for("reserve_v2"))
-import base64
-import json
-import hmac
-import hashlib
-import time
-import os
+
+
 
 USED_NONCES = set()
 
@@ -1329,13 +1283,15 @@ def reserve_v2():
     TIMELINE_START_HOUR = int(os.getenv("TIMELINE_START_HOUR", 6))
     TIMELINE_END_HOUR = int(os.getenv("TIMELINE_END_HOUR", 22))
     MAX_RECUR_MONTHS = int(os.getenv("MAX_RECUR_MONTHS", 4))
+    MAX_HOURS = int(os.getenv("MAX_HOURS", 4))
     return render_template(
         "reserve_v2.html",
         locations=sorted(locations_set),
         rooms_json=json.dumps(rooms),
         TIMELINE_START_HOUR=TIMELINE_START_HOUR,
         TIMELINE_END_HOUR=TIMELINE_END_HOUR,
-        MAX_RECUR_MONTHS=MAX_RECUR_MONTHS
+        MAX_RECUR_MONTHS=MAX_RECUR_MONTHS,
+        MAX_HOURS= MAX_HOURS
     )
 
 
@@ -1402,6 +1358,7 @@ def calendar_view_v2():
     TIMELINE_START_HOUR = int(os.getenv("TIMELINE_START_HOUR", 6))
     TIMELINE_END_HOUR = int(os.getenv("TIMELINE_END_HOUR", 20))
     MAX_RECUR_MONTHS = int(os.getenv("MAX_RECUR_MONTHS", 4))
+    MAX_HOURS= int(os.getenv("MAX_HOURS", 4))
     from datetime import datetime
 
     # date
@@ -1505,7 +1462,8 @@ def calendar_view_v2():
         time_slots=time_slots,
         TIMELINE_START_HOUR=TIMELINE_START_HOUR,
         TIMELINE_END_HOUR=TIMELINE_END_HOUR,
-        MAX_RECUR_MONTHS=MAX_RECUR_MONTHS
+        MAX_RECUR_MONTHS=MAX_RECUR_MONTHS,
+        MAX_HOURS=MAX_HOURS
     )
 
 @app.route("/api/reservations_v2_day")
@@ -2079,6 +2037,144 @@ def reserve_post(room_id):
         except:
             pass
         return jsonify(success=False, message=str(e)), 500
+
+@app.route('/reservation/edit/<int:res_id>', methods=['POST'])
+@login_required
+def edit_reservation(res_id):
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        data = request.get_json()
+
+        new_start = data.get("start_time")
+        new_end = data.get("end_time")
+        new_remarks = data.get("remarks", "")
+        mode = data.get("mode", "single")  # single | future
+
+        if not new_start or not new_end:
+            return jsonify(success=False, message="Missing data"), 400
+
+        new_start_dt = datetime.fromisoformat(new_start)
+        new_end_dt = datetime.fromisoformat(new_end)
+
+        # ==============================
+        # LOAD ORIGINAL RESERVATION
+        # ==============================
+        cur.execute("""
+            SELECT room_id, reserved_by, recurrence_id, start_time
+            FROM reservations
+            WHERE id = ?
+        """, (res_id,))
+        row = cur.fetchone()
+
+        if not row:
+            return jsonify(success=False, message="Reservation not found"), 404
+
+        room_id, reserved_by, recurrence_id, original_start = row
+
+        # ==============================
+        # AUTHORIZATION
+        # ==============================
+        is_admin = current_user.is_admin()
+        is_owner = current_user.display_name == reserved_by or current_user.username == reserved_by
+
+        if not (is_admin or is_owner):
+            return jsonify(success=False, message="Not authorized"), 403
+
+        # ==============================
+        # CONFLICT CHECK FUNCTION
+        # ==============================
+        def has_conflict(room_id, start, end, exclude_id=None):
+            sql = """
+                SELECT COUNT(*)
+                FROM reservations
+                WHERE room_id=?
+                  AND NOT (end_time <= ? OR start_time >= ?)
+                  AND status IN ('Pending','Approved','Blocked')
+            """
+            params = [room_id, start, end]
+
+            if exclude_id:
+                sql += " AND id <> ?"
+                params.append(exclude_id)
+
+            cur.execute(sql, params)
+            return cur.fetchone()[0] > 0
+
+        # ==============================
+        # MODE: SINGLE INSTANCE
+        # ==============================
+        if mode == "single" or not recurrence_id:
+
+            if has_conflict(room_id, new_start_dt, new_end_dt, res_id):
+                return jsonify(success=False, message="Conflict detected"), 409
+
+            cur.execute("""
+                UPDATE reservations
+                SET start_time=?, end_time=?, remarks=?, status='Pending', updated_at=GETDATE()
+                WHERE id=?
+            """, (new_start_dt, new_end_dt, new_remarks, res_id))
+
+            conn.commit()
+            return jsonify(success=True, message="Reservation updated")
+
+        # ==============================
+        # MODE: FUTURE (RECURRING)
+        # ==============================
+        else:
+
+            # Get all future reservations in series
+            cur.execute("""
+                SELECT id, start_time, end_time
+                FROM reservations
+                WHERE recurrence_id = ?
+                  AND start_time >= ?
+            """, (recurrence_id, original_start))
+
+            rows = cur.fetchall()
+
+            updated = 0
+            skipped = []
+
+            duration = new_end_dt - new_start_dt
+
+            for r in rows:
+                rid, old_start, old_end = r
+
+                # keep time shift relative
+                new_start_instance = old_start.replace(
+                    hour=new_start_dt.hour,
+                    minute=new_start_dt.minute
+                )
+                new_end_instance = new_start_instance + duration
+
+                if has_conflict(room_id, new_start_instance, new_end_instance, rid):
+                    skipped.append(str(old_start))
+                    continue
+
+                cur.execute("""
+                    UPDATE reservations
+                    SET start_time=?, end_time=?, remarks=?, status='Pending', updated_at=GETDATE()
+                    WHERE id=?
+                """, (new_start_instance, new_end_instance, new_remarks, rid))
+
+                updated += 1
+
+            conn.commit()
+
+            return jsonify(
+                success=True,
+                message=f"{updated} updated, {len(skipped)} skipped",
+                skipped=skipped
+            )
+
+    except Exception as e:
+        print("⚠️ edit_reservation error:", e)
+        return jsonify(success=False, message=str(e)), 500
+
+    finally:
+        conn.close()
 
 @app.route('/api/cancel_reservation/<int:res_id>', methods=['POST'])
 @login_required

@@ -37,14 +37,16 @@
                  value="{{ selected_date.strftime('%Y-%m-%d') if selected_date else '' }}" style="width: 160px;">
         </div>
 
-        <div class="col-md-auto">
+         <div class="col-md-auto">
           <label class="form-label small fw-bold text-uppercase text-muted" style="font-size: 0.65rem;">Location</label>
           <select id="locationFilterHeader" class="form-select form-select-sm border-2" style="min-width: 180px;">
-            <option value="all">All Locations</option>
-            {% for loc in locations %}
-              <option value="{{ loc }}">{{ loc }}</option>
-            {% endfor %}
-          </select>
+              <option value="all">All Locations</option>
+              {% for loc in locations %}
+                <option value="{{ loc }}" {% if loop.index == 1 %}selected{% endif %}>
+                  {{ loc }}
+                </option>
+              {% endfor %}
+            </select>
         </div>
 
         <div class="col-md-auto">
@@ -293,6 +295,7 @@
     const TIMELINE_START_HOUR = {{ TIMELINE_START_HOUR }};
     const TIMELINE_END_HOUR   = {{ TIMELINE_END_HOUR }};
     const MAX_RECUR_MONTHS   = {{ MAX_RECUR_MONTHS }};
+    const MAX_HOURS   = {{ MAX_HOURS }};
     function toDatetimeLocalValue(d) {
   // Format: YYYY-MM-DDTHH:MM (local time, no seconds)
   const pad = (n) => String(n).padStart(2, '0');
@@ -372,7 +375,6 @@
   }
 })();
 function generateModalTimeOptions() {
-
     const startSelect = document.getElementById("modalStartTime");
     const endSelect   = document.getElementById("modalEndTime");
 
@@ -402,8 +404,8 @@ function formatTime(timeStr) {
 }
 const startInput = document.getElementById("modalStartTime");
 const endInput   = document.getElementById("modalEndTime");
-
-const MAX_DURATION_MINUTES = 240; // 4 hours
+const MAX_DURATION_MINUTES = MAX_HOURS * 60;
+//const MAX_DURATION_MINUTES = 240; // 4 hours
 
 function updateEndTimeOptions() {
 
@@ -413,7 +415,7 @@ function updateEndTimeOptions() {
     const [sh, sm] = startVal.split(":").map(Number);
     const startMinutes = sh * 60 + sm;
 
-    endInput.innerHTML = ""; // 🔥 clear everything
+    endInput.innerHTML = ""; // ðŸ”¥ clear everything
 
     // Build only valid options
     for (let i = 30; i <= MAX_DURATION_MINUTES; i += 30) {
@@ -451,7 +453,7 @@ function updateEndTimeOptions() {
     if (endInput.options.length > 0) {
         endInput.selectedIndex = 0;
 
-        // 🔥 Auto scroll to first
+        // ðŸ”¥ Auto scroll to first
         setTimeout(() => {
             endInput.options[0].scrollIntoView({ block: "nearest" });
         }, 0);
@@ -517,12 +519,7 @@ modalDateInput.addEventListener("change", function() {
 });
 </script>
 <script>
-
 document.addEventListener("DOMContentLoaded", function () {
-
-    /* =========================================================
-       GLOBAL DATA
-    ========================================================== */
 
     const ROOMS = {{ rooms_json | safe }};
 
@@ -533,56 +530,75 @@ document.addEventListener("DOMContentLoaded", function () {
     const roomFilter = document.getElementById("roomFilterHeader");
     const applyBtn = document.getElementById("applyFilterBtn");
     const iframe = document.getElementById("availabilityFrame");
-    const recType = document.getElementById('repeat_rule');
 
+    const recType = document.getElementById('repeat_rule');
     const viewDate = document.getElementById('viewDate');
-    const date = "{{ selected_date }}";
-    const date1 = new Date().toISOString().split("T")[0];
-    //const viewDateInput = document.getElementById("viewDate");
-    //const selectedDate = viewDateInput?.value;
+
+    // ✅ FIX invalid CSS
     document.getElementById("openReserveBtn").style.display = "none";
-    document.getElementById("GridTitle").style.visibility = "none";
+    document.getElementById("GridTitle").style.display = "none"; // FIXED
     document.getElementById("ReservationHeader").style.display = "none";
 
-    document.getElementById("viewDate").value = new Date().toISOString().split("T")[0];
-    refreshAvailability();
-    document.getElementById("roomFilterHeader").disabled = true;
+    viewDate.value = new Date().toISOString().split("T")[0];
 
+    // ✅ Disable room until location loads
+    roomFilter.disabled = true;
+
+    /* =========================================================
+       🔥 SINGLE SOURCE OF TRUTH (ONLY ONE CHANGE HANDLER)
+    ========================================================== */
+    locationFilter.addEventListener("change", function () {
+
+        const loc = this.value;
+
+        // ✅ Keep "All Rooms"
+        roomFilter.innerHTML = `<option value="all">All Rooms</option>`;
+
+        const filteredRooms = ROOMS.filter(r =>
+            loc === "all" || (r.location || "General") === loc
+        );
+
+        filteredRooms.forEach(r => {
+            const opt = document.createElement("option");
+            opt.value = r.name;
+            opt.textContent = r.name;
+            roomFilter.appendChild(opt);
+        });
+
+        // ✅ Keep default = All Rooms
+        roomFilter.value = "all";
+
+        roomFilter.disabled = filteredRooms.length === 0;
+
+        // ✅ Auto refresh calendar
+        refreshAvailability();
+    });
+    generateModalTimeOptions();
+    /* =========================================================
+       🚀 INITIAL AUTO LOAD (FIXED ORDER)
+    ========================================================== */
+    if (locationFilter) {
+
+        // ✅ Force first REAL location (skip "All Locations")
+        if (locationFilter.options.length > 1) {
+            locationFilter.selectedIndex = 1;
+        }
+
+        // ✅ Trigger AFTER handler is ready
+        locationFilter.dispatchEvent(new Event("change"));
+    }
 
     if (!modalEl || !submitBtn) return;
 
     /* =========================================================
-       HEADER FILTERS → IFRAME
+       APPLY BUTTON (still optional)
     ========================================================== */
-    generateModalTimeOptions();
-    if (locationFilter) {
-        locationFilter.addEventListener("change", function () {
-
-            const loc = this.value;
-            roomFilter.innerHTML = `<option value="all">All Rooms</option>`;
-            document.getElementById("roomFilterHeader").disabled = false;
-            const filteredRooms = ROOMS.filter(r =>
-                loc === "all" || (r.location || "General") === loc
-            );
-
-            filteredRooms.forEach(r => {
-                const opt = document.createElement("option");
-                opt.value = r.name;
-                opt.textContent = r.name;
-                roomFilter.appendChild(opt);
-            });
-        });
-    }
-
     if (applyBtn) {
         applyBtn.addEventListener("click", function () {
 
             const loc = locationFilter?.value || "all";
             const room = roomFilter?.value || "all";
-            const date = new Date().toISOString().split("T")[0];
-            const viewDateInput = document.getElementById("viewDate");
-            const selectedDate = viewDateInput?.value;
-            console.log(selectedDate)
+            const selectedDate = viewDate?.value;
 
             iframe.src =
                 `/calendar_view_v2?embed=1`
@@ -720,7 +736,7 @@ document.addEventListener("DOMContentLoaded", function () {
         if (match) match.checked = true;
 
         /* ===============================
-           CONVERT SLOT MINUTES → HH:MM
+           CONVERT SLOT MINUTES â†’ HH:MM
         ================================ */
         const hours   = String(Math.floor(slotMin / 60)).padStart(2,"0");
         const minutes = String(slotMin % 60).padStart(2,"0");
@@ -740,7 +756,7 @@ document.addEventListener("DOMContentLoaded", function () {
         ================================ */
 
         document.getElementById("modalDate").value = selectedDate;
-        // 🔒 Limit "End On Date" to 4 months from start
+        // ðŸ”’ Limit "End On Date" to 4 months from start
 
         const startDateObj = new Date(selectedDate);
 
@@ -870,7 +886,7 @@ document.addEventListener("DOMContentLoaded", function () {
             endMode = "after";
         }
 
-        // 🔥 Convert "never" to MAX_RECUR_MONTHS limit
+        // ðŸ”¥ Convert "never" to MAX_RECUR_MONTHS limit
         if (endMode === "never") {
 
             const startDate = new Date(dateInput.value);
@@ -1060,17 +1076,20 @@ document.addEventListener("DOMContentLoaded", function () {
 
             ${detailRow("Time:",
                 `<span style="color:#0d47a1;font-weight:600;">
-                    ${displayStart} — ${displayEnd}
+                    ${displayStart} â€” ${displayEnd}
                 </span>`
             )}
             ${divider()}
 
-            ${detailRow("Meeting Title:", res.remarks || "—")}
+            ${detailRow("Meeting Title:", res.remarks || "â€”")}
 
         </div>
 
         ${canCancel ? `
-        <div style="margin-top:30px;text-align:center;">
+        <div style="margin-top:30px;text-align:center;display:flex;gap:10px;justify-content:center;">
+            <button id="editBtn" class="btn btn-primary">
+                    <i class="bi bi-pencil"></i> Edit
+                </button>
             <button id="cancelBtn"
                 style="
                     background:#dc2626;
@@ -1085,7 +1104,9 @@ document.addEventListener("DOMContentLoaded", function () {
                 <i class="bi bi-trash"></i>
                 ${CURRENT_USER.isAdmin && !isOwner ? "Admin Override Cancel" : "Cancel Reservation"}
             </button>
+
         </div>
+
     ` : `
         <div style="margin-top:30px;text-align:center;color:#6c757d;font-size:13px;">
             Only the reservation owner can cancel this booking.
@@ -1154,7 +1175,7 @@ document.addEventListener("DOMContentLoaded", function () {
             return `${hh}:${mm}`;
         };
 
-        return `${formatSingle(parts[0])} – ${formatSingle(parts[1])}`;
+        return `${formatSingle(parts[0])} â€“ ${formatSingle(parts[1])}`;
     }
 
 });
@@ -1179,7 +1200,7 @@ function refreshAvailability() {
     const loc = locationFilter?.value || "all";
     const room = roomFilter?.value || "all";
 
-    // 🔥 Use selected date instead of today
+    // ðŸ”¥ Use selected date instead of today
     const selectedDate = viewDateInput?.value;
 
     if (!selectedDate) return;
@@ -1215,7 +1236,7 @@ function getJsWeekday(date) {
     box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.1);
   }
 
-  .breadcrumb-item + .breadcrumb-item::before { content: "•"; color: #ccc; }
+  .breadcrumb-item + .breadcrumb-item::before { content: "â€¢"; color: #ccc; }
 
   /* Success Modal Enhancements */
   .success-icon-circle {
