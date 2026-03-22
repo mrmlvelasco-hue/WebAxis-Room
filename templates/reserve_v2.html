@@ -371,7 +371,7 @@ function generateModalTimeOptions() {
     }
 }
 
-const MAX_DURATION_MINUTES = 240;
+const MAX_DURATION_MINUTES = {{ MAX_HOURS }} * 60;
 
 function updateEndTimeOptions() {
     const startVal = document.getElementById("modalStartTime").value;

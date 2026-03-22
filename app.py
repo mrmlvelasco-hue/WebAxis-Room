@@ -1332,9 +1332,9 @@ def reserve_v2():
         })
         locations_set.add(r[2] or "General")
     TIMELINE_START_HOUR = int(os.getenv("TIMELINE_START_HOUR", 6))
-    TIMELINE_END_HOUR = int(os.getenv("TIMELINE_END_HOUR", 22))
-    MAX_RECUR_MONTHS = int(os.getenv("MAX_RECUR_MONTHS", 4))
-    MAX_HOURS = int(os.getenv("MAX_HOURS", 4))
+    TIMELINE_END_HOUR   = int(os.getenv("TIMELINE_END_HOUR", 22))
+    MAX_RECUR_MONTHS    = int(os.getenv("MAX_RECUR_MONTHS", 4))
+    MAX_HOURS           = int(os.getenv("MAX_HOURS", 8))
     return render_template(
         "reserve_v2.html",
         locations=sorted(locations_set),
@@ -1342,7 +1342,7 @@ def reserve_v2():
         TIMELINE_START_HOUR=TIMELINE_START_HOUR,
         TIMELINE_END_HOUR=TIMELINE_END_HOUR,
         MAX_RECUR_MONTHS=MAX_RECUR_MONTHS,
-        MAX_HOURS= MAX_HOURS
+        MAX_HOURS=MAX_HOURS
     )
 
 
@@ -1407,9 +1407,9 @@ def calendar_view_v2():
           - date: YYYY-MM-DD (default: today)
         """
         TIMELINE_START_HOUR = int(os.getenv("TIMELINE_START_HOUR", 6))
-        TIMELINE_END_HOUR = int(os.getenv("TIMELINE_END_HOUR", 20))
+        TIMELINE_END_HOUR   = int(os.getenv("TIMELINE_END_HOUR", 22))
         MAX_RECUR_MONTHS = int(os.getenv("MAX_RECUR_MONTHS", 4))
-        MAX_HOURS= int(os.getenv("MAX_HOURS", 4))
+        MAX_HOURS           = int(os.getenv("MAX_HOURS", 8))
         from datetime import datetime
 
         # date
@@ -2334,6 +2334,44 @@ def edit_reservation(res_id):
             return jsonify(success=False, message="Not authorized"), 403
 
         # ==============================
+        # DECIDE STATUS — mirrors reserve_post logic
+        # approvals_required = "no"   → Approved
+        # approvals_required = "yes"  → Pending
+        # approvals_required = "auto" → Pending if active approvers exist, else Approved
+        # ==============================
+        cur.execute("""
+            SELECT approvals_required, location
+            FROM dbo.rooms
+            WHERE id = ?
+        """, (room_id,))
+        room_row = cur.fetchone()
+
+        if not room_row:
+            return jsonify(success=False, message="Room not found"), 404
+
+        approvals_required_raw = room_row[0]
+        room_location          = room_row[1] or ""
+        approvals_required     = str(approvals_required_raw).strip().lower() \
+                                 if approvals_required_raw else "auto"
+
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM dbo.group_approvers
+            WHERE group_code = ? AND is_active = 1
+        """, (room_location,))
+        approver_count = cur.fetchone()[0]
+
+        def decide_status():
+            if approvals_required == "no":
+                return "Approved"
+            if approvals_required == "yes":
+                return "Pending"
+            # "auto" → Pending only if active approvers exist for this location
+            return "Pending" if approver_count > 0 else "Approved"
+
+        new_status = decide_status()
+
+        # ==============================
         # CONFLICT CHECK
         # ==============================
         def has_conflict(room_id, start, end, exclude_id=None):
@@ -2363,12 +2401,23 @@ def edit_reservation(res_id):
 
             cur.execute("""
                 UPDATE reservations
-                SET start_time=?, end_time=?, remarks=?, status='Pending'
+                SET start_time=?, end_time=?, remarks=?, status=?, updated_at=GETDATE()
                 WHERE id=?
-            """, (new_start_dt, new_end_dt, new_remarks, res_id))
+            """, (new_start_dt, new_end_dt, new_remarks, new_status, res_id))
 
             conn.commit()
-            return jsonify(success=True, message="Reservation updated")
+
+            log_audit(
+                "RESERVATION_EDITED",
+                f"Reservation {res_id} edited by {current_user.username} "
+                f"[mode=single, new_status={new_status}]"
+            )
+
+            return jsonify(
+                success=True,
+                message=f"Reservation updated. Status set to {new_status}.",
+                status=new_status
+            )
 
         # ==============================
         # FUTURE EDIT (RECURRING)
@@ -2380,6 +2429,7 @@ def edit_reservation(res_id):
                 FROM reservations
                 WHERE recurrence_id = ?
                   AND start_time >= ?
+                  AND status IN ('Pending','Approved','Blocked')
             """, (recurrence_id, original_start))
 
             rows = cur.fetchall()
@@ -2393,27 +2443,38 @@ def edit_reservation(res_id):
 
                 new_start_instance = old_start.replace(
                     hour=new_start_dt.hour,
-                    minute=new_start_dt.minute
+                    minute=new_start_dt.minute,
+                    second=0
                 )
                 new_end_instance = new_start_instance + duration
 
                 if has_conflict(room_id, new_start_instance, new_end_instance, rid):
-                    skipped.append(str(old_start))
+                    skipped.append(str(old_start.date()))
                     continue
 
                 cur.execute("""
                     UPDATE reservations
-                    SET start_time=?, end_time=?, remarks=?, status='Pending'
+                    SET start_time=?, end_time=?, remarks=?, status=?, updated_at=GETDATE()
                     WHERE id=?
-                """, (new_start_instance, new_end_instance, new_remarks, rid))
+                """, (new_start_instance, new_end_instance, new_remarks, new_status, rid))
 
                 updated += 1
 
             conn.commit()
 
+            log_audit(
+                "RESERVATION_EDITED",
+                f"Reservation series {recurrence_id} edited by {current_user.username} "
+                f"[mode=future, updated={updated}, skipped={len(skipped)}, new_status={new_status}]"
+            )
+
+            msg = f"{updated} updated, {len(skipped)} skipped. Status set to {new_status}."
             return jsonify(
                 success=True,
-                message=f"{updated} updated, {len(skipped)} skipped"
+                message=msg,
+                status=new_status,
+                updated=updated,
+                skipped=skipped
             )
 
     except Exception as e:
