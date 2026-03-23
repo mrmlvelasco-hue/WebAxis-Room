@@ -3,16 +3,18 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link href="{{ url_for('static', filename='bootstrap.min.css') }}" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <!--
+    NOTE: Bootstrap CSS, Bootstrap Icons, and SweetAlert2 are intentionally
+    NOT loaded here — they are already loaded by the parent page (base_dashboard.html).
+    Loading them again inside the iframe caused duplicate requests and slow first load.
+    Only load resources here that the parent page does NOT provide.
+  -->
 </head>
 
 <body class="p-0 m-0 bg-white" style="font-family: 'Inter', sans-serif; color: #1e293b;">
 
   <div class="px-3 py-2 bg-light border-bottom d-flex align-items-center justify-content-between d-none"
-     id="GridHeaderTitle">
+     id="GridHeaderTitle" style="display:none !important;">
     <div class="d-flex align-items-center">
       <span class="badge bg-primary-subtle text-primary border border-primary-subtle me-2 px-2 py-1">
         <i class="bi bi-calendar-event"></i>
@@ -29,7 +31,7 @@
 
   <div class="p-3">
     <div class="cal-grid-wrap shadow-sm border border-2 border-light-subtle">
-      <div class="cal-grid-scroll" >
+      <div class="cal-grid-scroll">
         <table class="table table-sm table-hover mb-0 cal-grid-table">
           <thead>
             <tr>
@@ -43,7 +45,7 @@
           </thead>
           <tbody>
             {% for r in rooms %}
-           <tr data-room-id="{{ r.id }}">
+            <tr data-room-id="{{ r.id }}">
               <td class="cal-col-room">
                 <div class="fw-bold text-dark">{{ r.name }}</div>
               </td>
@@ -53,7 +55,6 @@
               <td class="cal-col-cap text-center fw-medium text-secondary">{{ r.capacity }}</td>
               {% for t in time_slots %}
                 <td class="cal-slot-cell" data-slot-index="{{ loop.index0 }}"></td>
-
               {% endfor %}
             </tr>
             {% endfor %}
@@ -65,136 +66,118 @@
 
 <script>
 /* =========================================================
-   CALENDAR V2 – PRO VERSION
-   ✔ Solid coloring
-   ✔ Perfect click detection
-   ✔ No duplicate listeners
-   ✔ No extra API calls
-   ✔ Instant popup
+   CALENDAR V2 EMBED
 ========================================================= */
 
 const GRID_START_MIN = {{ TIMELINE_START_HOUR }} * 60;
 const GRID_END_MIN   = {{ TIMELINE_END_HOUR }} * 60;
 const SLOT_MINUTES   = 30;
 
-/* =============================
-   In-memory reservation map
-============================= */
-let reservationMap = {};
-// key format: roomId_slotMin → reservation object
-
-/* =============================
-   Helpers
-============================= */
 const CURRENT_USER = {
-    name: "{{ current_user.display_name }}",
+    name    : "{{ current_user.display_name }}",
     username: "{{ current_user.username }}",
-    isAdmin: {{ 'true' if current_user.is_admin() else 'false' }}
+    isAdmin : {{ 'true' if current_user.is_admin() else 'false' }}
 };
 
-function toMinutes(dtStr){
+/* ─── In-memory reservation map  roomId_slotMin → ev ─── */
+let reservationMap = {};
+
+/* ─── Helpers ─────────────────────────────────────────── */
+function toMinutes(dtStr) {
     const d = new Date(dtStr);
-    return d.getHours()*60 + d.getMinutes();
+    return d.getHours() * 60 + d.getMinutes();
 }
 
-function clamp(v,min,max){
+function clamp(v, min, max) {
     return Math.max(min, Math.min(max, v));
 }
 
-function formatSlotKey(roomId, slotMin){
+function formatSlotKey(roomId, slotMin) {
     return `${roomId}_${slotMin}`;
 }
 
-/* =============================
-   Clear Grid
-============================= */
+function formatHHMM(dtStr) {
+    if (!dtStr) return "--:--";
+    const part = dtStr.includes("T") ? dtStr.split("T")[1] : dtStr;
+    return part.substring(0, 5);
+}
 
-function clearGrid(){
+/* ─── Clear Grid ──────────────────────────────────────── */
+function clearGrid() {
     reservationMap = {};
-    document.getElementById("GridHeaderTitle").style.display = "none";
-    document.querySelectorAll(".cal-slot-cell").forEach(td=>{
-        td.classList.remove("cal-booked","cal-booked-start","cal-booked-end");
+    document.querySelectorAll(".cal-slot-cell").forEach(td => {
+        td.classList.remove("cal-booked", "cal-booked-start", "cal-booked-end",
+                            "status-approved", "status-pending", "status-blocked");
         td.innerHTML = "";
         td.removeAttribute("data-room-id");
         td.removeAttribute("data-slot-min");
         td.style.backgroundColor = "";
-        td.innerHTML = "";
-        td.removeAttribute("data-room-id");
-        td.removeAttribute("data-slot-min");
+        td.title = "";
     });
 }
 
-/* =============================
-   Paint Reservations
-============================= */
-
-function paintReservation(ev){
+/* ─── Paint Reservations ──────────────────────────────── */
+function paintReservation(ev) {
 
     const row = document.querySelector(`tr[data-room-id="${ev.room_id}"]`);
-    if(!row) return;
+    if (!row) return;
 
     let startMin = toMinutes(ev.start);
     let endMin   = toMinutes(ev.end);
-    if(endMin <= startMin) return;
+    if (endMin <= startMin) return;
 
     startMin = clamp(startMin, GRID_START_MIN, GRID_END_MIN);
-    endMin   = clamp(endMin, GRID_START_MIN, GRID_END_MIN);
+    endMin   = clamp(endMin,   GRID_START_MIN, GRID_END_MIN);
 
-    const startIdx = Math.floor((startMin - GRID_START_MIN)/SLOT_MINUTES);
-    const endIdx   = Math.ceil((endMin - GRID_START_MIN)/SLOT_MINUTES);
+    const startIdx = Math.floor((startMin - GRID_START_MIN) / SLOT_MINUTES);
+    const endIdx   = Math.ceil( (endMin   - GRID_START_MIN) / SLOT_MINUTES);
 
-    for(let i=startIdx;i<endIdx;i++){
+    const status = (ev.status || "").toLowerCase();
+
+    for (let i = startIdx; i < endIdx; i++) {
 
         const cell = row.querySelector(`td.cal-slot-cell[data-slot-index="${i}"]`);
-        if(!cell) continue;
+        if (!cell) continue;
 
         const slotMin = GRID_START_MIN + (i * SLOT_MINUTES);
 
         cell.classList.add("cal-booked");
-        cell.dataset.roomId = ev.room_id;
+
+        /* Status colour class */
+        if (status === "pending")  cell.classList.add("status-pending");
+        else if (status === "blocked") cell.classList.add("status-blocked");
+        else cell.classList.add("status-approved");
+
+        /* Start / end rounded corners */
+        if (i === startIdx) cell.classList.add("cal-booked-start");
+        if (i === endIdx - 1) cell.classList.add("cal-booked-end");
+
+        cell.dataset.roomId  = ev.room_id;
         cell.dataset.slotMin = slotMin;
 
-        /* Tooltip */
         cell.title =
-            "Room: " + ev.room + "\n" +
+            "Room: "        + ev.room        + "\n" +
             "Reserved By: " + ev.reserved_by + "\n" +
-            "Time: " + ev.start + " - " + ev.end + "\n" +
-            "Title: " + (ev.remarks || "No title");
+            "Time: "        + formatHHMM(ev.start) + " – " + formatHHMM(ev.end) + "\n" +
+            "Title: "       + (ev.remarks || "No title");
 
-        /* ----- Color by status ----- */
-        const status = (ev.status || "").toLowerCase();
-        console.log("Painting:", ev.room_id, slotMin);
-
-
-        /* ----- Store reservation in map ----- */
+        /* Store full ev in map for every slot it occupies */
         reservationMap[formatSlotKey(ev.room_id, slotMin)] = ev;
 
-        if(ev.remarks){
-
+        /* Remarks label on every cell — short truncation fits the 90px slot width */
+        if (ev.remarks) {
             const div = document.createElement("div");
-            div.className = "cal-remarks";
-
-            const remarkText = ev.remarks || "";
-
-            div.textContent =
-                remarkText.length > 10
-                    ? remarkText.substring(0, 10) + "..."
-                    : remarkText;
-
+            div.className   = "cal-remarks";
+            div.textContent = ev.remarks.length > 10
+                ? ev.remarks.substring(0, 10) + "…"
+                : ev.remarks;
             cell.appendChild(div);
-
-            // tooltip for full text
-            cell.title = ev.remarks;
         }
-
     }
 }
 
-/* =============================
-   Global Click Handler
-============================= */
-
-document.addEventListener("click", function(e){
+/* ─── Global Click Handler ────────────────────────────── */
+document.addEventListener("click", function (e) {
 
     const cell = e.target.closest(".cal-slot-cell");
     if (!cell) return;
@@ -202,196 +185,51 @@ document.addEventListener("click", function(e){
     const row = cell.closest("tr");
     if (!row) return;
 
-    const roomId = row.dataset.roomId;
+    const roomId    = row.dataset.roomId;
     const slotIndex = parseInt(cell.dataset.slotIndex);
-
     if (!roomId || isNaN(slotIndex)) return;
 
-    const slotMin = GRID_START_MIN + (slotIndex * SLOT_MINUTES);
-
-    const key = `${roomId}_${slotMin}`;
+    const slotMin   = GRID_START_MIN + (slotIndex * SLOT_MINUTES);
+    const key       = formatSlotKey(roomId, slotMin);
     const reservation = reservationMap[key];
-    console.log("roomId:", roomId);
-    console.log("slotMin:", slotMin);
-    console.log("isNaN:", isNaN(slotMin));
 
-    // Booked slot
     if (reservation) {
+        /* Booked slot → tell parent to show details */
         window.parent.postMessage({
             type: "SHOW_RESERVATION",
             data: reservation
         }, "*");
-        return;
+    } else {
+        /* Empty slot → tell parent to open new reservation modal */
+        window.parent.postMessage({
+            type: "OPEN_NEW_RESERVATION",
+            room_id : roomId,
+            slot_min: slotMin
+        }, "*");
     }
-
-    // Empty slot
-    window.parent.postMessage({
-        type: "OPEN_NEW_RESERVATION",
-        room_id: roomId,
-        slot_min: slotMin
-    }, "*");
-
 });
 
-/* =============================
-   Popup
-============================= */
-
-function showReservationDetails(res){
-
-    const status = (res.status || "").toLowerCase();
-
-    const statusMap = {
-        approved: { text: "APPROVED", bg: "#d1fae5", color: "#065f46" },
-        pending:  { text: "PENDING",  bg: "#fef3c7", color: "#92400e" },
-        blocked:  { text: "BLOCKED",  bg: "#fee2e2", color: "#991b1b" },
-        booked:   { text: "BOOKED",   bg: "#d1fae5", color: "#065f46" }
-    };
-
-    const badge = statusMap[status] || {
-        text: status.toUpperCase(),
-        bg: "#e5e7eb",
-        color: "#374151"
-    };
-
-    Swal.fire({
-        target: document.body,
-        backdrop: true,
-        width: 600,
-        showConfirmButton: false,
-        showCloseButton: true,
-        padding: "2rem",
-        html: `
-        <div style="text-align:center;margin-bottom:20px;">
-            <div style="font-size:28px;color:#0d47a1;">
-                <i class="bi bi-calendar-check"></i>
-            </div>
-            <h3 style="margin-top:8px;font-weight:700;color:#0d47a1;">
-                Reservation Details
-            </h3>
-        </div>
-
-        <div style="text-align:left;font-size:15px;">
-
-            ${detailRow("Room:", `<strong style="color:#0d47a1">${res.room}</strong>`)}
-            ${divider()}
-
-            ${detailRow("Status:",
-                `<span style="
-                    display:inline-block;
-                    padding:6px 14px;
-                    border-radius:20px;
-                    background:${badge.bg};
-                    color:${badge.color};
-                    font-weight:600;
-                    font-size:13px;
-                ">${badge.text}</span>`
-            )}
-            ${divider()}
-
-            ${detailRow("Reserved By:", res.reserved_by)}
-            ${divider()}
-
-            ${detailRow("Email:", res.email || "-")}
-            ${divider()}
-
-            ${detailRow("Time:",
-                `<span style="color:#0d47a1;font-weight:600;">
-                    ${res.start} — ${res.end}
-                </span>`
-            )}
-            ${divider()}
-
-            ${detailRow("Meeting Title:", res.remarks || "—")}
-
-        </div>
-
-        <div style="margin-top:30px;text-align:center;">
-            <button id="cancelBtn"
-                style="
-                    background:#dc2626;
-                    color:white;
-                    border:none;
-                    padding:12px 28px;
-                    border-radius:8px;
-                    font-weight:600;
-                    box-shadow:0 4px 12px rgba(220,38,38,0.3);
-                    cursor:pointer;
-                ">
-                <i class="bi bi-trash"></i>
-                Cancel Reservation
-            </button>
-        </div>
-        `,
-        didOpen: () => {
-
-            const btn = document.getElementById("cancelBtn");
-            if(!btn) return;
-
-            btn.addEventListener("click", async () => {
-
-                const confirm = await Swal.fire({
-                    title: "Confirm Cancellation?",
-                    icon: "warning",
-                    showCancelButton: true,
-                    confirmButtonColor: "#dc2626",
-                    confirmButtonText: "Yes, Cancel"
-                });
-
-                if(!confirm.isConfirmed) return;
-
-                const r = await fetch(`/api/cancel_reservation/${res.id}`, {
-                    method: "POST"
-                });
-
-                const d = await r.json();
-
-                if(d.success){
-                    Swal.fire("Cancelled!", "", "success")
-                        .then(()=> location.reload());
-                }else{
-                    Swal.fire("Error", d.message || "Cannot cancel", "error");
-                }
-            });
-        }
-    });
-
-    function detailRow(label, value){
-        return `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;">
-            <div style="color:#6b7280;width:140px;">${label}</div>
-            <div style="flex:1;text-align:left;">${value}</div>
-        </div>`;
-    }
-
-    function divider(){
-        return `<div style="border-bottom:1px solid #e5e7eb;"></div>`;
-    }
-}
-
-/* =============================
-   Load Data
-============================= */
-
-async function loadAndPaint(){
+/* ─── Load & Paint ────────────────────────────────────── */
+async function loadAndPaint() {
 
     clearGrid();
 
-    const date = "{{ selected_date }}";
+    const date     = "{{ selected_date }}";
     const location = "{{ location_filter }}";
-    const room = "{{ room_filter }}";
+    const room     = "{{ room_filter }}";
 
     const url =
         `/api/reservations_v2_day?date=${encodeURIComponent(date)}`
         + `&location=${encodeURIComponent(location)}`
         + `&room=${encodeURIComponent(room)}`;
 
-
-
-    const res = await fetch(url);
-    const data = await res.json();
-
-    (data||[]).forEach(paintReservation);
+    try {
+        const res  = await fetch(url);
+        const data = await res.json();
+        (data || []).forEach(paintReservation);
+    } catch (err) {
+        console.error("loadAndPaint error:", err);
+    }
 }
 
 document.addEventListener("DOMContentLoaded", loadAndPaint);
@@ -399,159 +237,123 @@ document.addEventListener("DOMContentLoaded", loadAndPaint);
 </script>
 
 <style>
-  /* Advanced Professional Styles */
   :root {
-    --booked-bg: #10b981; /* Modern Emerald Green */
+    --booked-bg    : #10b981;
     --booked-border: #059669;
-    --frozen-bg: #ffffff;
-    --header-bg: #f8fafc;
+    --pending-bg   : #f59e0b;
+    --pending-border: #d97706;
+    --blocked-bg   : #ef4444;
+    --blocked-border: #dc2626;
+    --frozen-bg    : #ffffff;
+    --header-bg    : #f8fafc;
   }
 
-  .cal-grid-wrap {border-radius: 12px;overflow: hidden;background: #fff;width: 100%;
-   /* Height computed from viewport: adjust the 64px + 24px to match your header & paddings */
-  height: calc(100vh - 64px - 24px);display: flex;flex-direction: column;}
+  .cal-grid-wrap {
+    border-radius: 12px; overflow: hidden; background: #fff; width: 100%;
+    height: calc(100vh - 64px - 24px); display: flex; flex-direction: column;
+  }
   .cal-grid-scroll {
-overflow: auto;
-  /* Remove max-height; let the parent define height */
-  /* max-height: 55vh;  <-- remove this */
-  flex: 1 1 auto;
-  position: relative;
-  scroll-behavior: smooth;
-}
-
+    overflow: auto; flex: 1 1 auto; position: relative; scroll-behavior: smooth;
+  }
   .cal-grid-table { border-collapse: separate !important; border-spacing: 0 !important; }
   .cal-grid-table th, .cal-grid-table td {
-    white-space: nowrap;
-    font-size: 13px;
-    padding: 12px 14px;
-    border-bottom: 1px solid #f1f5f9;
-    border-right: 1px solid #f1f5f9;
+    white-space: nowrap; font-size: 13px; padding: 12px 14px;
+    border-bottom: 1px solid #f1f5f9; border-right: 1px solid #f1f5f9;
   }
 
-  /* Sticky Header */
+  /* Sticky header */
   .cal-grid-table thead th {
-    position: sticky;
-    top: 0;
-    background: var(--header-bg);
-    z-index: 10;
-    font-weight: 600;
-    color: #64748b;
-    border-bottom: 2px solid #e2e8f0;
+    position: sticky; top: 0; background: var(--header-bg); z-index: 10;
+    font-weight: 600; color: #64748b; border-bottom: 2px solid #e2e8f0;
   }
 
-  /* Fixed Columns with better depth */
-  /*.cal-time-head, .cal-slot-cell { min-width: 85px; width: 85px; }*/
-  .cal-time-head,.cal-slot-cell {width: 90px;min-width: 90px;max-width: 90px;}
-  .cal-col-room, .cal-col-features, .cal-col-cap { position: sticky; background: var(--frozen-bg); z-index: 6; }
+  /* Fixed columns */
+  .cal-time-head, .cal-slot-cell { width: 90px; min-width: 90px; max-width: 90px; }
+  .cal-col-room, .cal-col-features, .cal-col-cap {
+    position: sticky; background: var(--frozen-bg); z-index: 6;
+  }
+  .cal-col-room     { left: 0;    min-width: 200px; width: 200px; z-index: 8; box-shadow: 2px 0 5px -2px rgba(0,0,0,0.05); }
+  .cal-col-features { left: 200px; min-width: 200px; width: 200px; z-index: 7; }
+  .cal-col-cap      { left: 400px; min-width: 80px;  width: 80px;  z-index: 7; border-right: 2px solid #cbd5e1; }
 
-  .cal-col-room { left: 0; min-width: 200px; width: 200px; z-index: 8; box-shadow: 2px 0 5px -2px rgba(0,0,0,0.05); }
-  .cal-col-features { left: 200px; min-width: 100px; width: 200px; z-index: 7; }
-  .cal-col-cap { left: 300px; min-width: 40px; width: 80px; z-index: 7; border-right: 2px solid #cbd5e1; }
-
-  /* Ensure Header Sticky parts stay on top */
   .cal-grid-table thead th.cal-col-room,
   .cal-grid-table thead th.cal-col-features,
   .cal-grid-table thead th.cal-col-cap { z-index: 20; background: var(--header-bg); }
 
-  /* Modern Booked Slot Styles */
-  .cal-slot-cell.cal-booked {
-  background: var(--booked-bg);
-  color: white;
-   box-shadow: inset 0 0 0 2px white;
-   transition: all 0.2s ease;
-}
-.cal-slot-cell.cal-booked {
-  transition: all 0.2s ease;
-}
-
-.cal-slot-cell.cal-booked:hover {
-  filter: brightness(1.1);
-  transform: scale(1.02);
-
-}
-  .cal-slot-cell.cal-booked-start {
-  border-left: 2px solid var(--booked-border) !important;
-  border-top-left-radius: 8px;
-  border-bottom-left-radius: 8px;
-}
-
-.cal-slot-cell.cal-booked-end {
-  border-right: 2px solid var(--booked-border) !important;
-  border-top-right-radius: 8px;
-  border-bottom-right-radius: 8px;
-}
-
-  /* Focus Column Highlight */
-  .cal-focus-col {
-    background: #e0f2fe !important;
-    box-shadow: inset 0 0 0 2px #0ea5e9;
-    color: #0369a1 !important;
-    transition: all 0.5s ease;
-  }
-
-  /* Custom Professional Scrollbar */
-  .cal-grid-scroll::-webkit-scrollbar { height: 8px; width: 8px; }
-  .cal-grid-scroll::-webkit-scrollbar-track { background: #f1f5f9; }
-  .cal-grid-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-  .cal-grid-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-
-    td.cal-slot-cell {
-  position: relative;
-}
-
-
-
-/* Truncate long remarks nicely */
-td.cal-slot-cell.cal-booked-start {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 12px;
-}
- .cal-remarks {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;   /* left align */
-
-  height: 100%;
-  padding-left: 1px;
-
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-
-  font-size: 12px;
-  text-align: left;
-}
-    .clickable-slot {
+  /* Slot states */
+  .cal-slot-cell {
     cursor: pointer;
-}
-
-.clickable-slot:hover {
-    background-color: #dbe7ff; /* light highlight */
-}
-    .cal-slot-cell {
-    cursor: pointer;
-}
-
-.cal-slot-cell {
     position: relative;
     z-index: 1;
-}
-    .cal-slot-cell.status-approved {
-  background: #10b981;
-  color: white;
-}
+    transition: background 0.15s, box-shadow 0.15s;
+  }
 
-.cal-slot-cell.status-pending {
-  background: #f59e0b;
-  color: white;
-}
+  /* Empty slot — clickable cue */
+  .cal-slot-cell:not(.cal-booked):hover {
+    background-color: #eff6ff;
+    box-shadow: inset 0 0 0 2px #3b82f6;
+  }
 
-.cal-slot-cell.status-blocked {
-  background: #ef4444;
-  color: white;
-}
+  /* Plus icon on hover — appears in the center of each empty cell */
+  .cal-slot-cell:not(.cal-booked)::after {
+    content: "+";
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 600;
+    color: #3b82f6;
+    opacity: 0;
+    transition: opacity 0.15s;
+    pointer-events: none;
+  }
+  .cal-slot-cell:not(.cal-booked):hover::after {
+    opacity: 1;
+  }
+
+  /* Active press feedback */
+  .cal-slot-cell:not(.cal-booked):active {
+    background-color: #dbeafe;
+    box-shadow: inset 0 0 0 2px #2563eb;
+  }
+
+  .cal-slot-cell.cal-booked {
+    color: white; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.3); transition: filter 0.15s, transform 0.1s;
+  }
+  .cal-slot-cell.cal-booked:hover {
+    filter: brightness(1.08);
+    cursor: pointer;
+  }
+
+  /* Status colours */
+  .cal-slot-cell.status-approved { background: var(--booked-bg); }
+  .cal-slot-cell.status-pending  { background: var(--pending-bg); }
+  .cal-slot-cell.status-blocked  { background: var(--blocked-bg); }
+
+  /* Start / end rounded caps */
+  .cal-slot-cell.cal-booked-start {
+    border-left: 2px solid rgba(0,0,0,0.15) !important;
+    border-top-left-radius: 6px; border-bottom-left-radius: 6px;
+  }
+  .cal-slot-cell.cal-booked-end {
+    border-right: 2px solid rgba(0,0,0,0.15) !important;
+    border-top-right-radius: 6px; border-bottom-right-radius: 6px;
+  }
+
+  /* Remarks label */
+  .cal-remarks {
+    display: flex; align-items: center; height: 100%; padding-left: 4px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-size: 11px; font-weight: 500;
+  }
+
+  /* Scrollbar */
+  .cal-grid-scroll::-webkit-scrollbar        { height: 8px; width: 8px; }
+  .cal-grid-scroll::-webkit-scrollbar-track  { background: #f1f5f9; }
+  .cal-grid-scroll::-webkit-scrollbar-thumb  { background: #cbd5e1; border-radius: 10px; }
+  .cal-grid-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 </style>
 
 </body>

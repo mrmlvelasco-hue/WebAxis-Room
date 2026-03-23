@@ -1,6 +1,11 @@
 {% extends "base_dashboard.html" %}
 {% block title %}Reserve Room | WebAXIS{% endblock %}
 
+{% block head %}
+<!-- Inter font for the reservation grid -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid py-4">
 
@@ -37,16 +42,14 @@
                  value="{{ selected_date.strftime('%Y-%m-%d') if selected_date else '' }}" style="width: 160px;">
         </div>
 
-         <div class="col-md-auto">
+        <div class="col-md-auto">
           <label class="form-label small fw-bold text-uppercase text-muted" style="font-size: 0.65rem;">Location</label>
           <select id="locationFilterHeader" class="form-select form-select-sm border-2" style="min-width: 180px;">
-              <option value="all">All Locations</option>
-              {% for loc in locations %}
-                <option value="{{ loc }}" {% if loop.index == 1 %}selected{% endif %}>
-                  {{ loc }}
-                </option>
-              {% endfor %}
-            </select>
+            <option value="all">All Locations</option>
+            {% for loc in locations %}
+              <option value="{{ loc }}" {% if loop.first %}selected{% endif %}>{{ loc }}</option>
+            {% endfor %}
+          </select>
         </div>
 
         <div class="col-md-auto">
@@ -97,13 +100,15 @@
 
       <div class="modal-header bg-white border-bottom-0 pt-4 px-4">
         <h5 class="modal-title fw-bold text-dark d-flex align-items-center">
-          <div class="icon-shape bg-primary-subtle text-primary rounded-circle me-3 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+          <div id="modalHeaderIcon" class="icon-shape bg-primary-subtle text-primary rounded-circle me-3 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
             <i class="bi bi-calendar-plus"></i>
           </div>
-          New Reservation
+          <span id="modalHeaderTitle">New Reservation</span>
         </h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
+      <!-- Hidden field: stores the reservation ID when editing (empty = new) -->
+      <input type="hidden" id="editReservationId" value="">
 
       <div class="modal-body px-4">
 
@@ -153,6 +158,31 @@
 
             </div>
 
+            <!-- ── EDIT SCOPE (shown only in edit mode for recurring reservations) ── -->
+            <div id="editScopeSection" style="display:none;" class="mb-4">
+              <h6 class="fw-bold small mb-3 text-primary text-uppercase">2. Edit Scope</h6>
+              <div class="p-3 border rounded-3 bg-white shadow-sm">
+                <label class="form-label small fw-semibold text-secondary mb-2">Apply changes to:</label>
+                <div class="d-flex flex-column gap-2">
+                  <div class="form-check custom-option p-3 border rounded-3 bg-light" id="scopeSingleOpt" style="cursor:pointer;">
+                    <input class="form-check-input" type="radio" name="editScope" id="scopeSingle" value="single" checked>
+                    <label class="form-check-label w-100" for="scopeSingle" style="cursor:pointer;">
+                      <span class="fw-semibold small">Only this event</span>
+                      <div class="text-muted" style="font-size:0.75rem;">Update just this one occurrence</div>
+                    </label>
+                  </div>
+                  <div class="form-check custom-option p-3 border rounded-3 bg-light" id="scopeFutureOpt" style="cursor:pointer;">
+                    <input class="form-check-input" type="radio" name="editScope" id="scopeFuture" value="future">
+                    <label class="form-check-label w-100" for="scopeFuture" style="cursor:pointer;">
+                      <span class="fw-semibold small">This and future events</span>
+                      <div class="text-muted" style="font-size:0.75rem;">Update this and all following occurrences</div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="recurrence-section">
             <h6 class="fw-bold small mb-3 text-primary text-uppercase">2. Recurrence</h6>
             <div class="p-3 border rounded-3 bg-white shadow-sm mb-3">
               <div class="mb-3">
@@ -229,6 +259,7 @@
                 </div>
               </div>
             </div>
+            </div><!-- /.recurrence-section -->
           </div>
 
           <div class="col-md-5">
@@ -258,7 +289,7 @@
       <div class="modal-footer border-top-0 px-4 pb-4">
         <button type="button" class="btn btn-light px-4 fw-semibold" data-bs-dismiss="modal">Cancel</button>
         <button id="submitBtn" type="button" class="btn btn-primary px-5 fw-bold shadow">
-          Create Reservation
+          <span id="submitBtnText">Create Reservation</span>
         </button>
       </div>
 
@@ -290,748 +321,330 @@
 </div>
 {% endblock %}
 
+
 {% block scripts %}
 <script>
-    const TIMELINE_START_HOUR = {{ TIMELINE_START_HOUR }};
-    const TIMELINE_END_HOUR   = {{ TIMELINE_END_HOUR }};
-    const MAX_RECUR_MONTHS   = {{ MAX_RECUR_MONTHS }};
-    const MAX_HOURS   = {{ MAX_HOURS }};
-    function toDatetimeLocalValue(d) {
-  // Format: YYYY-MM-DDTHH:MM (local time, no seconds)
-  const pad = (n) => String(n).padStart(2, '0');
-  const year = d.getFullYear();
-  const month = pad(d.getMonth() + 1);
-  const day = pad(d.getDate());
-  const hours = pad(d.getHours());
-  const minutes = pad(d.getMinutes());
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
-}
-    function fromDatetimeLocalValue(val) {
-  // Accepts "YYYY-MM-DDTHH:MM" (or with seconds) as local time
-  if (!val) return null;
-  const [datePart, timePart] = val.split('T');
-  if (!datePart || !timePart) return null;
-  const [y, m, d] = datePart.split('-').map(Number);
-  const [hh, mm = '0'] = timePart.split(':');
-  const dt = new Date(y, Number(m) - 1, Number(d), Number(hh), Number(mm), 0, 0);
-  return isNaN(dt.getTime()) ? null : dt;
-}
-    function roundHour_00_30_60(dt) {
-  const d = new Date(dt.getTime());
-  const m = d.getMinutes();
+/* =============================================================
+   CONSTANTS — injected from Flask
+============================================================= */
+const TIMELINE_START_HOUR = {{ TIMELINE_START_HOUR }};
+const TIMELINE_END_HOUR   = {{ TIMELINE_END_HOUR }};
+const MAX_RECUR_MONTHS    = {{ MAX_RECUR_MONTHS }};
 
-  if (m <= 14) {
-    // 00..14 -> :00 of same hour
-    d.setMinutes(0, 0, 0);
-  } else if (m <= 30) {
-    // 15..30 -> :30 of same hour (30 inclusive)
-    d.setMinutes(30, 0, 0);
-  } else {
-    // 31..59 -> :00 of next hour
-    d.setMinutes(0, 0, 0);
-    d.setHours(d.getHours() + 1);
-  }
-  return d;
-}
-(function wireDatetimeInputs() {
-  const startInput = document.getElementById('modalStartTime');
-  const endInput   = document.getElementById('modalEndTime');
+/* =============================================================
+   GLOBAL STATE  (spec §2)
+   reservationMode : "create" | "edit"
+   editingReservationId : number | null
+   editingRecurrenceId  : number | null  (for future-edit prompt)
+============================================================= */
+let reservationMode       = "create";
+let editingReservationId  = null;
+let editingRecurrenceId   = null;
 
-  function applySnap(inputEl) {
-    if (!inputEl.value) return null;
-    const dt = fromDatetimeLocalValue(inputEl.value);
-    if (!dt) return null;
-    const snapped = roundHour_00_30_60(dt);
-    const newVal = toDatetimeLocalValue(snapped);
-    if (newVal !== inputEl.value) inputEl.value = newVal;
-    return snapped;
-  }
+/* =============================================================
+   CURRENT USER  (used in showReservationDetails)
+============================================================= */
+const CURRENT_USER = {
+    username : "{{ current_user.username }}",
+    email    : "{{ current_user.email }}",
+    isAdmin  : {{ 'true' if current_user.is_admin() else 'false' }}
+};
 
-  function enforceOrder() {
-    // Ensure end >= start (optional)
-    const s = fromDatetimeLocalValue(startInput.value);
-    const e = fromDatetimeLocalValue(endInput.value);
-    if (s && e && e < s) {
-      endInput.value = toDatetimeLocalValue(s);
-    }
-  }
-
-  const onCommit = () => {
-    applySnap(startInput);
-    applySnap(endInput);
-    enforceOrder();
-  };
-
-  // Round on change and blur
-  modalStartTime.addEventListener('change', onCommit);
-  modalStartTime.addEventListener('blur', onCommit);
-  modalEndTime.addEventListener('change', onCommit);
-  modalEndTime.addEventListener('blur', onCommit);
-
-
-  // Optional: match both spinners to 30-min steps (you already set Start to 1800)
-  if (!endInput.hasAttribute('step')) {
-    endInput.setAttribute('step', String(1800)); // 1800 sec = 30 minutes
-  }
-})();
-function generateModalTimeOptions() {
-    const startSelect = document.getElementById("modalStartTime");
-    const endSelect   = document.getElementById("modalEndTime");
-
-    startSelect.innerHTML = "";
-    endSelect.innerHTML   = "";
-
-    for (let hour = TIMELINE_START_HOUR; hour <= TIMELINE_END_HOUR; hour++) {
-
-        ["00", "30"].forEach(min => {
-
-            if (hour === TIMELINE_END_HOUR && min === "30") return;
-
-            const value = `${String(hour).padStart(2,'0')}:${min}`;
-
-            startSelect.add(new Option(formatTime(value), value));
-            endSelect.add(new Option(formatTime(value), value));
-        });
-    }
-}
-
+/* =============================================================
+   TIME HELPERS
+============================================================= */
 function formatTime(timeStr) {
     const [h, m] = timeStr.split(":");
-    const hour = parseInt(h);
-    const ampm = hour >= 12 ? "PM" : "AM";
-    const hour12 = hour % 12 || 12;
-    return `${hour12}:${m} ${ampm}`;
+    const hour   = parseInt(h);
+    const ampm   = hour >= 12 ? "PM" : "AM";
+    const h12    = hour % 12 || 12;
+    return `${h12}:${m} ${ampm}`;
 }
-const startInput = document.getElementById("modalStartTime");
-const endInput   = document.getElementById("modalEndTime");
-const MAX_DURATION_MINUTES = MAX_HOURS * 60;
-//const MAX_DURATION_MINUTES = 240; // 4 hours
+
+function generateModalTimeOptions() {
+    const startSel = document.getElementById("modalStartTime");
+    const endSel   = document.getElementById("modalEndTime");
+    startSel.innerHTML = "";
+    endSel.innerHTML   = "";
+    for (let hour = TIMELINE_START_HOUR; hour <= TIMELINE_END_HOUR; hour++) {
+        ["00", "30"].forEach(min => {
+            if (hour === TIMELINE_END_HOUR && min === "30") return;
+            const value = `${String(hour).padStart(2,"0")}:${min}`;
+            startSel.add(new Option(formatTime(value), value));
+            endSel.add(new Option(formatTime(value), value));
+        });
+    }
+}
+
+const MAX_DURATION_MINUTES = {{ MAX_HOURS }} * 60;
 
 function updateEndTimeOptions() {
-
-    const startVal = startInput.value;
+    const startVal = document.getElementById("modalStartTime").value;
+    const endSel   = document.getElementById("modalEndTime");
     if (!startVal) return;
-
-    const [sh, sm] = startVal.split(":").map(Number);
+    const [sh, sm]     = startVal.split(":").map(Number);
     const startMinutes = sh * 60 + sm;
-
-    endInput.innerHTML = ""; // ðŸ”¥ clear everything
-
-    // Build only valid options
+    endSel.innerHTML   = "";
     for (let i = 30; i <= MAX_DURATION_MINUTES; i += 30) {
-
-        const totalMinutes = startMinutes + i;
-
-        const hours = Math.floor(totalMinutes / 60);
-        const minutes = totalMinutes % 60;
-
-        // stop if past 20:00 (your system limit)
+        const total   = startMinutes + i;
+        const hours   = Math.floor(total / 60);
+        const minutes = total % 60;
         if (hours > TIMELINE_END_HOUR || (hours === TIMELINE_END_HOUR && minutes > 0)) break;
-
-        const value =
-            String(hours).padStart(2, "0") + ":" +
-            String(minutes).padStart(2, "0");
-
-        const durationHours = i / 60;
-
-        let label;
-        if (durationHours < 1) {
-            label = `${i} mins`;
-        } else {
-            label = `${durationHours % 1 === 0 ? durationHours : durationHours.toFixed(1)} hours`;
-        }
-
-        const option = new Option(
-            `${formatTime(value)} (${label})`,
-            value
-        );
-
-        endInput.add(option);
+        const value = String(hours).padStart(2,"0") + ":" + String(minutes).padStart(2,"0");
+        const durH  = i / 60;
+        const label = durH < 1 ? `${i} mins` : `${durH % 1 === 0 ? durH : durH.toFixed(1)} hours`;
+        endSel.add(new Option(`${formatTime(value)} (${label})`, value));
     }
-
-    // Auto select first option (30 mins)
-    if (endInput.options.length > 0) {
-        endInput.selectedIndex = 0;
-
-        // ðŸ”¥ Auto scroll to first
-        setTimeout(() => {
-            endInput.options[0].scrollIntoView({ block: "nearest" });
-        }, 0);
-    }
+    if (endSel.options.length > 0) endSel.selectedIndex = 0;
 }
 
-startInput.addEventListener("change", updateEndTimeOptions);
-    function updateEndDurations() {
+/* =============================================================
+   FEATURE BADGES
+============================================================= */
+function parseFeatures(text) {
+    if (!text) return [];
+    return text.split(",").map(f => f.trim()).filter(Boolean);
+}
 
-    const startVal = startInput.value;
-    if (!startVal) return;
+function getFeatureIcon(name) {
+    const map = { "TV":"bi-tv","Audio":"bi-volume-up","Projector":"bi-projector",
+                  "Whiteboard":"bi-easel","VC":"bi-camera-video" };
+    return map[name] || "bi-dot";
+}
 
-    const [sh, sm] = startVal.split(":").map(Number);
-    const startMinutes = sh * 60 + sm;
-
-    Array.from(endInput.options).forEach((opt) => {
-
-        if (opt.disabled) {
-            opt.textContent = formatTime(opt.value);
-            return;
-        }
-
-        const [eh, em] = opt.value.split(":").map(Number);
-        const endMinutes = eh * 60 + em;
-
-        const diff = endMinutes - startMinutes;
-
-        if (diff <= 0) {
-            opt.textContent = formatTime(opt.value);
-            return;
-        }
-
-        const hours = diff / 60;
-
-        let label;
-        if (hours < 1) {
-            label = `${diff} mins`;
-        } else {
-            label = `${hours % 1 === 0 ? hours : hours.toFixed(1)} hours`;
-        }
-
-        opt.textContent = `${formatTime(opt.value)} (${label})`;
+function renderFeatures(featureText) {
+    const container = document.getElementById("featuresContainer");
+    if (!container) return;
+    container.innerHTML = "";
+    const features = parseFeatures(featureText);
+    if (!features.length) {
+        container.innerHTML = `<span class="text-muted small">No equipment listed</span>`;
+        return;
+    }
+    features.forEach(f => {
+        const badge = document.createElement("span");
+        badge.className = "badge bg-primary-subtle text-primary border px-3 py-2 d-inline-flex align-items-center gap-1";
+        badge.innerHTML = `<i class="bi ${getFeatureIcon(f)}"></i> ${f}`;
+        container.appendChild(badge);
     });
 }
-    const modalDateInput = document.getElementById("endsOnDate");
 
-modalDateInput.addEventListener("change", function() {
+/* =============================================================
+   MODAL MODE HELPERS  (spec §2, §3)
+============================================================= */
+function setModalMode(mode, res = null) {
 
-    const selectedDate = this.value;
-    if (!selectedDate) return;
+    reservationMode = mode;
 
-    const startDateObj = new Date(selectedDate);
-    const maxDate = new Date(startDateObj);
-    const MAX_RECUR_MONTHS   = {{ MAX_RECUR_MONTHS }};
-    console.log(MAX_RECUR_MONTHS);
-    maxDate.setMonth(maxDate.getMonth() + MAX_RECUR_MONTHS);
+    const icon          = document.getElementById("modalHeaderIcon");
+    const title         = document.getElementById("modalHeaderTitle");
+    const btnText       = document.getElementById("submitBtnText");
+    const recurBox      = document.querySelector(".recurrence-section");
+    const editScopeBox  = document.getElementById("editScopeSection");
 
-    const maxDateStr = maxDate.toISOString().split("T")[0];
-
-    const endsOnInput = document.getElementById("endsOnDate");
-    endsOnInput.max = maxDateStr;
-    endsOnInput.min = selectedDate;
-});
-</script>
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-
-    const ROOMS = {{ rooms_json | safe }};
-
-    const modalEl = document.getElementById("reserveModal");
-    const submitBtn = document.getElementById("submitBtn");
-
-    const locationFilter = document.getElementById("locationFilterHeader");
-    const roomFilter = document.getElementById("roomFilterHeader");
-    const applyBtn = document.getElementById("applyFilterBtn");
-    const iframe = document.getElementById("availabilityFrame");
-
-    const recType = document.getElementById('repeat_rule');
-    const viewDate = document.getElementById('viewDate');
-
-    // ✅ FIX invalid CSS
-    document.getElementById("openReserveBtn").style.display = "none";
-    document.getElementById("GridTitle").style.display = "none"; // FIXED
-    document.getElementById("ReservationHeader").style.display = "none";
-
-    viewDate.value = new Date().toISOString().split("T")[0];
-
-    // ✅ Disable room until location loads
-    roomFilter.disabled = true;
-
-    /* =========================================================
-       🔥 SINGLE SOURCE OF TRUTH (ONLY ONE CHANGE HANDLER)
-    ========================================================== */
-    locationFilter.addEventListener("change", function () {
-
-        const loc = this.value;
-
-        // ✅ Keep "All Rooms"
-        roomFilter.innerHTML = `<option value="all">All Rooms</option>`;
-
-        const filteredRooms = ROOMS.filter(r =>
-            loc === "all" || (r.location || "General") === loc
-        );
-
-        filteredRooms.forEach(r => {
-            const opt = document.createElement("option");
-            opt.value = r.name;
-            opt.textContent = r.name;
-            roomFilter.appendChild(opt);
-        });
-
-        // ✅ Keep default = All Rooms
-        roomFilter.value = "all";
-
-        roomFilter.disabled = filteredRooms.length === 0;
-
-        // ✅ Auto refresh calendar
-        refreshAvailability();
-    });
-    generateModalTimeOptions();
-    /* =========================================================
-       🚀 INITIAL AUTO LOAD (FIXED ORDER)
-    ========================================================== */
-    if (locationFilter) {
-
-        // ✅ Force first REAL location (skip "All Locations")
-        if (locationFilter.options.length > 1) {
-            locationFilter.selectedIndex = 1;
+    if (mode === "edit") {
+        editingReservationId = res.id;
+        editingRecurrenceId  = res.recurrence_id || null;
+        icon.innerHTML       = '<i class="bi bi-pencil-square"></i>';
+        title.textContent    = "Edit Reservation";
+        btnText.textContent  = "Update Reservation";
+        // Hide new-reservation recurrence panel
+        if (recurBox) recurBox.style.display = "none";
+        // Show edit scope selector only if this is a recurring reservation
+        if (editScopeBox) {
+            editScopeBox.style.display = editingRecurrenceId ? "" : "none";
+            // Reset to "single" each time
+            const single = document.getElementById("scopeSingle");
+            if (single) single.checked = true;
         }
-
-        // ✅ Trigger AFTER handler is ready
-        locationFilter.dispatchEvent(new Event("change"));
-    }
-
-    if (!modalEl || !submitBtn) return;
-
-    /* =========================================================
-       APPLY BUTTON (still optional)
-    ========================================================== */
-    if (applyBtn) {
-        applyBtn.addEventListener("click", function () {
-
-            const loc = locationFilter?.value || "all";
-            const room = roomFilter?.value || "all";
-            const selectedDate = viewDate?.value;
-
-            iframe.src =
-                `/calendar_view_v2?embed=1`
-                + `&date=${encodeURIComponent(selectedDate)}`
-                + `&location=${encodeURIComponent(loc)}`
-                + `&room=${encodeURIComponent(room)}`;
-        });
-    }
-    // hide recurrence UI where applicable
-      if (recType){
-            recType.addEventListener('change', () => {
-            weeklyOptions.style.display = recType.value === 'weekly' ? 'block' : 'none';
-            monthlyOptions.style.display = recType.value === 'monthly' ? 'block' : 'none';
-      });
-      }
-
-       function validateTimes() {
-    if (!startInput.value || !endInput.value) return;
-
-    if (endInput.value <= startInput.value) {
-      endInput.setCustomValidity('End must be after start');
     } else {
-      endInput.setCustomValidity('');
+        editingReservationId = null;
+        editingRecurrenceId  = null;
+        icon.innerHTML       = '<i class="bi bi-calendar-plus"></i>';
+        title.textContent    = "New Reservation";
+        btnText.textContent  = "Create Reservation";
+        if (recurBox)     recurBox.style.display     = "";
+        if (editScopeBox) editScopeBox.style.display = "none";
     }
-  }
+}
 
-    /* =========================================================
-       FEATURE RENDERING
-    ========================================================== */
+/* =============================================================
+   OPEN EDIT MODAL  (spec §3)
+============================================================= */
+function openEditModal(res) {
 
-    function parseFeatures(text) {
-        if (!text) return [];
-        return text.split(",")
-                   .map(f => f.trim())
-                   .filter(f => f.length > 0);
+    function extractTime(dtStr) {
+        if (!dtStr) return "";
+        const part = dtStr.includes("T") ? dtStr.split("T")[1] : dtStr;
+        return part.substring(0, 5);
     }
-
-    function getFeatureIcon(name) {
-        const map = {
-            "TV": "bi-tv",
-            "Audio": "bi-volume-up",
-            "Projector": "bi-projector",
-            "Whiteboard": "bi-easel",
-            "VC": "bi-camera-video"
-        };
-        return map[name] || "bi-dot";
-    }
-
-    function renderFeatures(featureText) {
-
-        const container = document.getElementById("featuresContainer");
-        if (!container) return;
-
-        container.innerHTML = "";
-
-        const features = parseFeatures(featureText);
-
-        if (features.length === 0) {
-            container.innerHTML =
-                `<span class="text-muted small">No equipment listed</span>`;
-            return;
-        }
-
-        features.forEach(f => {
-            const badge = document.createElement("span");
-            badge.className =
-                "badge bg-primary-subtle text-primary border px-3 py-2 d-inline-flex align-items-center gap-1";
-
-            const icon = getFeatureIcon(f);
-            badge.innerHTML = `<i class="bi ${icon}"></i> ${f}`;
-            container.appendChild(badge);
-        });
+    function extractDate(dtStr) {
+        if (!dtStr) return "";
+        return dtStr.includes("T") ? dtStr.split("T")[0] : dtStr;
     }
 
-    /* =========================================================
-       RECURRENCE ENABLE / DISABLE
-    ========================================================== */
+    const ROOMS   = window._ROOMS || [];
+    const room    = ROOMS.find(r => r.id == res.room_id || r.name === res.room);
+    const startTime = extractTime(res.start);
+    const endTime   = extractTime(res.end);
+    const date      = extractDate(res.start);
 
-    modalEl.addEventListener("shown.bs.modal", function () {
+    // Switch to edit mode (sets globals + UI labels)
+    setModalMode("edit", res);
 
-        const endsNever = document.getElementById("endsNever");
-        const endsOn = document.getElementById("endsOn");
-        const endsAfter = document.getElementById("endsAfter");
-        const endsOnDate = document.getElementById("endsOnDate");
-        const endsAfterCount = document.getElementById("endsAfterCount");
+    // Populate fields
+    document.getElementById("modalDate").value         = date;
+    document.getElementById("modalRoomLabel").textContent = res.room || (room ? room.name : "");
+    document.getElementById("modalMeetingTitle").value = res.remarks || "";
 
-        function syncEnds() {
-            if (endsOnDate) endsOnDate.disabled = !endsOn?.checked;
-            if (endsAfterCount) endsAfterCount.disabled = !endsAfter?.checked;
+    renderFeatures(room ? (room.features || "") : "");
+
+    // Rebuild time selects then apply values
+    generateModalTimeOptions();
+    document.getElementById("modalStartTime").value = startTime;
+    updateEndTimeOptions();
+
+    // Set end time — needs a tick because updateEndTimeOptions rebuilds options
+    setTimeout(() => {
+        const endSel = document.getElementById("modalEndTime");
+        for (const opt of endSel.options) {
+            if (opt.value === endTime) { opt.selected = true; break; }
         }
-
-        [endsNever, endsOn, endsAfter].forEach(el => {
-            if (el) el.addEventListener("change", syncEnds);
-        });
-
-        syncEnds();
-    });
-
-    /* =========================================================
-       OPEN NEW RESERVATION (FROM GRID CLICK)
-    ========================================================== */
-
-    window.addEventListener("message", function (event) {
-
-      if (!event.data || !event.data.type) return;
-
-    // ===================================================
-    // OPEN NEW RESERVATION (Blank Cell Click)
-    // ===================================================
-    if (event.data.type === "OPEN_NEW_RESERVATION") {
-
-        console.log("OPEN_NEW_RESERVATION");
-        const MAX_RECUR_MONTHS   = {{ MAX_RECUR_MONTHS }};
-        console.log(MAX_RECUR_MONTHS);
-        const roomId  = event.data.room_id;
-        const slotMin = event.data.slot_min;
-
-        const room = ROOMS.find(r => r.id == roomId);
-        if (!room) return;
-
-        const viewDateInput = document.getElementById("viewDate");
-        const selectedDate = viewDateInput?.value;
-        if (!selectedDate) return;
-
-        /* ===============================
-           AUTO CHECK WEEKDAY (UNCHANGED)
-        ================================ */
-        const dateObj = new Date(selectedDate);
-        const weekdayCode = getJsWeekday(dateObj);
-
-        document.querySelectorAll(".wkday")
-            .forEach(cb => cb.checked = false);
-
-        const match = document.querySelector(`.wkday[value="${weekdayCode}"]`);
-        if (match) match.checked = true;
-
-        /* ===============================
-           CONVERT SLOT MINUTES â†’ HH:MM
-        ================================ */
-        const hours   = String(Math.floor(slotMin / 60)).padStart(2,"0");
-        const minutes = String(slotMin % 60).padStart(2,"0");
-
-        const startTime = `${hours}:${minutes}`;
-
-        // End = +30 mins
-        const endDate = new Date(`${selectedDate}T${startTime}`);
-        endDate.setMinutes(endDate.getMinutes() + 30);
-
-        const endTime =
-            String(endDate.getHours()).padStart(2,"0") + ":" +
-            String(endDate.getMinutes()).padStart(2,"0");
-
-        /* ===============================
-           SET MODAL FIELDS (NEW WAY)
-        ================================ */
-
-        document.getElementById("modalDate").value = selectedDate;
-        // ðŸ”’ Limit "End On Date" to 4 months from start
-
-        const startDateObj = new Date(selectedDate);
-
-        const maxDate = new Date(startDateObj);
-
-        maxDate.setMonth(maxDate.getMonth() + MAX_RECUR_MONTHS);
-
-        const maxDateStr = maxDate.toISOString().split("T")[0];
-
-        const endsOnInput = document.getElementById("endsOnDate");
-        endsOnInput.max = maxDateStr;
-        endsOnInput.min = selectedDate;
-        document.getElementById("modalStartTime").value = startTime;
-        document.getElementById("modalEndTime").value   = endTime;
-        updateEndTimeOptions();
-        document.getElementById("modalMeetingTitle").value = "";
-        document.getElementById("modalRoomLabel").textContent = room.name;
-        console.log(MAX_RECUR_MONTHS + " Months recurring");
-        console.log(maxDateStr + " Max Date");
-        renderFeatures(room.features || "");
-
-        document.getElementById("repeat_rule").value = "none";
-        document.getElementById("endsNever").checked = true;
-
-        new bootstrap.Modal(modalEl).show();
-    }
-        // ===================================================
-    // SHOW EXISTING RESERVATION
-    // ===================================================
-    if (event.data.type === "SHOW_RESERVATION") {
-
-        const res = event.data.data;
-        console.log('SHOW_RESERVATION')
-        showReservationDetails(res);
-    }
-    });
-
-
-    /* =========================================================
-       SUBMIT HANDLER
-    ========================================================== */
-
-    submitBtn.addEventListener("click", async function (e) {
-
-        e.preventDefault();
-
-        const startInput = document.getElementById("modalStartTime");
-        const endInput   = document.getElementById("modalEndTime");
-        const remarksInput = document.getElementById("modalMeetingTitle");
-
-
-        if (!startInput.value || !endInput.value) {
-            Swal.fire("Missing Data",
-                "Please select start and end time.",
-                "warning");
-            return;
-        }
-
-        function toMinutes(t) {
-            const [h, m] = t.split(":").map(Number);
-            return h * 60 + m;
-        }
-
-        if (toMinutes(endInput.value) <= toMinutes(startInput.value)) {
-            Swal.fire("Invalid Time", "End must be after start.", "error");
-            return;
-        }
-
-        const roomName =
-            document.getElementById("modalRoomLabel")?.textContent?.trim();
-
-        const room = ROOMS.find(r => r.name === roomName);
-
-        if (!room) {
-            Swal.fire("Error", "Room not found.", "error");
-            return;
-        }
-
-        const fd = new FormData();
-        //fd.append("start_time", startInput.value);
-        //fd.append("end_time", endInput.value);
-        const dateInput = document.getElementById("modalDate");
-
-        if (!dateInput.value) {
-            Swal.fire("Missing Date", "Please select a date.", "warning");
-            return;
-        }
-
-        const startCombined = `${dateInput.value}T${startInput.value}`;
-        const endCombined   = `${dateInput.value}T${endInput.value}`;
-
-        fd.append("start_time", startCombined);
-        fd.append("end_time", endCombined);
-
-        fd.append("remarks", remarksInput.value || "");
-
-        fd.append("recurrence_type",document.getElementById("repeat_rule")?.value || "none");
-        // Weekly days
-        const selectedWeekdays = Array.from(
-            document.querySelectorAll(".wkday:checked")
-        ).map(cb => cb.value);
-
-        fd.append("weekdays", selectedWeekdays.join(","));
-
-        // Weekly interval
-        fd.append(
-            "weekly_interval",
-            document.getElementById("weeklyInterval")?.value || 1
-        );
-        //let endMode = "never";
-        //if (document.getElementById("endsOn")?.checked) endMode = "on";
-        //if (document.getElementById("endsAfter")?.checked) endMode = "after";
-
-        //fd.append("end_mode", endMode);
-        //fd.append("end_on_date",
-        //    document.getElementById("endsOnDate")?.value || "");
-        //fd.append("end_after_count",
-        //    document.getElementById("endsAfterCount")?.value || "");
-        let endMode = "never";
-        let endOnDate = document.getElementById("endsOnDate")?.value || "";
-
-        if (document.getElementById("endsOn")?.checked) {
-            endMode = "on";
-        }
-
-        if (document.getElementById("endsAfter")?.checked) {
-            endMode = "after";
-        }
-
-        // ðŸ”¥ Convert "never" to MAX_RECUR_MONTHS limit
-        if (endMode === "never") {
-
-            const startDate = new Date(dateInput.value);
-            const maxDate = new Date(startDate);
-
-            maxDate.setMonth(maxDate.getMonth() + MAX_RECUR_MONTHS);
-
-            endOnDate = maxDate.toISOString().split("T")[0];
-
-            endMode = "on"; // force backend to treat as end date
-        }
-
-        fd.append("end_mode", endMode);
-        fd.append("end_on_date", endOnDate);
-        fd.append("end_after_count",
-            document.getElementById("endsAfterCount")?.value || "");
-
-
-        submitBtn.disabled = true;
-        const originalText = submitBtn.innerHTML;
-        submitBtn.innerHTML =
-            `<span class="spinner-border spinner-border-sm"></span> Saving...`;
-
-        try {
-
-            const res = await fetch(`/reserve_post/${room.id}`, {
-                method: "POST",
-                body: fd,
-                headers: { "X-Requested-With": "XMLHttpRequest" }
-            });
-
-            const data = await res.json();
-
-            /* ======================
-               SUCCESS
-            ====================== */
-            if (res.ok && data.success) {
-
-                // Close reservation modal
-                const modalInstance = bootstrap.Modal.getInstance(
-                    document.getElementById("reserveModal")
-                );
-
-                if (modalInstance) modalInstance.hide();
-
-                // Small delay for smooth UX
-                setTimeout(() => {
-                    refreshAvailability();
-                }, 200);
-
-                await Swal.fire("Success", "Reservation created.", "success");
-
-                return;
-            }
-
-            /* ======================
-               CONFLICT
-            ====================== */
-            if (res.status === 409 && data.conflicts) {
-
-                let html = `
-                    <div style="text-align:left;">
-                    <b style="color:#dc3545;">
-                    ${data.conflicts.length} conflict(s) detected
-                    </b><br><br>
-                `;
-
-                data.conflicts.forEach(c => {
-                    html += `
-                        <div style="margin-bottom:10px;">
-                            <b>${c.date}</b><br>
-                            ${c.conflict_with}<br>
-                            ${c.time_range}
-                        </div>
-                    `;
-                });
-
-                html += `No reservations were saved.</div>`;
-
-                await Swal.fire({
-                    icon: "error",
-                    title: "Reservation Conflict",
-                    html: html,
-                    width: 600
-                });
-
-                return;
-            }
-
-            throw new Error(data.message || "Reservation failed.");
-
-        } catch (err) {
-
-            await Swal.fire("Error",
-                err.message || "Unexpected system error.",
-                "error");
-
-        } finally {
-
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = originalText;
-        }
-    });
-     function showReservationDetails(res) {
-
-    const isOwner =
-    res.reserved_by === CURRENT_USER.username ||
-    res.email === CURRENT_USER.email;
-
-    const canCancel = isOwner || CURRENT_USER.isAdmin;
-
-    const status = (res.status || "").toLowerCase();
+    }, 0);
+
+    new bootstrap.Modal(document.getElementById("reserveModal")).show();
+}
+
+/* =============================================================
+   SHOW RESERVATION DETAILS POPUP  (spec §1)
+   Edit button visible only to owner or admin
+============================================================= */
+function showReservationDetails(res) {
+
+    const isOwner  = res.reserved_by === CURRENT_USER.username ||
+                     res.email       === CURRENT_USER.email;
+    const canEdit  = isOwner || CURRENT_USER.isAdmin;
+    const canCancel= isOwner || CURRENT_USER.isAdmin;
 
     const statusMap = {
-        approved: { text: "APPROVED", bg: "#d1fae5", color: "#065f46" },
-        pending:  { text: "PENDING",  bg: "#fef3c7", color: "#92400e" },
-        blocked:  { text: "BLOCKED",  bg: "#fee2e2", color: "#991b1b" },
-        booked:   { text: "BOOKED",   bg: "#d1fae5", color: "#065f46" }
+        approved: { text:"APPROVED", bg:"#d1fae5", color:"#065f46" },
+        pending:  { text:"PENDING",  bg:"#fef3c7", color:"#92400e" },
+        blocked:  { text:"BLOCKED",  bg:"#fee2e2", color:"#991b1b" },
+        booked:   { text:"BOOKED",   bg:"#d1fae5", color:"#065f46" }
     };
+    const status = (res.status || "").toLowerCase();
+    const badge  = statusMap[status] || { text:status.toUpperCase(), bg:"#e5e7eb", color:"#374151" };
 
-    const badge = statusMap[status] || {
-        text: status.toUpperCase(),
-        bg: "#e5e7eb",
-        color: "#374151"
-    };
-
-     // robust time parsing
-     function toMinutes(t){
-         if (!t) return null;
-         if (t.includes('T')) t = t.split('T')[1];
-         const [hh,mm] = t.split(':');
-         return (parseInt(hh)||0)*60 + (parseInt(mm)||0);
-     }
-
-    function minutesToHHMM(mins){
-        const h = Math.floor(mins / 60);
-        const m = mins % 60;
-        return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+    function parseTime(t) {
+        if (!t) return null;
+        if (t.includes("T")) t = t.split("T")[1];
+        const [hh, mm] = t.split(":");
+        return (parseInt(hh)||0)*60 + (parseInt(mm)||0);
     }
-    const startMin = toMinutes(res.start);
-    const endMin   = toMinutes(res.end);
+    function minsToHHMM(m) {
+        if (m === null) return "--:--";
+        return String(Math.floor(m/60)).padStart(2,"0") + ":" + String(m%60).padStart(2,"0");
+    }
+    const displayStart = minsToHHMM(parseTime(res.start));
+    const displayEnd   = minsToHHMM(parseTime(res.end));
 
-    const displayStart = minutesToHHMM(startMin);
-    const displayEnd   = minutesToHHMM(endMin);
+    function detailRow(label, value) {
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;">
+                  <div style="color:#6b7280;width:140px;">${label}</div>
+                  <div style="flex:1;text-align:left;">${value}</div>
+                </div>`;
+    }
+    function divider() { return `<div style="border-bottom:1px solid #e5e7eb;"></div>`; }
 
+    const isRecurring = !!res.recurrence_id;
+
+    // ── Cancel scope panel (shown inside Swal when canCancel) ────────
+    // For non-recurring: just a confirm button
+    // For recurring: 3-option radio card selector
+    function buildCancelPanel() {
+        if (!canCancel) {
+            return `<div style="margin-top:24px;text-align:center;color:#6c757d;font-size:13px;">
+                        Only the reservation owner can modify this booking.
+                    </div>`;
+        }
+
+        const adminLabel = CURRENT_USER.isAdmin && !isOwner ? "Admin Override — " : "";
+
+        if (!isRecurring) {
+            // Simple single-event cancel
+            return `
+            <div style="margin-top:24px;border-top:1px solid #e5e7eb;padding-top:20px;
+                        display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+                <button id="swalEditBtn"
+                    style="background:#0d6efd;color:white;border:none;padding:10px 24px;
+                           border-radius:8px;font-weight:600;cursor:pointer;font-size:14px;">
+                    <i class="bi bi-pencil-square"></i> Edit
+                </button>
+                <button id="swalCancelBtn" data-mode="single"
+                    style="background:#dc2626;color:white;border:none;padding:10px 24px;
+                           border-radius:8px;font-weight:600;cursor:pointer;font-size:14px;">
+                    <i class="bi bi-trash"></i> ${adminLabel}Cancel Reservation
+                </button>
+            </div>`;
+        }
+
+        // Recurring — show scope selector + action buttons
+        return `
+        <div style="margin-top:24px;border-top:1px solid #e5e7eb;padding-top:20px;">
+
+            <p style="font-size:13px;font-weight:600;color:#374151;margin:0 0 12px;text-align:left;">
+                <i class="bi bi-arrow-repeat me-1 text-primary"></i>
+                This is a recurring reservation. What would you like to do?
+            </p>
+
+            <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;" id="cancelScopeGroup">
+
+                <label id="cso1" style="display:flex;align-items:flex-start;gap:10px;padding:11px 14px;
+                            border-radius:8px;border:2px solid #3b82f6;background:#eff6ff;cursor:pointer;">
+                    <input type="radio" name="cancelScope" value="single" checked
+                           style="margin-top:3px;accent-color:#2563eb;">
+                    <div style="text-align:left;">
+                        <div style="font-size:13px;font-weight:600;color:#1d4ed8;">Only this event</div>
+                        <div style="font-size:12px;color:#6b7280;margin-top:2px;">Cancel just this one occurrence</div>
+                    </div>
+                </label>
+
+                <label id="cso2" style="display:flex;align-items:flex-start;gap:10px;padding:11px 14px;
+                            border-radius:8px;border:1px solid #e5e7eb;background:#f9fafb;cursor:pointer;">
+                    <input type="radio" name="cancelScope" value="future"
+                           style="margin-top:3px;accent-color:#2563eb;">
+                    <div style="text-align:left;">
+                        <div style="font-size:13px;font-weight:600;color:#111827;">This and future events</div>
+                        <div style="font-size:12px;color:#6b7280;margin-top:2px;">Cancel this and all following occurrences</div>
+                    </div>
+                </label>
+
+                <label id="cso3" style="display:flex;align-items:flex-start;gap:10px;padding:11px 14px;
+                            border-radius:8px;border:1px solid #e5e7eb;background:#f9fafb;cursor:pointer;">
+                    <input type="radio" name="cancelScope" value="all"
+                           style="margin-top:3px;accent-color:#2563eb;">
+                    <div style="text-align:left;">
+                        <div style="font-size:13px;font-weight:600;color:#111827;">All events in this series</div>
+                        <div style="font-size:12px;color:#6b7280;margin-top:2px;">Cancel every occurrence — past, present, and future</div>
+                    </div>
+                </label>
+
+            </div>
+
+            <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+                <button id="swalEditBtn"
+                    style="background:#0d6efd;color:white;border:none;padding:10px 24px;
+                           border-radius:8px;font-weight:600;cursor:pointer;font-size:14px;">
+                    <i class="bi bi-pencil-square"></i> Edit
+                </button>
+                <button id="swalCancelBtn"
+                    style="background:#dc2626;color:white;border:none;padding:10px 24px;
+                           border-radius:8px;font-weight:600;cursor:pointer;font-size:14px;">
+                    <i class="bi bi-trash"></i> ${adminLabel}Confirm Cancel
+                </button>
+            </div>
+        </div>`;
+    }
 
     Swal.fire({
         target: document.body,
@@ -1041,224 +654,496 @@ document.addEventListener("DOMContentLoaded", function () {
         showCloseButton: true,
         padding: "2rem",
         html: `
-        <div style="text-align:center;margin-bottom:20px;">
-            <div style="font-size:28px;color:#0d47a1;">
-                <i class="bi bi-calendar-check"></i>
+            <div style="text-align:center;margin-bottom:20px;">
+                <div style="font-size:28px;color:#0d47a1;"><i class="bi bi-calendar-check"></i></div>
+                <h3 style="margin-top:8px;font-weight:700;color:#0d47a1;">Reservation Details</h3>
             </div>
-            <h3 style="margin-top:8px;font-weight:700;color:#0d47a1;">
-                Reservation Details
-            </h3>
-        </div>
-
-        <div style="text-align:left;font-size:15px;">
-
-            ${detailRow("Room:", `<strong style="color:#0d47a1">${res.room}</strong>`)}
-            ${divider()}
-
-            ${detailRow("Status:",
-                `<span style="
-                    display:inline-block;
-                    padding:6px 14px;
-                    border-radius:20px;
-                    background:${badge.bg};
-                    color:${badge.color};
-                    font-weight:600;
-                    font-size:13px;
-                ">${badge.text}</span>`
-            )}
-            ${divider()}
-
-            ${detailRow("Reserved By:", res.reserved_by)}
-            ${divider()}
-
-            ${detailRow("Email:", res.email || "-")}
-            ${divider()}
-
-            ${detailRow("Time:",
-                `<span style="color:#0d47a1;font-weight:600;">
-                    ${displayStart} â€” ${displayEnd}
-                </span>`
-            )}
-            ${divider()}
-
-            ${detailRow("Meeting Title:", res.remarks || "â€”")}
-
-        </div>
-
-        ${canCancel ? `
-        <div style="margin-top:30px;text-align:center;display:flex;gap:10px;justify-content:center;">
-            <button id="editBtn" class="btn btn-primary">
-                    <i class="bi bi-pencil"></i> Edit
-                </button>
-            <button id="cancelBtn"
-                style="
-                    background:#dc2626;
-                    color:white;
-                    border:none;
-                    padding:12px 28px;
-                    border-radius:8px;
-                    font-weight:600;
-                    box-shadow:0 4px 12px rgba(220,38,38,0.3);
-                    cursor:pointer;
-                ">
-                <i class="bi bi-trash"></i>
-                ${CURRENT_USER.isAdmin && !isOwner ? "Admin Override Cancel" : "Cancel Reservation"}
-            </button>
-
-        </div>
-
-    ` : `
-        <div style="margin-top:30px;text-align:center;color:#6c757d;font-size:13px;">
-            Only the reservation owner can cancel this booking.
-        </div>
-    `}
-        `,
+            <div style="text-align:left;font-size:15px;">
+                ${detailRow("Room:", `<strong style="color:#0d47a1">${res.room}</strong>`)}
+                ${divider()}
+                ${detailRow("Status:", `<span style="display:inline-block;padding:6px 14px;border-radius:20px;
+                    background:${badge.bg};color:${badge.color};font-weight:600;font-size:13px;">${badge.text}</span>`)}
+                ${divider()}
+                ${detailRow("Reserved By:", res.reserved_by)}
+                ${divider()}
+                ${detailRow("Email:", res.email || "-")}
+                ${divider()}
+                ${detailRow("Time:", `<span style="color:#0d47a1;font-weight:600;">${displayStart} — ${displayEnd}</span>`)}
+                ${divider()}
+                ${detailRow("Meeting Title:", res.remarks || "—")}
+                ${isRecurring ? divider() + detailRow("Series:", `<span style="color:#6b7280;font-size:12px;">
+                    <i class="bi bi-arrow-repeat"></i> Recurring reservation</span>`) : ""}
+            </div>
+            ${buildCancelPanel()}`,
         didOpen: () => {
 
-            const btn = document.getElementById("cancelBtn");
-            if(!btn) return;
+            // ── Edit button ──────────────────────────────────────────
+            const editBtn = document.getElementById("swalEditBtn");
+            if (editBtn) {
+                editBtn.addEventListener("click", () => {
+                    Swal.close();
+                    openEditModal(res);
+                });
+            }
 
-            btn.addEventListener("click", async () => {
+            // ── Radio card highlight sync ────────────────────────────
+            if (isRecurring) {
+                const scopeLabels = [
+                    document.getElementById("cso1"),
+                    document.getElementById("cso2"),
+                    document.getElementById("cso3")
+                ];
+                document.querySelectorAll('input[name="cancelScope"]').forEach((radio, idx) => {
+                    radio.addEventListener("change", () => {
+                        scopeLabels.forEach((lbl, j) => {
+                            const active = j === idx;
+                            lbl.style.border      = active ? "2px solid #3b82f6" : "1px solid #e5e7eb";
+                            lbl.style.background  = active ? "#eff6ff"            : "#f9fafb";
+                            lbl.querySelector("div > div").style.color = active ? "#1d4ed8" : "#111827";
+                        });
+                    });
+                });
+            }
+
+            // ── Cancel button ────────────────────────────────────────
+            const cancelBtn = document.getElementById("swalCancelBtn");
+            if (!cancelBtn) return;
+
+            cancelBtn.addEventListener("click", async () => {
+
+                // Determine scope
+                const scopeEl = document.querySelector('input[name="cancelScope"]:checked');
+                const mode    = scopeEl ? scopeEl.value : "single";
+
+                // Build confirmation message based on mode
+                const confirmMessages = {
+                    single : "Cancel just this occurrence?",
+                    future : "Cancel this and all future occurrences?",
+                    all    : "Cancel the entire series? This cannot be undone."
+                };
 
                 const confirm = await Swal.fire({
-                    title: "Confirm Cancellation?",
-                    icon: "warning",
-                    showCancelButton: true,
+                    title             : "Confirm Cancellation",
+                    text              : confirmMessages[mode],
+                    icon              : mode === "all" ? "error" : "warning",
+                    showCancelButton  : true,
                     confirmButtonColor: "#dc2626",
-                    confirmButtonText: "Yes, Cancel"
+                    cancelButtonText  : "Go back",
+                    confirmButtonText : mode === "all" ? "Yes, cancel all" : "Yes, cancel"
                 });
 
-                if(!confirm.isConfirmed) return;
+                if (!confirm.isConfirmed) return;
+
+                cancelBtn.disabled    = true;
+                cancelBtn.textContent = "Cancelling...";
 
                 const r = await fetch(`/api/cancel_reservation/${res.id}`, {
-                    method: "POST"
+                    method  : "POST",
+                    headers : { "Content-Type": "application/json" },
+                    body    : JSON.stringify({ mode })
                 });
-
                 const d = await r.json();
 
-                if(d.success){
-                    Swal.fire("Cancelled!", "", "success")
-                        .then(()=> {
-                            refreshAvailability();
-                        });
-                }else{
+                if (d.success) {
+                    Swal.fire({
+                        icon             : "success",
+                        title            : "Cancelled",
+                        text             : d.message,
+                        confirmButtonText: "OK"
+                    }).then(() => refreshAvailability());
+                } else {
                     Swal.fire("Error", d.message || "Cannot cancel", "error");
+                    cancelBtn.disabled    = false;
+                    cancelBtn.textContent = "Confirm Cancel";
                 }
             });
         }
     });
-
-    function detailRow(label, value){
-        return `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;">
-            <div style="color:#6b7280;width:140px;">${label}</div>
-            <div style="flex:1;text-align:left;">${value}</div>
-        </div>`;
-    }
-
-    function divider(){
-        return `<div style="border-bottom:1px solid #e5e7eb;"></div>`;
-    }
 }
-    function formatTimeRange(range) {
-        if (!range) return "";
 
-        const parts = range.split(" - ");
-        if (parts.length !== 2) return range;
+/* =============================================================
+   MAIN — DOMContentLoaded
+============================================================= */
+document.addEventListener("DOMContentLoaded", function () {
 
-        const formatSingle = (dtStr) => {
-            const d = new Date(dtStr);
-            if (isNaN(d)) return dtStr;
+    /* ── Room data (expose globally so openEditModal can access) ── */
+    const ROOMS = {{ rooms_json | safe }};
+    window._ROOMS = ROOMS;
 
-            const hh = String(d.getHours()).padStart(2, '0');
-            const mm = String(d.getMinutes()).padStart(2, '0');
-            return `${hh}:${mm}`;
-        };
+    const modalEl   = document.getElementById("reserveModal");
+    const submitBtn = document.getElementById("submitBtn");
 
-        return `${formatSingle(parts[0])} â€“ ${formatSingle(parts[1])}`;
-    }
-
-});
-
-    const CURRENT_USER = {
-    username: "{{ current_user.username }}",
-    email: "{{ current_user.email }}",
-    isAdmin: {{ 'true' if current_user.is_admin() else 'false' }}
-};
-
-
-document.getElementById("viewDate")
-    ?.addEventListener("change", function () {
-        refreshAvailability();
-    });
-function refreshAvailability() {
-
+    /* ── Filter dropdowns ────────────────────────────────────── */
     const locationFilter = document.getElementById("locationFilterHeader");
-    const roomFilter = document.getElementById("roomFilterHeader");
-    const viewDateInput = document.getElementById("viewDate");
+    const roomFilter     = document.getElementById("roomFilterHeader");
+    const applyBtn       = document.getElementById("applyFilterBtn");
+    const iframe         = document.getElementById("availabilityFrame");
 
-    const loc = locationFilter?.value || "all";
-    const room = roomFilter?.value || "all";
+    document.getElementById("openReserveBtn").style.display    = "none";
+    document.getElementById("GridTitle").style.visibility      = "hidden";
+    document.getElementById("ReservationHeader").style.display = "none";
+    document.getElementById("viewDate").value = new Date().toISOString().split("T")[0];
 
-    // ðŸ”¥ Use selected date instead of today
-    const selectedDate = viewDateInput?.value;
+    /* ── Auto-populate room dropdown for pre-selected first location ── */
+    (function initLocationFilter() {
+        const loc = locationFilter?.value || "all";
+        if (loc && loc !== "all") {
+            roomFilter.innerHTML = `<option value="all">All Rooms</option>`;
+            roomFilter.disabled  = false;
+            ROOMS.filter(r => (r.location || "General") === loc)
+                 .forEach(r => {
+                     const opt = document.createElement("option");
+                     opt.value = r.name;
+                     opt.textContent = r.name;
+                     roomFilter.appendChild(opt);
+                 });
+        } else {
+            roomFilter.disabled = true;
+        }
+    })();
 
+    refreshAvailability();
+    generateModalTimeOptions();
+
+    /* ── Wire start-time change → rebuild end-time options ── */
+    document.getElementById("modalStartTime")
+            ?.addEventListener("change", updateEndTimeOptions);
+
+    /* ── Reset modal to create mode when closed ── */
+    document.getElementById("reserveModal")
+            ?.addEventListener("hidden.bs.modal", () => setModalMode("create"));
+
+    if (locationFilter) {
+        locationFilter.addEventListener("change", function () {
+            const loc = this.value;
+            roomFilter.innerHTML = `<option value="all">All Rooms</option>`;
+            document.getElementById("roomFilterHeader").disabled = false;
+            ROOMS.filter(r => loc === "all" || (r.location || "General") === loc)
+                 .forEach(r => {
+                     const opt = document.createElement("option");
+                     opt.value = r.name; opt.textContent = r.name;
+                     roomFilter.appendChild(opt);
+                 });
+        });
+    }
+
+    if (applyBtn) {
+        applyBtn.addEventListener("click", function () {
+            const loc  = locationFilter?.value || "all";
+            const room = roomFilter?.value || "all";
+            const selectedDate = document.getElementById("viewDate")?.value;
+            iframe.src = `/calendar_view_v2?embed=1`
+                       + `&date=${encodeURIComponent(selectedDate)}`
+                       + `&location=${encodeURIComponent(loc)}`
+                       + `&room=${encodeURIComponent(room)}`;
+        });
+    }
+
+    /* ── Recurrence frequency toggle ────────────────────────── */
+    const recType = document.getElementById("repeat_rule");
+    if (recType) {
+        recType.addEventListener("change", () => {
+            const wo = document.getElementById("weeklyOptions");
+            if (wo) wo.style.display = recType.value === "weekly" ? "block" : "none";
+        });
+    }
+
+    /* ── Recurrence ends radio sync ─────────────────────────── */
+    modalEl.addEventListener("shown.bs.modal", function () {
+        const endsNever      = document.getElementById("endsNever");
+        const endsOn         = document.getElementById("endsOn");
+        const endsAfter      = document.getElementById("endsAfter");
+        const endsOnDate     = document.getElementById("endsOnDate");
+        const endsAfterCount = document.getElementById("endsAfterCount");
+
+        function syncEnds() {
+            if (endsOnDate)     endsOnDate.disabled     = !endsOn?.checked;
+            if (endsAfterCount) endsAfterCount.disabled = !endsAfter?.checked;
+        }
+        [endsNever, endsOn, endsAfter].forEach(el => el?.addEventListener("change", syncEnds));
+        syncEnds();
+    });
+
+    /* ── endsOnDate max constraint ───────────────────────────── */
+    document.getElementById("endsOnDate")?.addEventListener("change", function () {
+        const selectedDate = this.value;
+        if (!selectedDate) return;
+        const max = new Date(selectedDate);
+        max.setMonth(max.getMonth() + MAX_RECUR_MONTHS);
+        this.max = max.toISOString().split("T")[0];
+        this.min = selectedDate;
+    });
+
+    /* ── Date change listener ────────────────────────────────── */
+    document.getElementById("viewDate")
+            ?.addEventListener("change", () => refreshAvailability());
+
+    /* =========================================================
+       MESSAGE LISTENER — from calendar iframe  (spec §7)
+       Single listener, no duplicates
+    ========================================================== */
+    window.addEventListener("message", function (event) {
+
+        if (!event.data || !event.data.type) return;
+
+        /* ── Empty slot clicked → New Reservation ── */
+        if (event.data.type === "OPEN_NEW_RESERVATION") {
+
+            const roomId  = event.data.room_id;
+            const slotMin = event.data.slot_min;
+            const room    = ROOMS.find(r => r.id == roomId);
+            if (!room) return;
+
+            const selectedDate = document.getElementById("viewDate")?.value;
+            if (!selectedDate) return;
+
+            // Reset to create mode
+            setModalMode("create");
+
+            // Auto-check weekday checkbox
+            const weekdayCode = getJsWeekday(new Date(selectedDate));
+            document.querySelectorAll(".wkday").forEach(cb => cb.checked = false);
+            const match = document.querySelector(`.wkday[value="${weekdayCode}"]`);
+            if (match) match.checked = true;
+
+            // Slot → HH:MM
+            const hh      = String(Math.floor(slotMin / 60)).padStart(2,"0");
+            const mm      = String(slotMin % 60).padStart(2,"0");
+            const startTime = `${hh}:${mm}`;
+            const endDate   = new Date(`${selectedDate}T${startTime}`);
+            endDate.setMinutes(endDate.getMinutes() + 30);
+            const endTime = String(endDate.getHours()).padStart(2,"0") + ":"
+                          + String(endDate.getMinutes()).padStart(2,"0");
+
+            // Set recurrence date bounds
+            const maxDate = new Date(selectedDate);
+            maxDate.setMonth(maxDate.getMonth() + MAX_RECUR_MONTHS);
+            const endsOnInput = document.getElementById("endsOnDate");
+            endsOnInput.max = maxDate.toISOString().split("T")[0];
+            endsOnInput.min = selectedDate;
+
+            // Populate modal fields
+            document.getElementById("modalDate").value            = selectedDate;
+            document.getElementById("modalStartTime").value       = startTime;
+            document.getElementById("modalEndTime").value         = endTime;
+            document.getElementById("modalMeetingTitle").value    = "";
+            document.getElementById("modalRoomLabel").textContent = room.name;
+            document.getElementById("repeat_rule").value          = "none";
+            document.getElementById("endsNever").checked          = true;
+            updateEndTimeOptions();
+            renderFeatures(room.features || "");
+
+            new bootstrap.Modal(modalEl).show();
+        }
+
+        /* ── Booked slot clicked → Show details ── */
+        if (event.data.type === "SHOW_RESERVATION") {
+            showReservationDetails(event.data.data);
+        }
+    });
+
+    /* =========================================================
+       SUBMIT HANDLER  (spec §4, §5)
+    ========================================================== */
+    submitBtn.addEventListener("click", async function (e) {
+
+        e.preventDefault();
+
+        const startInput   = document.getElementById("modalStartTime");
+        const endInput     = document.getElementById("modalEndTime");
+        const remarksInput = document.getElementById("modalMeetingTitle");
+        const dateInput    = document.getElementById("modalDate");
+
+        /* ── Validation ── */
+        if (!startInput.value || !endInput.value) {
+            Swal.fire("Missing Data", "Please select start and end time.", "warning");
+            return;
+        }
+        if (!dateInput.value) {
+            Swal.fire("Missing Date", "Please select a date.", "warning");
+            return;
+        }
+
+        function toMinutes(t) { const [h,m]=t.split(":").map(Number); return h*60+m; }
+        if (toMinutes(endInput.value) <= toMinutes(startInput.value)) {
+            Swal.fire("Invalid Time", "End time must be after start time.", "error");
+            return;
+        }
+
+        const roomName = document.getElementById("modalRoomLabel")?.textContent?.trim();
+        const room     = ROOMS.find(r => r.name === roomName);
+        if (!room && reservationMode === "create") {
+            Swal.fire("Error", "Room not found.", "error");
+            return;
+        }
+
+        const startCombined = `${dateInput.value}T${startInput.value}`;
+        const endCombined   = `${dateInput.value}T${endInput.value}`;
+
+        /* ── Spinner ── */
+        submitBtn.disabled  = true;
+        const originalHTML  = submitBtn.innerHTML;
+        submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Saving...`;
+
+        try {
+
+            /* ==================================================
+               EDIT MODE  (spec §4 — /reservation/edit/<id>)
+            ================================================== */
+            if (reservationMode === "edit") {
+
+                // Read scope from the in-modal radio buttons (spec §5)
+                let editMode = "single";
+                if (editingRecurrenceId) {
+                    const scopeEl = document.querySelector('input[name="editScope"]:checked');
+                    editMode = scopeEl ? scopeEl.value : "single";
+                }
+
+                const res  = await fetch(`/reservation/edit/${editingReservationId}`, {
+                    method:  "POST",
+                    headers: { "Content-Type": "application/json",
+                               "X-Requested-With": "XMLHttpRequest" },
+                    body: JSON.stringify({
+                        start_time : startCombined,
+                        end_time   : endCombined,
+                        remarks    : remarksInput.value || "",
+                        mode       : editMode
+                    })
+                });
+                const data = await res.json().catch(() => ({ success: res.ok }));
+
+                if (res.ok && data.success) {
+                    bootstrap.Modal.getInstance(modalEl)?.hide();
+                    setTimeout(() => refreshAvailability(), 200);
+                    await Swal.fire("Updated!", data.message || "Reservation updated successfully.", "success");
+                    return;
+                }
+                if (res.status === 409) {
+                    await Swal.fire({ icon:"error", title:"Conflict Detected",
+                        text: data.message || "The new time conflicts with an existing reservation." });
+                    return;
+                }
+                throw new Error(data.message || "Update failed.");
+            }
+
+            /* ==================================================
+               CREATE MODE  (spec §4 — /reserve_post/<room_id>)
+               Original FormData flow — unchanged from production
+            ================================================== */
+            const fd = new FormData();
+            fd.append("start_time",       startCombined);
+            fd.append("end_time",         endCombined);
+            fd.append("remarks",          remarksInput.value || "");
+            fd.append("recurrence_type",  document.getElementById("repeat_rule")?.value || "none");
+
+            const selectedWeekdays = Array.from(document.querySelectorAll(".wkday:checked"))
+                                          .map(cb => cb.value);
+            fd.append("weekdays",         selectedWeekdays.join(","));
+            fd.append("weekly_interval",  document.getElementById("weeklyInterval")?.value || 1);
+
+            let endMode   = "never";
+            let endOnDate = document.getElementById("endsOnDate")?.value || "";
+            if (document.getElementById("endsOn")?.checked)    endMode = "on";
+            if (document.getElementById("endsAfter")?.checked) endMode = "after";
+
+            if (endMode === "never") {
+                const maxDate = new Date(dateInput.value);
+                maxDate.setMonth(maxDate.getMonth() + MAX_RECUR_MONTHS);
+                endOnDate = maxDate.toISOString().split("T")[0];
+                endMode   = "on";
+            }
+            fd.append("end_mode",         endMode);
+            fd.append("end_on_date",      endOnDate);
+            fd.append("end_after_count",  document.getElementById("endsAfterCount")?.value || "");
+
+            const res  = await fetch(`/reserve_post/${room.id}`, {
+                method:  "POST",
+                body:    fd,
+                headers: { "X-Requested-With": "XMLHttpRequest" }
+            });
+            const data = await res.json();
+
+            if (res.ok && data.success) {
+                bootstrap.Modal.getInstance(modalEl)?.hide();
+                setTimeout(() => refreshAvailability(), 200);
+                await Swal.fire("Success", "Reservation created.", "success");
+                return;
+            }
+
+            if (res.status === 409 && data.conflicts) {
+                let html = `<div style="text-align:left;">
+                    <b style="color:#dc3545;">${data.conflicts.length} conflict(s) detected</b><br><br>`;
+                data.conflicts.forEach(c => {
+                    html += `<div style="margin-bottom:10px;">
+                        <b>${c.date}</b><br>${c.conflict_with}<br>${c.time_range}</div>`;
+                });
+                html += `No reservations were saved.</div>`;
+                await Swal.fire({ icon:"error", title:"Reservation Conflict", html, width:600 });
+                return;
+            }
+
+            throw new Error(data.message || "Reservation failed.");
+
+        } catch (err) {
+            await Swal.fire("Error", err.message || "Unexpected system error.", "error");
+        } finally {
+            submitBtn.disabled  = false;
+            submitBtn.innerHTML = originalHTML;
+        }
+    });
+
+}); // end DOMContentLoaded
+
+/* =============================================================
+   REFRESH IFRAME
+============================================================= */
+function refreshAvailability() {
+    const loc          = document.getElementById("locationFilterHeader")?.value || "all";
+    const room         = document.getElementById("roomFilterHeader")?.value || "all";
+    const selectedDate = document.getElementById("viewDate")?.value;
     if (!selectedDate) return;
-
-    const url =
-        `/calendar_view_v2?embed=1`
-        + `&date=${encodeURIComponent(selectedDate)}`
-        + `&location=${encodeURIComponent(loc)}`
-        + `&room=${encodeURIComponent(room)}`;
-
     const frame = document.getElementById("availabilityFrame");
-
     if (!frame) return;
-
-    frame.src = url;
-
+    frame.src = `/calendar_view_v2?embed=1`
+              + `&date=${encodeURIComponent(selectedDate)}`
+              + `&location=${encodeURIComponent(loc)}`
+              + `&room=${encodeURIComponent(room)}`;
 }
+
 function getJsWeekday(date) {
-  const map = ['SU','MO','TU','WE','TH','FR','SA'];
-  return map[date.getDay()];
+    return ["SU","MO","TU","WE","TH","FR","SA"][date.getDay()];
 }
-
 </script>
 
 <style>
- /* Extra Polish CSS */
   body { background-color: #f8f9fa; }
-
   .card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
-
   .form-control:focus, .form-select:focus {
     border-color: #0d6efd;
-    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.1);
+    box-shadow: 0 0 0 0.25rem rgba(13,110,253,0.1);
   }
-
-  .breadcrumb-item + .breadcrumb-item::before { content: "â€¢"; color: #ccc; }
-
-  /* Success Modal Enhancements */
+  .breadcrumb-item + .breadcrumb-item::before { content: "•"; color: #ccc; }
   .success-icon-circle {
-    width: 80px;
-    height: 80px;
-    background-color: #d1fae5;
-    color: #059669;
-    border-radius: 50%;
-    margin: 0 auto;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    width: 80px; height: 80px;
+    background-color: #d1fae5; color: #059669;
+    border-radius: 50%; margin: 0 auto;
+    display: flex; align-items: center; justify-content: center;
     animation: scaleUp 0.4s ease-out;
   }
+  @keyframes scaleUp { from { transform: scale(0); } to { transform: scale(1); } }
+  #availabilityFrame { transition: opacity 0.3s ease; }
 
-  @keyframes scaleUp {
-    from { transform: scale(0); }
-    to { transform: scale(1); }
+  /* Edit scope radio cards */
+  #editScopeSection .form-check {
+    transition: border-color 0.15s, background 0.15s;
+    border: 2px solid #e2e8f0 !important;
   }
-
-  #availabilityFrame {
-    transition: opacity 0.3s ease;
+  #editScopeSection .form-check:has(input:checked) {
+    border-color: #0d6efd !important;
+    background: #eff6ff !important;
+  }
+  #editScopeSection .form-check:hover {
+    border-color: #93c5fd !important;
   }
 </style>
 {% endblock %}

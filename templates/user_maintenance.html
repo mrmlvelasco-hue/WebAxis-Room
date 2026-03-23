@@ -80,7 +80,50 @@
 
   <!-- Registered Users -->
   <div class="card p-4 border-0 user-table-card">
-  <h5 class="fw-semibold mb-3"><i class="bi bi-people"></i> Registered Users</h5>
+  <div class="d-flex flex-wrap align-items-center justify-content-between mb-3 gap-2">
+    <h5 class="fw-semibold mb-0"><i class="bi bi-people"></i> Registered Users
+      <span class="badge bg-secondary ms-2" style="font-size:0.75rem;">{{ total }} total</span>
+    </h5>
+
+    <!-- Search form -->
+    <form method="GET" action="{{ url_for('user_maintenance') }}"
+          class="d-flex gap-2" id="searchForm" style="min-width:280px;">
+      <div class="input-group input-group-sm">
+        <span class="input-group-text bg-white border-end-0">
+          <i class="bi bi-search text-muted"></i>
+        </span>
+        <input type="text"
+               name="search"
+               id="searchInput"
+               class="form-control border-start-0 ps-0"
+               placeholder="Search username, name, email, role…"
+               value="{{ search }}"
+               autocomplete="off">
+        {% if search %}
+        <a href="{{ url_for('user_maintenance') }}"
+           class="btn btn-outline-secondary border"
+           title="Clear search">
+          <i class="bi bi-x-lg"></i>
+        </a>
+        {% endif %}
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm px-3">Search</button>
+    </form>
+  </div>
+
+  <!-- Results summary -->
+  {% if search %}
+  <div class="mb-2 small text-muted">
+    Showing {{ users|length }} of {{ total }} result{{ 's' if total != 1 }} for
+    <strong>"{{ search }}"</strong>
+    — <a href="{{ url_for('user_maintenance') }}" class="text-decoration-none">show all</a>
+  </div>
+  {% else %}
+  <div class="mb-2 small text-muted">
+    Showing {{ ((page - 1) * per_page) + 1 }}–{{ ((page - 1) * per_page) + users|length }}
+    of {{ total }} users
+  </div>
+  {% endif %}
 
   <div class="table-responsive">
     <table class="table table-hover align-middle table-bordered">
@@ -127,7 +170,89 @@
       </tbody>
     </table>
   </div>
+
+  <!-- Pagination -->
+  {% if total_pages > 1 %}
+  <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
+    <div class="small text-muted">
+      Page {{ page }} of {{ total_pages }}
+    </div>
+    <nav>
+      <ul class="pagination pagination-sm mb-0">
+
+        <!-- Previous -->
+        <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+          <a class="page-link"
+             href="{{ url_for('user_maintenance', page=page-1, search=search) }}">
+            <i class="bi bi-chevron-left"></i>
+          </a>
+        </li>
+
+        <!-- Page numbers (show window of 5 around current) -->
+        {% set start_p = [1, page - 2] | max %}
+        {% set end_p   = [total_pages, page + 2] | min %}
+
+        {% if start_p > 1 %}
+          <li class="page-item">
+            <a class="page-link" href="{{ url_for('user_maintenance', page=1, search=search) }}">1</a>
+          </li>
+          {% if start_p > 2 %}
+            <li class="page-item disabled"><span class="page-link">…</span></li>
+          {% endif %}
+        {% endif %}
+
+        {% for p in range(start_p, end_p + 1) %}
+          <li class="page-item {% if p == page %}active{% endif %}">
+            <a class="page-link"
+               href="{{ url_for('user_maintenance', page=p, search=search) }}">{{ p }}</a>
+          </li>
+        {% endfor %}
+
+        {% if end_p < total_pages %}
+          {% if end_p < total_pages - 1 %}
+            <li class="page-item disabled"><span class="page-link">…</span></li>
+          {% endif %}
+          <li class="page-item">
+            <a class="page-link"
+               href="{{ url_for('user_maintenance', page=total_pages, search=search) }}">{{ total_pages }}</a>
+          </li>
+        {% endif %}
+
+        <!-- Next -->
+        <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+          <a class="page-link"
+             href="{{ url_for('user_maintenance', page=page+1, search=search) }}">
+            <i class="bi bi-chevron-right"></i>
+          </a>
+        </li>
+
+      </ul>
+    </nav>
+  </div>
+  {% endif %}
+
 </div>
 
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const input = document.getElementById("searchInput");
+    const form  = document.getElementById("searchForm");
+    if (!input || !form) return;
+
+    let debounceTimer;
+    input.addEventListener("input", function () {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+            const url = new URL(form.action, window.location.origin);
+            url.searchParams.set("search", input.value.trim());
+            url.searchParams.set("page", "1");
+            window.location.href = url.toString();
+        }, 400);
+    });
+});
+</script>
 {% endblock %}

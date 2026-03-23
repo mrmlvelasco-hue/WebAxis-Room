@@ -8,7 +8,6 @@ import json
 import hmac
 import hashlib
 import time
-# import os
 from datetime import datetime, timedelta, timezone, date, time as datetime_time
 import webbrowser
 import threading
@@ -721,8 +720,60 @@ def login():
 import itsdangerous
 serializer = itsdangerous.URLSafeTimedSerializer(app.secret_key)
 
-
-
+# @app.route('/sso-login')
+# def sso_login():
+#
+#     token = request.args.get("token")
+#
+#     if not token:
+#         return "SSO Error: Missing authentication token.", 400
+#
+#     # --- Decode Token ---
+#     try:
+#         data = serializer.loads(token, max_age=60)
+#         username = data.get("username")
+#
+#     except Exception:
+#         return "SSO Error: Invalid or expired token.", 401
+#
+#     if not username:
+#         return "SSO Error: Username not found in token.", 401
+#
+#     # --- Check if user exists ---
+#     conn = get_db_connection()
+#     cursor = conn.cursor()
+#
+#     cursor.execute("""
+#         SELECT id, username, email, display_name, role
+#         FROM dbo.users
+#         WHERE username = ?
+#     """, (username,))
+#
+#     row = cursor.fetchone()
+#     conn.close()
+#
+#     if not row:
+#         return f"""
+#         SSO Login Failed
+#
+#         User '{username}' is not registered in the Room Reservation System.
+#
+#         Please contact the system administrator to request access.
+#         """, 403
+#
+#     # --- Login user ---
+#     uid, uname, email, display_name, role = row
+#     user = User(uid, uname, email, display_name, role)
+#
+#     login_user(user)
+#
+#     return redirect(url_for("reserve_v2"))
+import base64
+import json
+import hmac
+import hashlib
+import time
+import os
 
 USED_NONCES = set()
 
@@ -1281,9 +1332,9 @@ def reserve_v2():
         })
         locations_set.add(r[2] or "General")
     TIMELINE_START_HOUR = int(os.getenv("TIMELINE_START_HOUR", 6))
-    TIMELINE_END_HOUR = int(os.getenv("TIMELINE_END_HOUR", 22))
-    MAX_RECUR_MONTHS = int(os.getenv("MAX_RECUR_MONTHS", 4))
-    MAX_HOURS = int(os.getenv("MAX_HOURS", 4))
+    TIMELINE_END_HOUR   = int(os.getenv("TIMELINE_END_HOUR", 22))
+    MAX_RECUR_MONTHS    = int(os.getenv("MAX_RECUR_MONTHS", 4))
+    MAX_HOURS           = int(os.getenv("MAX_HOURS", 8))
     return render_template(
         "reserve_v2.html",
         locations=sorted(locations_set),
@@ -1291,7 +1342,7 @@ def reserve_v2():
         TIMELINE_START_HOUR=TIMELINE_START_HOUR,
         TIMELINE_END_HOUR=TIMELINE_END_HOUR,
         MAX_RECUR_MONTHS=MAX_RECUR_MONTHS,
-        MAX_HOURS= MAX_HOURS
+        MAX_HOURS=MAX_HOURS
     )
 
 
@@ -1348,123 +1399,123 @@ def reserve(room_id):
 @app.route('/calendar_view_v2', methods=['GET'])
 @login_required
 def calendar_view_v2():
-    """Day view grid (Excel-like) with 30-min slots.
+        """Day view grid (Excel-like) with 30-min slots.
 
-    Accepts query params:
-      - location: location filter (default: all)
-      - room: room name filter (optional)
-      - date: YYYY-MM-DD (default: today)
-    """
-    TIMELINE_START_HOUR = int(os.getenv("TIMELINE_START_HOUR", 6))
-    TIMELINE_END_HOUR = int(os.getenv("TIMELINE_END_HOUR", 20))
-    MAX_RECUR_MONTHS = int(os.getenv("MAX_RECUR_MONTHS", 4))
-    MAX_HOURS= int(os.getenv("MAX_HOURS", 4))
-    from datetime import datetime
+        Accepts query params:
+          - location: location filter (default: all)
+          - room: room name filter (optional)
+          - date: YYYY-MM-DD (default: today)
+        """
+        TIMELINE_START_HOUR = int(os.getenv("TIMELINE_START_HOUR", 6))
+        TIMELINE_END_HOUR   = int(os.getenv("TIMELINE_END_HOUR", 22))
+        MAX_RECUR_MONTHS = int(os.getenv("MAX_RECUR_MONTHS", 4))
+        MAX_HOURS           = int(os.getenv("MAX_HOURS", 8))
+        from datetime import datetime
 
-    # date
-    date_str = request.args.get("date")
-    try:
-        selected_date = datetime.strptime(date_str, "%Y-%m-%d").date() if date_str else datetime.now().date()
-    except Exception:
-        selected_date = datetime.now().date()
+        # date
+        date_str = request.args.get("date")
+        try:
+            selected_date = datetime.strptime(date_str, "%Y-%m-%d").date() if date_str else datetime.now().date()
+        except Exception:
+            selected_date = datetime.now().date()
 
-    location_filter = (request.args.get("location") or "all").strip()
-    room_filter = (request.args.get("room") or "all").strip()
-    print("🧩 Filter:", room_filter)
-    conn = get_db_connection()
-    cur = conn.cursor()
+        location_filter = (request.args.get("location") or "all").strip()
+        room_filter = (request.args.get("room") or "all").strip()
+        print("🧩 Filter:", room_filter)
+        conn = get_db_connection()
+        cur = conn.cursor()
 
-    allowed_locations = get_user_locations(current_user.id)
+        allowed_locations = get_user_locations(current_user.id)
 
-    if current_user.is_admin():
-        cur.execute("SELECT DISTINCT location FROM rooms WHERE status='Active'")
-        allowed_locations = [r[0] for r in cur.fetchall()]
+        if current_user.is_admin():
+            cur.execute("SELECT DISTINCT location FROM rooms WHERE status='Active'")
+            allowed_locations = [r[0] for r in cur.fetchall()]
 
-    if not allowed_locations:
-        allowed_locations = ["Axis T1"]  # fallback
+        if not allowed_locations:
+            allowed_locations = ["Axis T1"]  # fallback
 
-    # ----------------------------------------
-    # 4. GET ALL ROOMS UNDER ALLOWED LOCATIONS
-    # ----------------------------------------
-    placeholders = ",".join(["?"] * len(allowed_locations))
-
-    # locations for dropdown
-    cur.execute("""
-        SELECT DISTINCT ISNULL(NULLIF(LTRIM(RTRIM(r.location)), ''), 'General') AS location
-        FROM dbo.rooms r (NOLOCK) JOIN 
-        user_locations ul (NOLOCK) on r.location = ul.location_name
-        WHERE
-        ul.user_id = ? 
-        AND  status='Active'
-        ORDER BY ISNULL(NULLIF(LTRIM(RTRIM(r.location)), ''), 'General')
-    """,current_user.id)
-    locations = [str(r[0]) for r in cur.fetchall()]
-
-    # rooms list
-    sql = """
-        SELECT id, name, capacity,
-               ISNULL(NULLIF(LTRIM(RTRIM(location)), ''), 'General') AS location,
-               ISNULL(features,'') AS features
-        FROM dbo.rooms
-        WHERE status='Active'
-    """
-    params = []
-    # 🔒 Enforce user access
-    if allowed_locations is not None:
+        # ----------------------------------------
+        # 4. GET ALL ROOMS UNDER ALLOWED LOCATIONS
+        # ----------------------------------------
         placeholders = ",".join(["?"] * len(allowed_locations))
-        sql += f" AND location IN ({placeholders})"
-        params.extend(allowed_locations)
 
-    if location_filter.lower() != 'all':
-        sql += " AND LOWER(LTRIM(RTRIM(location))) = LOWER(?)"
-        params.append(location_filter)
-    if room_filter and room_filter.lower() != 'all':
-        sql += " AND LOWER(LTRIM(RTRIM(name))) = LOWER(?)"
-        params.append(room_filter)
-    sql += " ORDER BY location, name"
+        # locations for dropdown
+        cur.execute("""
+            SELECT DISTINCT ISNULL(NULLIF(LTRIM(RTRIM(r.location)), ''), 'General') AS location
+            FROM dbo.rooms r (NOLOCK) JOIN 
+            user_locations ul (NOLOCK) on r.location = ul.location_name
+            WHERE
+            ul.user_id = ? 
+            AND  status='Active'
+            ORDER BY ISNULL(NULLIF(LTRIM(RTRIM(r.location)), ''), 'General')
+        """,current_user.id)
+        locations = [str(r[0]) for r in cur.fetchall()]
 
-    cur.execute(sql, params)
-    print("🧩 SQL:", sql)
-    print("🧩 PARAMS:", params)
+        # rooms list
+        sql = """
+            SELECT id, name, capacity,
+                   ISNULL(NULLIF(LTRIM(RTRIM(location)), ''), 'General') AS location,
+                   ISNULL(features,'') AS features
+            FROM dbo.rooms
+            WHERE status='Active'
+        """
+        params = []
+        # 🔒 Enforce user access
+        if allowed_locations is not None:
+            placeholders = ",".join(["?"] * len(allowed_locations))
+            sql += f" AND location IN ({placeholders})"
+            params.extend(allowed_locations)
 
-    rows = cur.fetchall()
-    conn.close()
+        if location_filter.lower() != 'all':
+            sql += " AND LOWER(LTRIM(RTRIM(location))) = LOWER(?)"
+            params.append(location_filter)
+        if room_filter and room_filter.lower() != 'all':
+            sql += " AND LOWER(LTRIM(RTRIM(name))) = LOWER(?)"
+            params.append(room_filter)
+        sql += " ORDER BY location, name"
 
-    rooms = []
-    for r in rows:
-        rooms.append({
-            "id": int(r.id),
-            "name": str(r.name),
-            "capacity": int(r.capacity) if r.capacity is not None else 0,
-            "location": str(r.location) if r.location else "General",
-            "features": str(r.features) if r.features else ""
-        })
+        cur.execute(sql, params)
+        print("🧩 SQL:", sql)
+        print("🧩 PARAMS:", params)
 
-    # 30-minute slots based on ENV configuration
-    time_slots = []
+        rows = cur.fetchall()
+        conn.close()
 
-    for h in range(TIMELINE_START_HOUR, TIMELINE_END_HOUR + 1):
+        rooms = []
+        for r in rows:
+            rooms.append({
+                "id": int(r.id),
+                "name": str(r.name),
+                "capacity": int(r.capacity) if r.capacity is not None else 0,
+                "location": str(r.location) if r.location else "General",
+                "features": str(r.features) if r.features else ""
+            })
 
-        time_slots.append(f"{h:02d}:00")
+        # 30-minute slots based on ENV configuration
+        time_slots = []
 
-        if h != TIMELINE_END_HOUR:
-            time_slots.append(f"{h:02d}:30")
+        for h in range(TIMELINE_START_HOUR, TIMELINE_END_HOUR + 1):
 
-    embed = (request.args.get("embed") or "").strip() == "1"
+            time_slots.append(f"{h:02d}:00")
 
-    return render_template(
-        "calendar_view_v2_embed.html" if embed else "calendar_view_v2.html",
-        selected_date=selected_date,
-        location_filter=location_filter,
-        room_filter=room_filter,
-        locations=locations,
-        rooms=rooms,
-        time_slots=time_slots,
-        TIMELINE_START_HOUR=TIMELINE_START_HOUR,
-        TIMELINE_END_HOUR=TIMELINE_END_HOUR,
-        MAX_RECUR_MONTHS=MAX_RECUR_MONTHS,
-        MAX_HOURS=MAX_HOURS
-    )
+            if h != TIMELINE_END_HOUR:
+                time_slots.append(f"{h:02d}:30")
+
+        embed = (request.args.get("embed") or "").strip() == "1"
+
+        return render_template(
+            "calendar_view_v2_embed.html" if embed else "calendar_view_v2.html",
+            selected_date=selected_date,
+            location_filter=location_filter,
+            room_filter=room_filter,
+            locations=locations,
+            rooms=rooms,
+            time_slots=time_slots,
+            TIMELINE_START_HOUR=TIMELINE_START_HOUR,
+            TIMELINE_END_HOUR=TIMELINE_END_HOUR,
+            MAX_RECUR_MONTHS=MAX_RECUR_MONTHS,
+            MAX_HOURS=MAX_HOURS
+        )
 
 @app.route("/api/reservations_v2_day")
 @login_required
@@ -1530,7 +1581,8 @@ def api_reservations_v2_day():
             r.reserved_by,
             ISNULL(r.remarks,'') AS remarks,
             r.status,
-            r.email
+            r.email,
+            r.recurrence_id
         FROM dbo.reservations r
         INNER JOIN dbo.rooms rm ON rm.id = r.room_id
         WHERE rm.status='Active'
@@ -1574,6 +1626,7 @@ def api_reservations_v2_day():
             "remarks": str(row.remarks),
             "status": str(row.status),
             "email": str(row.email),
+            "recurrence_id": str(row.recurrence_id) if row.recurrence_id else None,
         })
 
     return jsonify(events)
@@ -2038,6 +2091,201 @@ def reserve_post(room_id):
             pass
         return jsonify(success=False, message=str(e)), 500
 
+@app.route('/api/cancel_reservation/<int:res_id>', methods=['POST'])
+@login_required
+def api_cancel_reservation(res_id):
+    """
+    Cancel a reservation with scope support for recurring series.
+
+    JSON body (optional — defaults to 'single'):
+        { "mode": "single" | "future" | "all" }
+
+    mode = "single"  → cancel only this occurrence
+    mode = "future"  → cancel this + all future occurrences in the series
+    mode = "all"     → cancel every occurrence in the series (past & future)
+    """
+    try:
+        conn = get_db_connection()
+        cur  = conn.cursor()
+
+        # ── Read mode from JSON body ──────────────────────────────────
+        body = request.get_json(silent=True) or {}
+        mode = body.get("mode", "single").strip().lower()
+        if mode not in ("single", "future", "all"):
+            mode = "single"
+
+        # ── Fetch the target reservation ─────────────────────────────
+        cur.execute("""
+            SELECT
+                r.id,
+                r.room_id,
+                u.username   AS reserved_by,
+                r.status,
+                r.start_time,
+                r.end_time,
+                r.recurrence_id
+            FROM dbo.reservations r WITH (NOLOCK)
+            JOIN dbo.users u WITH (NOLOCK)
+                ON r.reserved_by = u.display_name
+            WHERE r.id = ?
+        """, (res_id,))
+
+        row = cur.fetchone()
+        if not row:
+            return jsonify({"success": False, "message": "Reservation not found."}), 404
+
+        rid            = row[1]
+        reserved_by    = row[2] or ""
+        status         = row[3] or ""
+        start_time     = row[4]
+        recurrence_id  = row[6]
+
+        # ── Authorization ─────────────────────────────────────────────
+        cur.execute("SELECT group_code FROM dbo.rooms WHERE id = ?", (rid,))
+        room_row   = cur.fetchone()
+        group_code = room_row[0] if room_row else None
+
+        allowed = False
+        if (current_user.role or "").lower() == "admin":
+            allowed = True
+        elif current_user.username.lower() == reserved_by.lower():
+            allowed = True
+        elif group_code and is_user_group_admin(current_user.username, group_code):
+            allowed = True
+
+        if not allowed:
+            return jsonify({"success": False, "message": "Unauthorized to cancel this reservation."}), 403
+
+        if status == "Cancelled":
+            return jsonify({"success": False, "message": "Reservation already cancelled."}), 400
+
+        # ── If mode is future/all but no recurrence_id, fall back to single ──
+        if mode in ("future", "all") and not recurrence_id:
+            mode = "single"
+
+        # ─────────────────────────────────────────────────────────────
+        # CANCEL LOGIC
+        # ─────────────────────────────────────────────────────────────
+
+        cancelled_count = 0
+
+        def cancel_auto_blocks(target_res_id):
+            """Cancel combined-room auto-blocks linked to a reservation."""
+            cur.execute("""
+                UPDATE crev
+                    SET crev.status     = 'Cancelled',
+                        crev.updated_at = GETDATE()
+                FROM
+                    reservations AS rev (NOLOCK)
+                    JOIN rooms AS r (NOLOCK)
+                        ON rev.room_id = r.id
+                    LEFT JOIN rooms AS comr (NOLOCK)
+                        ON r.group_code    = comr.group_code
+                       AND comr.is_combined <> 1
+                    JOIN reservations AS crev (NOLOCK)
+                        ON comr.id          = crev.room_id
+                       AND crev.start_time  = rev.start_time
+                       AND crev.end_time    = rev.end_time
+                WHERE
+                    rev.id = ?
+                    AND r.is_combined = 1
+                    AND crev.reserved_by LIKE '%' + rev.reserved_by + '%'
+                    AND crev.status = 'Blocked'
+            """, (target_res_id,))
+
+        # ── SINGLE ────────────────────────────────────────────────────
+        if mode == "single":
+
+            cur.execute("""
+                UPDATE dbo.reservations
+                SET status = 'Cancelled', updated_at = GETDATE()
+                WHERE id = ?
+                  AND status IN ('Pending', 'Approved', 'Blocked')
+            """, (res_id,))
+
+            cancelled_count = cur.rowcount
+            cancel_auto_blocks(res_id)
+
+            message = "Reservation cancelled successfully."
+
+        # ── FUTURE ───────────────────────────────────────────────────
+        elif mode == "future":
+
+            # Fetch all future IDs in the series (>= this occurrence)
+            cur.execute("""
+                SELECT id FROM dbo.reservations
+                WHERE recurrence_id = ?
+                  AND start_time >= ?
+                  AND status IN ('Pending', 'Approved', 'Blocked')
+            """, (recurrence_id, start_time))
+
+            future_ids = [r[0] for r in cur.fetchall()]
+
+            if future_ids:
+                placeholders = ",".join(["?"] * len(future_ids))
+                cur.execute(f"""
+                    UPDATE dbo.reservations
+                    SET status = 'Cancelled', updated_at = GETDATE()
+                    WHERE id IN ({placeholders})
+                """, future_ids)
+                cancelled_count = cur.rowcount
+
+                # Cancel auto-blocks for each
+                for fid in future_ids:
+                    cancel_auto_blocks(fid)
+
+            message = f"{cancelled_count} occurrence(s) cancelled (this and future)."
+
+        # ── ALL ───────────────────────────────────────────────────────
+        elif mode == "all":
+
+            # Fetch every ID in the series
+            cur.execute("""
+                SELECT id FROM dbo.reservations
+                WHERE recurrence_id = ?
+                  AND status IN ('Pending', 'Approved', 'Blocked')
+            """, (recurrence_id,))
+
+            all_ids = [r[0] for r in cur.fetchall()]
+
+            if all_ids:
+                placeholders = ",".join(["?"] * len(all_ids))
+                cur.execute(f"""
+                    UPDATE dbo.reservations
+                    SET status = 'Cancelled', updated_at = GETDATE()
+                    WHERE id IN ({placeholders})
+                """, all_ids)
+                cancelled_count = cur.rowcount
+
+                for aid in all_ids:
+                    cancel_auto_blocks(aid)
+
+            message = f"{cancelled_count} occurrence(s) cancelled (entire series)."
+
+        conn.commit()
+
+        log_audit(
+            "RESERVATION_CANCELLED",
+            f"Reservation ID {res_id} cancelled by {current_user.username} "
+            f"[mode={mode}, recurrence_id={recurrence_id}, count={cancelled_count}]"
+        )
+
+        return jsonify({
+            "success":        True,
+            "room_id":        rid,
+            "res_id":         res_id,
+            "mode":           mode,
+            "cancelled_count": cancelled_count,
+            "message":        message
+        })
+
+    except Exception as e:
+        print("⚠️ api_cancel_reservation error:", e)
+        return jsonify({"success": False, "message": f"System error: {e}"}), 500
+
+    finally:
+        conn.close()
+
 @app.route('/reservation/edit/<int:res_id>', methods=['POST'])
 @login_required
 def edit_reservation(res_id):
@@ -2059,7 +2307,7 @@ def edit_reservation(res_id):
         new_end_dt = datetime.fromisoformat(new_end)
 
         # ==============================
-        # LOAD ORIGINAL RESERVATION
+        # GET ORIGINAL
         # ==============================
         cur.execute("""
             SELECT room_id, reserved_by, recurrence_id, start_time
@@ -2074,16 +2322,57 @@ def edit_reservation(res_id):
         room_id, reserved_by, recurrence_id, original_start = row
 
         # ==============================
-        # AUTHORIZATION
+        # AUTH CHECK
         # ==============================
         is_admin = current_user.is_admin()
-        is_owner = current_user.display_name == reserved_by or current_user.username == reserved_by
+        is_owner = (
+            current_user.username == reserved_by or
+            current_user.display_name == reserved_by
+        )
 
         if not (is_admin or is_owner):
             return jsonify(success=False, message="Not authorized"), 403
 
         # ==============================
-        # CONFLICT CHECK FUNCTION
+        # DECIDE STATUS — mirrors reserve_post logic
+        # approvals_required = "no"   → Approved
+        # approvals_required = "yes"  → Pending
+        # approvals_required = "auto" → Pending if active approvers exist, else Approved
+        # ==============================
+        cur.execute("""
+            SELECT approvals_required, location
+            FROM dbo.rooms
+            WHERE id = ?
+        """, (room_id,))
+        room_row = cur.fetchone()
+
+        if not room_row:
+            return jsonify(success=False, message="Room not found"), 404
+
+        approvals_required_raw = room_row[0]
+        room_location          = room_row[1] or ""
+        approvals_required     = str(approvals_required_raw).strip().lower() \
+                                 if approvals_required_raw else "auto"
+
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM dbo.group_approvers
+            WHERE group_code = ? AND is_active = 1
+        """, (room_location,))
+        approver_count = cur.fetchone()[0]
+
+        def decide_status():
+            if approvals_required == "no":
+                return "Approved"
+            if approvals_required == "yes":
+                return "Pending"
+            # "auto" → Pending only if active approvers exist for this location
+            return "Pending" if approver_count > 0 else "Approved"
+
+        new_status = decide_status()
+
+        # ==============================
+        # CONFLICT CHECK
         # ==============================
         def has_conflict(room_id, start, end, exclude_id=None):
             sql = """
@@ -2103,7 +2392,7 @@ def edit_reservation(res_id):
             return cur.fetchone()[0] > 0
 
         # ==============================
-        # MODE: SINGLE INSTANCE
+        # SINGLE EDIT
         # ==============================
         if mode == "single" or not recurrence_id:
 
@@ -2112,24 +2401,35 @@ def edit_reservation(res_id):
 
             cur.execute("""
                 UPDATE reservations
-                SET start_time=?, end_time=?, remarks=?, status='Pending', updated_at=GETDATE()
+                SET start_time=?, end_time=?, remarks=?, status=?, updated_at=GETDATE()
                 WHERE id=?
-            """, (new_start_dt, new_end_dt, new_remarks, res_id))
+            """, (new_start_dt, new_end_dt, new_remarks, new_status, res_id))
 
             conn.commit()
-            return jsonify(success=True, message="Reservation updated")
+
+            log_audit(
+                "RESERVATION_EDITED",
+                f"Reservation {res_id} edited by {current_user.username} "
+                f"[mode=single, new_status={new_status}]"
+            )
+
+            return jsonify(
+                success=True,
+                message=f"Reservation updated. Status set to {new_status}.",
+                status=new_status
+            )
 
         # ==============================
-        # MODE: FUTURE (RECURRING)
+        # FUTURE EDIT (RECURRING)
         # ==============================
         else:
 
-            # Get all future reservations in series
             cur.execute("""
-                SELECT id, start_time, end_time
+                SELECT id, start_time
                 FROM reservations
                 WHERE recurrence_id = ?
                   AND start_time >= ?
+                  AND status IN ('Pending','Approved','Blocked')
             """, (recurrence_id, original_start))
 
             rows = cur.fetchall()
@@ -2139,156 +2439,50 @@ def edit_reservation(res_id):
 
             duration = new_end_dt - new_start_dt
 
-            for r in rows:
-                rid, old_start, old_end = r
+            for rid, old_start in rows:
 
-                # keep time shift relative
                 new_start_instance = old_start.replace(
                     hour=new_start_dt.hour,
-                    minute=new_start_dt.minute
+                    minute=new_start_dt.minute,
+                    second=0
                 )
                 new_end_instance = new_start_instance + duration
 
                 if has_conflict(room_id, new_start_instance, new_end_instance, rid):
-                    skipped.append(str(old_start))
+                    skipped.append(str(old_start.date()))
                     continue
 
                 cur.execute("""
                     UPDATE reservations
-                    SET start_time=?, end_time=?, remarks=?, status='Pending', updated_at=GETDATE()
+                    SET start_time=?, end_time=?, remarks=?, status=?, updated_at=GETDATE()
                     WHERE id=?
-                """, (new_start_instance, new_end_instance, new_remarks, rid))
+                """, (new_start_instance, new_end_instance, new_remarks, new_status, rid))
 
                 updated += 1
 
             conn.commit()
 
+            log_audit(
+                "RESERVATION_EDITED",
+                f"Reservation series {recurrence_id} edited by {current_user.username} "
+                f"[mode=future, updated={updated}, skipped={len(skipped)}, new_status={new_status}]"
+            )
+
+            msg = f"{updated} updated, {len(skipped)} skipped. Status set to {new_status}."
             return jsonify(
                 success=True,
-                message=f"{updated} updated, {len(skipped)} skipped",
+                message=msg,
+                status=new_status,
+                updated=updated,
                 skipped=skipped
             )
 
     except Exception as e:
-        print("⚠️ edit_reservation error:", e)
+        print("Edit error:", e)
         return jsonify(success=False, message=str(e)), 500
 
     finally:
         conn.close()
-
-@app.route('/api/cancel_reservation/<int:res_id>', methods=['POST'])
-@login_required
-def api_cancel_reservation(res_id):
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-
-        # FIXED SQL WITH JOIN + NOLOCK + CORRECT QUOTING
-        cur.execute("""
-            SELECT 
-                r.id,
-                r.room_id,
-                u.username AS reserved_by,
-                r.status,
-                r.start_time,
-                r.end_time
-            FROM dbo.reservations r WITH (NOLOCK)
-            JOIN dbo.users u WITH (NOLOCK)
-                ON r.reserved_by = u.display_name
-            WHERE r.id = ?
-        """, (res_id,))
-
-        row = cur.fetchone()
-
-        if not row:
-            return jsonify({"success": False, "message": "Reservation not found."}), 404
-
-        rid         = row[1]
-        reserved_by = row[2] or ""
-        status      = row[3] or ""
-        start_time  = row[4]
-        end_time    = row[5]
-
-        # Get room group_code
-        cur.execute("SELECT group_code FROM dbo.rooms WHERE id = ?", (rid,))
-        room_row = cur.fetchone()
-        group_code = room_row[0] if room_row else None
-
-        # Authorization: admin OR initiator OR location approver
-        allowed = False
-        if (current_user.role or "").lower() == "admin":
-            allowed = True
-        elif current_user.username.lower() == reserved_by.lower():
-            allowed = True
-        elif group_code and is_user_group_admin(current_user.username, group_code):
-            allowed = True
-
-        if not allowed:
-            return jsonify({"success": False, "message": "Unauthorized to cancel this reservation."}), 403
-
-        # Already cancelled
-        if status == "Cancelled":
-            return jsonify({"success": False, "message": "Reservation already cancelled."}), 400
-
-        # Cancel main reservation
-        cur.execute("""
-            UPDATE dbo.reservations
-            SET status = 'Cancelled', updated_at = GETDATE()
-            WHERE id = ?
-        """, (res_id,))
-
-        # Cancel auto-blocks
-        auto_marker = f"[AUTO BLOCK] {reserved_by}"
-        # UPDATE dbo.reservations
-        #     SET status = 'Cancelled', updated_at = GETDATE()
-        #     WHERE reserved_by LIKE ?
-        #       AND start_time = ?
-        #       AND end_time = ?
-        #       AND status = 'Blocked'
-
-        cur.execute("""
-            UPDATE crev
-                SET crev.status = 'Cancelled',
-                    crev.updated_at = GETDATE()
-                FROM 
-                    reservations AS rev (NOLOCK)
-                    JOIN rooms AS r (NOLOCK) 
-                        ON rev.room_id = r.id
-                    LEFT JOIN rooms AS comr (NOLOCK)
-                        ON r.group_code = comr.group_code
-                       AND comr.is_combined <> 1
-                    JOIN reservations AS crev (NOLOCK)
-                        ON comr.id = crev.room_id
-                       AND crev.start_time = rev.start_time
-                       AND crev.end_time   = rev.end_time
-                WHERE
-                    rev.id = ?
-                    AND r.is_combined = 1
-                    AND crev.reserved_by LIKE '%' + rev.reserved_by + '%'
-                    AND crev.status = 'Blocked';
-
-        """, (res_id))
-
-        conn.commit()
-
-        log_audit("RESERVATION_CANCELLED",
-                  f"Reservation ID {res_id} cancelled by {current_user.username}")
-
-        return jsonify({
-            "success": True,
-            "room_id": rid,
-            "res_id": res_id,
-            "message": "Reservation cancelled successfully."
-        })
-
-    except Exception as e:
-        print("⚠️ api_cancel_reservation error:", e)
-        return jsonify({"success": False, "message": f"System error: {e}"}), 500
-
-    finally:
-        conn.close()
-
-
 
 @app.route('/api/booked_slots')
 @login_required
@@ -3239,12 +3433,42 @@ def user_maintenance():
 
     # Reload connection for GET
     conn = get_db_connection()
-    cur = conn.cursor()
+    cur  = conn.cursor()
 
-    cur.execute("""
+    # ── Search & pagination params ────────────────────────────
+    search   = request.args.get('search', '').strip()
+    page     = max(1, int(request.args.get('page', 1)))
+    per_page = 25
+    offset   = (page - 1) * per_page
+
+    # ── Base query with optional search filter ────────────────
+    where  = ""
+    params = []
+    if search:
+        where  = """
+            WHERE (
+                username     LIKE ?
+                OR display_name LIKE ?
+                OR email     LIKE ?
+                OR role      LIKE ?
+            )
+        """
+        like = f"%{search}%"
+        params = [like, like, like, like]
+
+    # Total count for pagination
+    cur.execute(f"SELECT COUNT(*) FROM dbo.users {where}", params)
+    total = cur.fetchone()[0]
+    total_pages = max(1, -(-total // per_page))   # ceiling division
+
+    # Paginated result
+    cur.execute(f"""
         SELECT id, username, display_name, email, role, status, last_login, last_login_ip
-        FROM users ORDER BY created_at DESC
-    """)
+        FROM dbo.users
+        {where}
+        ORDER BY created_at DESC
+        OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+    """, params + [offset, per_page])
     users = cur.fetchall()
 
     locations = get_all_room_locations()
@@ -3255,7 +3479,12 @@ def user_maintenance():
     return render_template(
         'user_maintenance.html',
         users=users,
-        locations=locations
+        locations=locations,
+        search=search,
+        page=page,
+        per_page=per_page,
+        total=total,
+        total_pages=total_pages
     )
 
 
