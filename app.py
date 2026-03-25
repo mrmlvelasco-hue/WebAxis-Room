@@ -11,11 +11,15 @@ import time
 from datetime import datetime, timedelta, timezone, date, time as datetime_time
 import webbrowser
 import threading
+from contextlib import contextmanager
 from dateutil import parser as dateparser  # pip install python-dateutil
 
 from dateutil.rrule import rrule, rruleset, DAILY, WEEKLY, MONTHLY
 from dateutil.relativedelta import relativedelta
 
+# ── SQLAlchemy connection pool ─────────────────────────────────────────────
+from sqlalchemy import create_engine, text
+from sqlalchemy.pool import QueuePool
 
 import uuid
 
@@ -53,62 +57,106 @@ app.permanent_session_lifetime = timedelta(days=7)
 NATIONAL_ADMINS = ['admin', 'systemadmin']  # add more if needed
 
 
+
+
 def get_db_connection():
     """
-    Cross-platform SQL Server connection.
+    Cross-platform SQL Server connection via SQLAlchemy connection pool.
+    - QueuePool keeps persistent connections alive and reuses them.
+    - pool_size=10  : up to 10 concurrent connections held open
+    - max_overflow=20: up to 20 extra burst connections allowed
+    - pool_timeout=30: wait max 30s for a free connection before raising
+    - pool_recycle=1800: recycle connections every 30 min (prevents stale conn)
     FreeTDS for Linux (Docker), ODBC17/18/NativeClient for Windows.
-    Compatible with SQL Server 2008.
     """
+    return _engine.raw_connection()
+
+
+# ── Build SQLAlchemy engine once at startup ────────────────────────────────
+def _build_engine():
     import platform
 
-    # --- Windows (PyCharm local dev) ---
     if platform.system() == "Windows":
-        # Try Driver 17/18
-        possible_drivers = [
-            "{ODBC Driver 18 for SQL Server}",
-            "{ODBC Driver 17 for SQL Server}",
-            "{SQL Server Native Client 11.0}",
-            "{SQL Server}"
+        # pyodbc.drivers() reads installed drivers from the Windows registry
+        # — does NOT need a DB connection, safe to call before DB is up
+        available = pyodbc.drivers()
+        priority  = [
+            "ODBC Driver 18 for SQL Server",
+            "ODBC Driver 17 for SQL Server",
+            "SQL Server Native Client 11.0",
+            "SQL Server",
         ]
-        driver = None
-
-        for d in possible_drivers:
-            try:
-                pyodbc.connect(
-                    f"DRIVER={d};SERVER={DB_HOST};UID={DB_USERNAME};PWD={DB_PASSWORD};",
-                    timeout=1
-                )
-                driver = d
-                break
-            except:
-                pass
+        driver = next((d for d in priority if d in available), None)
 
         if not driver:
-            raise Exception("No usable SQL Server ODBC driver found in Windows.")
+            raise RuntimeError(
+                f"No usable SQL Server ODBC driver found on Windows. "
+                f"Installed drivers: {available}"
+            )
 
-        conn_str = (
-            f"DRIVER={driver};"
-            f"SERVER={DB_HOST};"
-            f"DATABASE={DB_DATABASE};"
-            f"UID={DB_USERNAME};"
-            f"PWD={DB_PASSWORD};"
-            "Encrypt=no;"
-            "TrustServerCertificate=yes;"
-        )
-        return pyodbc.connect(conn_str, autocommit=False)
+        # Use creator= so pyodbc builds the connection string directly.
+        # Avoids URL-encoding issues with spaces in driver names
+        # (e.g. "ODBC Driver 17 for SQL Server" breaks when URL-encoded as +).
+        def creator():
+            return pyodbc.connect(
+                f"DRIVER={{{driver}}};"
+                f"SERVER={DB_HOST};"
+                f"DATABASE={DB_DATABASE};"
+                f"UID={DB_USERNAME};"
+                f"PWD={DB_PASSWORD};"
+                "Encrypt=no;"
+                "TrustServerCertificate=yes;",
+                autocommit=False
+            )
 
-    # --- Linux (Docker) → Use FreeTDS ---
     else:
-        conn_str = (
-            "DRIVER={FreeTDS};"
-            f"SERVER={DB_HOST};"
-            f"DATABASE={DB_DATABASE};"
-            f"UID={DB_USERNAME};"
-            f"PWD={DB_PASSWORD};"
-            "Port=1433;"
-            "TDS_Version=7.3;"
-        )
-        return pyodbc.connect(conn_str, autocommit=False)
+        # Linux / Docker — FreeTDS
+        def creator():
+            return pyodbc.connect(
+                "DRIVER={FreeTDS};"
+                f"SERVER={DB_HOST};"
+                f"DATABASE={DB_DATABASE};"
+                f"UID={DB_USERNAME};"
+                f"PWD={DB_PASSWORD};"
+                "Port=1433;"
+                "TDS_Version=7.3;",
+                autocommit=False
+            )
+
+    return create_engine(
+        "mssql+pyodbc://",   # dialect hint only — actual connection via creator
+        creator        = creator,
+        poolclass      = QueuePool,
+        pool_size      = 10,    # persistent connections kept open
+        max_overflow   = 20,    # burst connections on top of pool_size
+        pool_timeout   = 30,    # seconds to wait for a free connection
+        pool_recycle   = 1800,  # recycle connections every 30 min
+        pool_pre_ping  = True,  # test connection before handing it out
+        echo           = False,
+    )
+# ── Initialise connection pool once at startup ─────────────────────────────
+_engine = _build_engine()
+
+
+# ── Fix 3: Context manager — guarantees conn.close() even on exceptions ───
+@contextmanager
+def db_connection():
+    """
+    Usage:
+        with db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(...)
+            conn.commit()
+    Connection is ALWAYS returned to the pool, even if an exception occurs.
+    """
+    conn = _engine.raw_connection()
+    try:
+        yield conn
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()   # returns to pool, doesn't actually close TCP socket
 
 
 
@@ -537,6 +585,9 @@ def authenticate_local(username, password):
         conn = get_db_connection(); cursor = conn.cursor()
         cursor.execute("SELECT id, username, password_hash, email, display_name, role FROM dbo.users WHERE username = ?", (username,))
         row = cursor.fetchone(); conn.close()
+        print("USERNAME FROM DB:", username, "|")
+        print("password:", password, "|")
+        print("INPUT USERNAME:", username, "|")
         if not row:
             return None
         uid, uname, pw_hash, email, display_name, role = row
@@ -627,9 +678,8 @@ def is_approval_required_for_room(room_id):
 #     return render_template('login.html')
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-
     if current_user.is_authenticated:
-        return redirect(url_for('main_menu'))
+        return redirect(url_for('reserve_v2'))
 
     username = None
     password = None
@@ -1956,6 +2006,21 @@ def reserve_post(room_id):
         # ðŸ”´ ALL-OR-NOTHING VALIDATION PHASE
         # =========================================================
 
+        # Fix 4: sp_getapplock — makes conflict check + INSERT atomic per room.
+        # Two users booking the same slot at the same time will serialize here.
+        # Lock releases automatically on conn.commit() or conn.rollback().
+        lock_name = f"room_booking_{room_id}"
+        cur.execute("""
+            DECLARE @res INT
+            EXEC @res = sp_getapplock
+                @Resource    = ?,
+                @LockMode    = 'Exclusive',
+                @LockOwner   = 'Transaction',
+                @LockTimeout = 10000
+            IF @res < 0
+                RAISERROR('Could not acquire booking lock. Please try again.', 16, 1)
+        """, (lock_name,))
+
         conflicts = []
 
         for dt in all_dates:
@@ -1965,10 +2030,9 @@ def reserve_post(room_id):
             # Check main room conflict
             cur.execute("""
                 SELECT reserved_by, start_time, end_time, r.name
-                FROM reservations res (NOLOCK)
-                     JOIN rooms r (NOLOCK) on res.room_id = r.ID
-                WHERE 
-                 room_id=?
+                FROM dbo.reservations res
+                     JOIN dbo.rooms r on res.room_id = r.ID
+                WHERE room_id=?
                 AND NOT (end_time <= ? OR start_time >= ?)
                 AND res.status IN ('Pending','Approved','Blocked')
             """, (room_id, new_start, new_end))
@@ -2808,10 +2872,11 @@ def api_reservations():
                    r.end_time,
                    ISNULL(r.remarks,'') AS remarks,
                    r.status
-            FROM reservations r
-            INNER JOIN rooms rm ON rm.id = r.room_id
-            INNER JOIN user_locations ul
-                ON ul.location_name = rm.location
+            FROM user_locations ul
+            INNER JOIN rooms rm 
+                ON rm.location = ul.location_name
+            INNER JOIN reservations r 
+                ON r.room_id = rm.id
             WHERE ul.user_id = ?
               AND r.status IN ('Approved','Pending')
               AND r.start_time >= ? AND r.start_time < ?
@@ -3729,38 +3794,38 @@ if __name__ == '__main__':
     print("Initializing WebAXIS System...")
     ensure_default_admin()
 
-    # True if running local dev, false if running inside docker
     is_dev = os.getenv("FLASK_ENV", "development").lower() == "development"
     print(f"Running in {'Development' if is_dev else 'Production'} mode")
 
     if is_dev:
-        # Development mode → Local PC → 127.0.0.1 binding
+        # Development — local machine, single process is fine
         print("WebAXIS RoomSys available at http://127.0.0.1:5000/login")
 
-        # Auto-open browser only during development
         if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
             threading.Timer(
                 1.5,
                 lambda: webbrowser.open_new("http://127.0.0.1:5000/login")
-            #     webbrowser.open_new("http://127.0.0.1:5000/login")
-
             ).start()
 
         app.run(
             host="127.0.0.1",
             port=5000,
             debug=True,
+            threaded=True,      # handle concurrent requests during dev
             use_reloader=True
         )
 
     else:
-        # Production mode → Docker → must bind to 0.0.0.0
+        # Production fallback — prefer Gunicorn (see gunicorn.conf.py)
+        # Run with:  gunicorn -c gunicorn.conf.py app:app
         print("WebAXIS RoomSys available at http://0.0.0.0:5000/login")
+        print("TIP: For production use Gunicorn — gunicorn -c gunicorn.conf.py app:app")
 
         app.run(
             host="0.0.0.0",
             port=5000,
             debug=False,
+            threaded=True,      # each request in its own thread
             use_reloader=False
         )
 
