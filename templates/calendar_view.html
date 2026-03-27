@@ -273,15 +273,26 @@ function refreshExcelIfVisible(){
     },
 
     eventContent: function(arg) {
-      const room = arg.event.extendedProps.room;
-      const color = arg.event.extendedProps.color;
+      const room = arg.event.extendedProps.room || '';
+      const color = arg.event.extendedProps.color || '#0d6efd';
+      const reserver = arg.event.extendedProps.reserved_by || arg.event.title;
+
+      const start = arg.event.start;
+      const end = arg.event.end;
+
+      const timeRange = start && end
+        ? start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) +
+          ' - ' +
+          end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : '';
 
       return {
         html: `
-          <div class="p-1 rounded text-white" style="background:${color};font-size:0.72rem;">
-            <div class="fw-bold">${arg.event.title.split(' - ')[1]}</div>
+          <div class="p-1 rounded text-white" style="background:${color}; font-size:0.72rem;">
+            <div class="fw-bold">${reserver.split(' - ')[1]}</div>
             <small class="text-white-50">${room}</small><br>
-            <small>${arg.timeText}</small>
+            <small>${timeRange}</small>
+
           </div>
         `
       };

@@ -1522,7 +1522,7 @@ def calendar_view_v2():
         if room_filter and room_filter.lower() != 'all':
             sql += " AND LOWER(LTRIM(RTRIM(name))) = LOWER(?)"
             params.append(room_filter)
-        sql += " ORDER BY location, name"
+        sql += " ORDER BY Capacity DESC, location, name"
 
         cur.execute(sql, params)
         print("🧩 SQL:", sql)
@@ -1608,6 +1608,7 @@ def api_reservations_v2_day():
             JOIN user_locations ul (NOLOCK) on r.location = ul.location_name
             WHERE status='Active'
             and ul.user_id= ?
+            
         """, (current_user.id,))
         allowed_locations = [r[0] for r in cur.fetchall()]
 
@@ -1657,7 +1658,7 @@ def api_reservations_v2_day():
         sql += " AND LOWER(LTRIM(RTRIM(rm.name))) = LOWER(?)"
         params.append(room_filter)
 
-    sql += " ORDER BY rm.location, rm.name, r.start_time"
+    sql += " ORDER BY rm.capacity desc, rm.name, r.start_time"
 
     cur.execute(sql, params)
     rows = cur.fetchall()
