@@ -28,17 +28,10 @@
         {% endfor %}
       </select>
 
-      <!-- ROOM FILTER -->
+      <!-- ROOM FILTER (populated by updateRoomDropdown() on load) -->
       <select id="roomFilter" class="form-select form-select-sm">
-    <option value="all">All Rooms</option>
-    {% for loc, room_list in grouped_rooms.items() %}
-        <optgroup label="{{ loc }}">
-            {% for room in room_list %}
-                <option value="{{ room }}">{{ room }}</option>
-            {% endfor %}
-        </optgroup>
-    {% endfor %}
-</select>
+        <option value="all">All Rooms</option>
+      </select>
 
 
       <!-- TODAY -->
@@ -52,15 +45,15 @@
   </div>
 
   <!-- LEGEND -->
-  <div class="d-flex gap-4 mb-3 flex-wrap">
-    <span class="d-flex align-items-center">
-      <span class="legend-box bg-primary me-2"></span> Approved
-    </span>
+<!--  <div class="d-flex gap-4 mb-3 flex-wrap">-->
+<!--    <span class="d-flex align-items-center">-->
+<!--      <span class="legend-box bg-primary me-2"></span> Approved-->
+<!--    </span>-->
 
-    <span class="d-flex align-items-center">
-      <span class="legend-box bg-warning me-2"></span> Pending
-    </span>
-  </div>
+<!--    <span class="d-flex align-items-center">-->
+<!--      <span class="legend-box bg-warning me-2"></span> Pending-->
+<!--    </span>-->
+<!--  </div>-->
 
   <!-- Calendar Container -->
   <div id="calendar" class="calendar-container"></div>
@@ -142,8 +135,13 @@ document.addEventListener('DOMContentLoaded', function () {
     const loc = groupFilter.value;
     roomFilter.innerHTML = '<option value="all">All Rooms</option>';
 
-    if (groupedRooms[loc]) {
-      groupedRooms[loc].forEach(room => {
+    // Find matching key case-insensitively to guard against key mismatches
+    const matchedKey = Object.keys(groupedRooms).find(
+      k => k.trim().toLowerCase() === (loc || '').trim().toLowerCase()
+    );
+
+    if (matchedKey && groupedRooms[matchedKey] && groupedRooms[matchedKey].length > 0) {
+      groupedRooms[matchedKey].forEach(room => {
         const opt = document.createElement('option');
         opt.value = room;
         opt.textContent = room;
