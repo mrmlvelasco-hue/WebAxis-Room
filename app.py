@@ -45,7 +45,7 @@ AD_USER_DOMAIN = os.getenv("AD_USER_DOMAIN", "")
 AD_TEST_USER = os.getenv("AD_TEST_USER")
 AD_TEST_PASS = os.getenv("AD_TEST_PASS")
 
-SHARED_SECRET_KEY = os.getenv("SHARED_SECRET_KEY")
+SHARED_SECRET_KEY  = os.getenv("SHARED_SECRET_KEY")
 
 app = Flask(__name__)
 
@@ -55,6 +55,8 @@ if not SHARED_SECRET_KEY:
 app.secret_key = SHARED_SECRET_KEY
 app.permanent_session_lifetime = timedelta(days=7)
 NATIONAL_ADMINS = ['admin', 'systemadmin']  # add more if needed
+
+
 
 
 def get_db_connection():
@@ -72,13 +74,44 @@ def get_db_connection():
 
 # ── Build SQLAlchemy engine once at startup ────────────────────────────────
 def _build_engine():
+    """
+    Builds a SQLAlchemy engine with connection pool.
+
+    Driver behaviour by version:
+      Driver 17 → Encrypt=NO  by default  (safe without SSL cert)
+      Driver 18 → Encrypt=YES by default  (BREAKING — needs TrustServerCertificate=yes
+                                            or a valid SSL cert on SQL Server)
+      FreeTDS   → No encryption by default (safe without SSL cert)
+
+    We always set Encrypt=no + TrustServerCertificate=yes so the app
+    works identically on Driver 17, Driver 18, and FreeTDS without
+    needing SSL certificates configured on the SQL Server.
+
+    Environment mapping:
+      Windows dev  → Microsoft ODBC Driver 17 or 18  (whichever is installed)
+      QAS Docker   → FreeTDS  (Driver 17 installed on QAS host)
+      PRD Docker   → FreeTDS  (Driver 18 installed on PRD host)
+    All three work because we normalise the encryption settings below.
+    """
     import platform
 
+    # ── Shared connection settings (same for all drivers) ─────────────────
+    # Encrypt=no + TrustServerCertificate=yes ensures Driver 17, 18,
+    # and FreeTDS all behave the same — no SSL cert required on SQL Server.
+    SHARED_PARAMS = (
+        f"SERVER={DB_HOST};"
+        f"DATABASE={DB_DATABASE};"
+        f"UID={DB_USERNAME};"
+        f"PWD={DB_PASSWORD};"
+        "Encrypt=no;"
+        "TrustServerCertificate=yes;"
+    )
+
     if platform.system() == "Windows":
-        # pyodbc.drivers() reads installed drivers from the Windows registry
+        # pyodbc.drivers() reads installed drivers from Windows registry
         # — does NOT need a DB connection, safe to call before DB is up
         available = pyodbc.drivers()
-        priority = [
+        priority  = [
             "ODBC Driver 18 for SQL Server",
             "ODBC Driver 17 for SQL Server",
             "SQL Server Native Client 11.0",
@@ -92,48 +125,69 @@ def _build_engine():
                 f"Installed drivers: {available}"
             )
 
-        # Use creator= so pyodbc builds the connection string directly.
-        # Avoids URL-encoding issues with spaces in driver names
-        # (e.g. "ODBC Driver 17 for SQL Server" breaks when URL-encoded as +).
+        print(f"[DB] Windows — using driver: {driver}")
+
         def creator():
             return pyodbc.connect(
-                f"DRIVER={{{driver}}};"
-                f"SERVER={DB_HOST};"
-                f"DATABASE={DB_DATABASE};"
-                f"UID={DB_USERNAME};"
-                f"PWD={DB_PASSWORD};"
-                "Encrypt=no;"
-                "TrustServerCertificate=yes;",
+                f"DRIVER={{{driver}}};" + SHARED_PARAMS,
                 autocommit=False
             )
 
     else:
-        # Linux / Docker — FreeTDS
-        def creator():
-            return pyodbc.connect(
-                "DRIVER={FreeTDS};"
-                f"SERVER={DB_HOST};"
-                f"DATABASE={DB_DATABASE};"
-                f"UID={DB_USERNAME};"
-                f"PWD={DB_PASSWORD};"
-                "Port=1433;"
-                "TDS_Version=7.3;",
-                autocommit=False
+        # Linux / Docker — try Microsoft ODBC driver first (if installed),
+        # fall back to FreeTDS. This handles QAS (Driver 17) and PRD (Driver 18)
+        # automatically without any code change between environments.
+        available = pyodbc.drivers()
+        linux_priority = [
+            "ODBC Driver 18 for SQL Server",   # PRD Docker
+            "ODBC Driver 17 for SQL Server",   # QAS Docker
+            "FreeTDS",                          # fallback (always in Dockerfile)
+        ]
+        driver = next((d for d in linux_priority if d in available), None)
+
+        if not driver:
+            raise RuntimeError(
+                f"No usable SQL Server ODBC driver found on Linux. "
+                f"Installed drivers: {available}"
             )
 
+        print(f"[DB] Linux/Docker — using driver: {driver}")
+
+        if driver == "FreeTDS":
+            # FreeTDS needs Port and TDS_Version explicitly
+            def creator():
+                return pyodbc.connect(
+                    f"DRIVER={{FreeTDS}};"
+                    f"SERVER={DB_HOST};"
+                    f"DATABASE={DB_DATABASE};"
+                    f"UID={DB_USERNAME};"
+                    f"PWD={DB_PASSWORD};"
+                    "Port=1433;"
+                    "TDS_Version=7.3;"
+                    "Encrypt=no;"
+                    "TrustServerCertificate=yes;",
+                    autocommit=False
+                )
+        else:
+            # Microsoft ODBC Driver 17 or 18 on Linux
+            # Same connection string as Windows — works identically
+            def creator():
+                return pyodbc.connect(
+                    f"DRIVER={{{driver}}};" + SHARED_PARAMS,
+                    autocommit=False
+                )
+
     return create_engine(
-        "mssql+pyodbc://",  # dialect hint only — actual connection via creator
-        creator=creator,
-        poolclass=QueuePool,
-        pool_size=10,  # persistent connections kept open
-        max_overflow=20,  # burst connections on top of pool_size
-        pool_timeout=30,  # seconds to wait for a free connection
-        pool_recycle=1800,  # recycle connections every 30 min
-        pool_pre_ping=True,  # test connection before handing it out
-        echo=False,
+        "mssql+pyodbc://",   # dialect hint only — actual connection via creator
+        creator        = creator,
+        poolclass      = QueuePool,
+        pool_size      = 10,    # persistent connections kept open
+        max_overflow   = 20,    # burst connections on top of pool_size
+        pool_timeout   = 30,    # seconds to wait for a free connection
+        pool_recycle   = 1800,  # recycle connections every 30 min
+        pool_pre_ping  = True,  # test connection before handing it out
+        echo           = False,
     )
-
-
 # ── Initialise connection pool once at startup ─────────────────────────────
 _engine = _build_engine()
 
@@ -156,13 +210,13 @@ def db_connection():
         conn.rollback()
         raise
     finally:
-        conn.close()  # returns to pool, doesn't actually close TCP socket
+        conn.close()   # returns to pool, doesn't actually close TCP socket
+
 
 
 login_manager = LoginManager()
 login_manager.login_view = 'login'
 login_manager.init_app(app)
-
 
 class User(UserMixin):
     def __init__(self, id, username, email=None, display_name=None, role='user'):
@@ -175,27 +229,19 @@ class User(UserMixin):
     def is_admin(self):
         return (self.role or '').lower() == 'admin'
 
-
 def rows_to_dicts(cursor):
     columns = [col[0] for col in cursor.description]
     return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
-
 def get_group_approver(group_code):
     try:
-        conn = get_db_connection();
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT TOP 1 approver_username FROM dbo.group_approvers WHERE group_code = ? AND is_primary = 1 ORDER BY id DESC",
-            (group_code,))
-        row = cur.fetchone();
-        conn.close()
+        conn = get_db_connection(); cur = conn.cursor()
+        cur.execute("SELECT TOP 1 approver_username FROM dbo.group_approvers WHERE group_code = ? AND is_primary = 1 ORDER BY id DESC", (group_code,))
+        row = cur.fetchone(); conn.close()
         return row[0] if row else None
     except Exception as e:
         print("⚠️ get_group_approver error:", e)
         return None
-
-
 def get_approvers_for_location(location_name):
     """
     Returns list of approvers for a given location.
@@ -218,21 +264,15 @@ def get_approvers_for_location(location_name):
         print("⚠️ get_approvers_for_location error:", e)
         return []
 
-
 def is_user_group_admin(username, group_code):
     try:
-        conn = get_db_connection();
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM dbo.group_approvers WHERE group_code = ? AND approver_username = ?",
-                    (group_code, username))
-        row = cur.fetchone();
-        conn.close()
+        conn = get_db_connection(); cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM dbo.group_approvers WHERE group_code = ? AND approver_username = ?", (group_code, username))
+        row = cur.fetchone(); conn.close()
         return (row[0] if row else 0) > 0
     except Exception as e:
         print("⚠️ is_user_group_admin error:", e)
         return False
-
-
 # is_admin = (current_user.username.lower() == "admin")
 @app.route('/approvals/<int:res_id>/approve', methods=['POST'])
 @login_required
@@ -252,6 +292,7 @@ def approve_reservation(res_id):
         WHERE u.username = ?
     """, (username,))
     assigned_locations = [row[0] for row in cur.fetchall()]
+
 
     # Fetch reservation + location
     cur.execute("""
@@ -329,7 +370,6 @@ def approve_reservation(res_id):
 
     flash("✔ Reservation approved", "success")
     return redirect(url_for('approvals'))
-
 
 @app.route('/approvals')
 @login_required
@@ -437,6 +477,7 @@ def approvals():
     )
 
 
+
 @app.route('/reservation/<int:reservation_id>/<string:action>', methods=['GET'])
 @login_required
 def update_reservation_status(reservation_id, action):
@@ -468,7 +509,6 @@ def update_reservation_status(reservation_id, action):
         flash("⚠️ Error while updating reservation.", "danger")
 
     return redirect(url_for('admin_dashboard'))
-
 
 @app.route('/approvals/<int:res_id>/deny', methods=['POST'])
 @login_required
@@ -541,15 +581,12 @@ def deny_reservation(res_id):
     flash("❌ Reservation denied", "info")
     return redirect(url_for('approvals'))
 
-
 @login_manager.user_loader
 def load_user(user_id):
     try:
-        conn = get_db_connection();
-        cursor = conn.cursor()
+        conn = get_db_connection(); cursor = conn.cursor()
         cursor.execute("SELECT id, username, email, display_name, role FROM dbo.users WHERE id = ?", (int(user_id),))
-        row = cursor.fetchone();
-        conn.close()
+        row = cursor.fetchone(); conn.close()
         if row:
             uid, username, email, display_name, role = row
             return User(uid, username, email, display_name, role)
@@ -557,11 +594,9 @@ def load_user(user_id):
         print("⚠️ load_user error:", e)
     return None
 
-
 def log_audit(action, details=None):
     try:
-        conn = get_db_connection();
-        cursor = conn.cursor()
+        conn = get_db_connection(); cursor = conn.cursor()
         username = "system"
         try:
             if current_user and getattr(current_user, "is_authenticated", False):
@@ -582,14 +617,11 @@ def log_audit(action, details=None):
     except Exception as e:
         print("⚠️ Audit logging failed (DB connection):", e)
 
-
 def ensure_default_admin():
     try:
-        conn = get_db_connection();
-        cursor = conn.cursor()
+        conn = get_db_connection(); cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM dbo.users WHERE role = 'admin'")
-        row = cursor.fetchone();
-        admin_count = row[0] if row else 0
+        row = cursor.fetchone(); admin_count = row[0] if row else 0
         if admin_count == 0:
             default_admin = "admin"
             cursor.execute("""
@@ -602,16 +634,11 @@ def ensure_default_admin():
     except Exception as e:
         print("⚠️ ensure_default_admin error:", e)
 
-
 def authenticate_local(username, password):
     try:
-        conn = get_db_connection();
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT id, username, password_hash, email, display_name, role FROM dbo.users WHERE username = ?",
-            (username,))
-        row = cursor.fetchone();
-        conn.close()
+        conn = get_db_connection(); cursor = conn.cursor()
+        cursor.execute("SELECT id, username, password_hash, email, display_name, role FROM dbo.users WHERE username = ?", (username,))
+        row = cursor.fetchone(); conn.close()
         print("USERNAME FROM DB:", username, "|")
         print("password:", password, "|")
         print("INPUT USERNAME:", username, "|")
@@ -626,12 +653,10 @@ def authenticate_local(username, password):
         print("⚠️ authenticate_local error:", e)
     return None
 
-
 def authenticate_ldap(username, password, timeout=3):
     if not AD_SERVER:
         return False
-    user_principal = username if (
-                '@' in username or '\\' in username) else f"{username}@{AD_USER_DOMAIN}" if AD_USER_DOMAIN else username
+    user_principal = username if ('@' in username or '\\' in username) else f"{username}@{AD_USER_DOMAIN}" if AD_USER_DOMAIN else username
     try:
         server = Server(AD_SERVER, port=AD_PORT, use_ssl=AD_USE_SSL, get_info=ALL, connect_timeout=timeout)
         conn_ldap = Connection(server, user=user_principal, password=password, auto_bind=True)
@@ -640,12 +665,9 @@ def authenticate_ldap(username, password, timeout=3):
     except Exception as e:
         print("⚠️ LDAP bind failed:", e)
         return False
-
-
 def is_approval_required_for_room(room_id):
     try:
-        conn = get_db_connection();
-        cur = conn.cursor()
+        conn = get_db_connection(); cur = conn.cursor()
         cur.execute("SELECT approvals_required, location FROM rooms WHERE id = ?", (room_id,))
         row = cur.fetchone()
         conn.close()
@@ -653,7 +675,7 @@ def is_approval_required_for_room(room_id):
         if not row:
             return True  # default safety
 
-        room_flag = row[0]  # may be NULL
+        room_flag = row[0]     # may be NULL
         location = row[1]
 
         # room override
@@ -661,8 +683,7 @@ def is_approval_required_for_room(room_id):
             return bool(room_flag)
 
         # fallback: location approval rule
-        conn = get_db_connection();
-        cur = conn.cursor()
+        conn = get_db_connection(); cur = conn.cursor()
         cur.execute("SELECT approvals_required FROM locations WHERE name = ?", (location,))
         loc_row = cur.fetchone()
         conn.close()
@@ -800,9 +821,7 @@ def login():
 
     return redirect(url_for('reserve_v2'))
 
-
 import itsdangerous
-
 serializer = itsdangerous.URLSafeTimedSerializer(app.secret_key)
 
 # @app.route('/sso-login')
@@ -865,9 +884,9 @@ USED_NONCES = set()
 SSO_TOKEN_EXPIRY = int(os.getenv("SSO_TOKEN_EXPIRY", "60"))
 SHARED_SECRET_KEY = os.getenv("SHARED_SECRET_KEY")
 
-
 @app.route('/sso-login')
 def sso_login():
+
     token = request.args.get("token")
 
     if not token:
@@ -963,7 +982,6 @@ def sso_login():
 
     return redirect(url_for("reserve_v2"))
 
-
 @app.route('/logout')
 @login_required
 def logout():
@@ -971,7 +989,6 @@ def logout():
     logout_user()
     flash("You have been logged out successfully.")
     return redirect(url_for('login'))
-
 
 @app.route('/rooms/maintenance')
 @login_required
@@ -1006,7 +1023,7 @@ def room_maintenance():
             AND ul.location_name = r.location
             )
             ORDER BY location, name
-    """, current_user.username)
+    """,current_user.username)
     rooms = rows_to_dicts(cur)
     # Load locations for dropdowns
     cur.execute("""SELECT DISTINCT location FROM rooms r WHERE  EXISTS (
@@ -1050,28 +1067,23 @@ def room_maintenance():
 @login_required
 def add_room():
     if not getattr(current_user, 'is_admin', lambda: False)():
-        flash("Not authorized.", "danger");
-        return redirect(url_for('menu'))
+        flash("Not authorized.", "danger"); return redirect(url_for('menu'))
     name = request.form['name']
     group_code = request.form.get('group_code') or None
     capacity = int(request.form.get('capacity') or 0)
     approver = request.form.get('approver') or None
     is_combined = 1 if request.form.get('is_combined') else 0
     features = request.form.get('features') or None
-    conn = get_db_connection();
-    cur = conn.cursor()
-    cur.execute(
-        "INSERT INTO dbo.rooms (name, location, capacity, group_code, description, status, is_combined,features) VALUES (?, ?, ?, ?, ?, 'Active', ?,?)",
-        (name, group_code or name, capacity, group_code, '', is_combined, features))
+    conn = get_db_connection(); cur = conn.cursor()
+    cur.execute("INSERT INTO dbo.rooms (name, location, capacity, group_code, description, status, is_combined,features) VALUES (?, ?, ?, ?, ?, 'Active', ?,?)",
+                (name, group_code or name, capacity, group_code, '', is_combined,features))
     conn.commit()
     if approver and group_code:
-        cur.execute("INSERT INTO dbo.group_approvers (group_code, approver_username, is_primary) VALUES (?, ?, 1)",
-                    (group_code, approver))
+        cur.execute("INSERT INTO dbo.group_approvers (group_code, approver_username, is_primary) VALUES (?, ?, 1)", (group_code, approver))
         conn.commit()
     conn.close()
     flash("Room added.", "success")
     return redirect(url_for('room_maintenance'))
-
 
 @app.route('/rooms/edit/<int:id>', methods=['POST'])
 @login_required
@@ -1094,32 +1106,27 @@ def edit_room(id):
     elif approvals_raw == "no":
         approvals_required = 0
     # else "auto" -> NULL
-    conn = get_db_connection();
-    cur = conn.cursor()
+    conn = get_db_connection(); cur = conn.cursor()
     cur.execute("""
         UPDATE dbo.rooms
         SET name=?, location=?, group_code=?, capacity=?, is_combined=?, approvals_required=?, features=?,status=?
         WHERE id=?
-    """, (name, location, group_code, capacity, is_combined, approvals_required, features, status, id))
-    conn.commit();
-    conn.close()
+    """, (name, location, group_code, capacity, is_combined,approvals_required, features,status,id))
+    conn.commit(); conn.close()
     flash("✅ Room updated successfully.", "success")
     return redirect(url_for('room_maintenance'))
-
 
 @app.route('/rooms/deactivate/<int:id>')
 @login_required
 def deactivate_room(id):
     if not getattr(current_user, 'is_admin', lambda: False)():
-        flash("Not authorized.", "danger");
-        return redirect(url_for('menu'))
-    conn = get_db_connection();
-    cur = conn.cursor()
+        flash("Not authorized.", "danger"); return redirect(url_for('menu'))
+    conn = get_db_connection(); cur = conn.cursor()
     cur.execute("UPDATE dbo.rooms SET status = 'Inactive' WHERE id = ?", (id,))
-    conn.commit();
-    conn.close()
+    conn.commit(); conn.close()
     flash("Room deactivated.", "warning")
     return redirect(url_for('room_maintenance'))
+
 
 
 def get_room_availability_for_date(room_id, date,
@@ -1185,7 +1192,6 @@ def get_all_room_ids():
 # --- ROOM LIST (HARDENED PATCH) --------------------------------------------
 import traceback
 from datetime import date, timedelta
-
 
 @app.route("/rooms")
 @login_required
@@ -1307,7 +1313,7 @@ def room_list():
                    status, remarks
             FROM reservations
             WHERE CAST(start_time AS DATE) = ?
-              AND room_id IN ({','.join(['?'] * len(room_ids))})
+              AND room_id IN ({','.join(['?']*len(room_ids))})
         """
         params = [raw_date] + room_ids
         cur.execute(sql, params)
@@ -1381,7 +1387,6 @@ def room_list():
             # fallback: simple text response
             return "Internal Server Error", 500
 
-
 # This is for the View route in new module
 @app.route('/reserve_v2', methods=['GET'])
 @login_required
@@ -1431,9 +1436,9 @@ def reserve_v2():
         })
         locations_set.add(r[2] or "General")
     TIMELINE_START_HOUR = int(os.getenv("TIMELINE_START_HOUR", 6))
-    TIMELINE_END_HOUR = int(os.getenv("TIMELINE_END_HOUR", 22))
-    MAX_RECUR_MONTHS = int(os.getenv("MAX_RECUR_MONTHS", 4))
-    MAX_HOURS = int(os.getenv("MAX_HOURS", 8))
+    TIMELINE_END_HOUR   = int(os.getenv("TIMELINE_END_HOUR", 22))
+    MAX_RECUR_MONTHS    = int(os.getenv("MAX_RECUR_MONTHS", 4))
+    MAX_HOURS           = int(os.getenv("MAX_HOURS", 8))
     return render_template(
         "reserve_v2.html",
         locations=sorted(locations_set),
@@ -1495,52 +1500,51 @@ def reserve(room_id):
     finally:
         conn.close()
 
-
 @app.route('/calendar_view_v2', methods=['GET'])
 @login_required
 def calendar_view_v2():
-    """Day view grid (Excel-like) with 30-min slots.
+        """Day view grid (Excel-like) with 30-min slots.
 
-    Accepts query params:
-      - location: location filter (default: all)
-      - room: room name filter (optional)
-      - date: YYYY-MM-DD (default: today)
-    """
-    TIMELINE_START_HOUR = int(os.getenv("TIMELINE_START_HOUR", 6))
-    TIMELINE_END_HOUR = int(os.getenv("TIMELINE_END_HOUR", 22))
-    MAX_RECUR_MONTHS = int(os.getenv("MAX_RECUR_MONTHS", 4))
-    MAX_HOURS = int(os.getenv("MAX_HOURS", 8))
-    from datetime import datetime
+        Accepts query params:
+          - location: location filter (default: all)
+          - room: room name filter (optional)
+          - date: YYYY-MM-DD (default: today)
+        """
+        TIMELINE_START_HOUR = int(os.getenv("TIMELINE_START_HOUR", 6))
+        TIMELINE_END_HOUR   = int(os.getenv("TIMELINE_END_HOUR", 22))
+        MAX_RECUR_MONTHS = int(os.getenv("MAX_RECUR_MONTHS", 4))
+        MAX_HOURS           = int(os.getenv("MAX_HOURS", 8))
+        from datetime import datetime
 
-    # date
-    date_str = request.args.get("date")
-    try:
-        selected_date = datetime.strptime(date_str, "%Y-%m-%d").date() if date_str else datetime.now().date()
-    except Exception:
-        selected_date = datetime.now().date()
+        # date
+        date_str = request.args.get("date")
+        try:
+            selected_date = datetime.strptime(date_str, "%Y-%m-%d").date() if date_str else datetime.now().date()
+        except Exception:
+            selected_date = datetime.now().date()
 
-    location_filter = (request.args.get("location") or "all").strip()
-    room_filter = (request.args.get("room") or "all").strip()
-    print("🧩 Filter:", room_filter)
-    conn = get_db_connection()
-    cur = conn.cursor()
+        location_filter = (request.args.get("location") or "all").strip()
+        room_filter = (request.args.get("room") or "all").strip()
+        print("🧩 Filter:", room_filter)
+        conn = get_db_connection()
+        cur = conn.cursor()
 
-    allowed_locations = get_user_locations(current_user.id)
+        allowed_locations = get_user_locations(current_user.id)
 
-    if current_user.is_admin():
-        cur.execute("SELECT DISTINCT location FROM rooms WHERE status='Active'")
-        allowed_locations = [r[0] for r in cur.fetchall()]
+        if current_user.is_admin():
+            cur.execute("SELECT DISTINCT location FROM rooms WHERE status='Active'")
+            allowed_locations = [r[0] for r in cur.fetchall()]
 
-    if not allowed_locations:
-        allowed_locations = ["Axis T1"]  # fallback
+        if not allowed_locations:
+            allowed_locations = ["Axis T1"]  # fallback
 
-    # ----------------------------------------
-    # 4. GET ALL ROOMS UNDER ALLOWED LOCATIONS
-    # ----------------------------------------
-    placeholders = ",".join(["?"] * len(allowed_locations))
+        # ----------------------------------------
+        # 4. GET ALL ROOMS UNDER ALLOWED LOCATIONS
+        # ----------------------------------------
+        placeholders = ",".join(["?"] * len(allowed_locations))
 
-    # locations for dropdown
-    cur.execute("""
+        # locations for dropdown
+        cur.execute("""
             SELECT DISTINCT ISNULL(NULLIF(LTRIM(RTRIM(r.location)), ''), 'General') AS location
             FROM dbo.rooms r (NOLOCK) JOIN 
             user_locations ul (NOLOCK) on r.location = ul.location_name
@@ -1548,75 +1552,74 @@ def calendar_view_v2():
             ul.user_id = ? 
             AND  status='Active'
             ORDER BY ISNULL(NULLIF(LTRIM(RTRIM(r.location)), ''), 'General')
-        """, current_user.id)
-    locations = [str(r[0]) for r in cur.fetchall()]
+        """,current_user.id)
+        locations = [str(r[0]) for r in cur.fetchall()]
 
-    # rooms list
-    sql = """
+        # rooms list
+        sql = """
             SELECT id, name, capacity,
                    ISNULL(NULLIF(LTRIM(RTRIM(location)), ''), 'General') AS location,
                    ISNULL(features,'') AS features
             FROM dbo.rooms
             WHERE status='Active'
         """
-    params = []
-    # 🔒 Enforce user access
-    if allowed_locations is not None:
-        placeholders = ",".join(["?"] * len(allowed_locations))
-        sql += f" AND location IN ({placeholders})"
-        params.extend(allowed_locations)
+        params = []
+        # 🔒 Enforce user access
+        if allowed_locations is not None:
+            placeholders = ",".join(["?"] * len(allowed_locations))
+            sql += f" AND location IN ({placeholders})"
+            params.extend(allowed_locations)
 
-    if location_filter.lower() != 'all':
-        sql += " AND LOWER(LTRIM(RTRIM(location))) = LOWER(?)"
-        params.append(location_filter)
-    if room_filter and room_filter.lower() != 'all':
-        sql += " AND LOWER(LTRIM(RTRIM(name))) = LOWER(?)"
-        params.append(room_filter)
-    sql += " ORDER BY Capacity DESC, location, name"
+        if location_filter.lower() != 'all':
+            sql += " AND LOWER(LTRIM(RTRIM(location))) = LOWER(?)"
+            params.append(location_filter)
+        if room_filter and room_filter.lower() != 'all':
+            sql += " AND LOWER(LTRIM(RTRIM(name))) = LOWER(?)"
+            params.append(room_filter)
+        sql += " ORDER BY Capacity DESC,location, name"
 
-    cur.execute(sql, params)
-    print("🧩 SQL:", sql)
-    print("🧩 PARAMS:", params)
+        cur.execute(sql, params)
+        print("🧩 SQL:", sql)
+        print("🧩 PARAMS:", params)
 
-    rows = cur.fetchall()
-    conn.close()
+        rows = cur.fetchall()
+        conn.close()
 
-    rooms = []
-    for r in rows:
-        rooms.append({
-            "id": int(r.id),
-            "name": str(r.name),
-            "capacity": int(r.capacity) if r.capacity is not None else 0,
-            "location": str(r.location) if r.location else "General",
-            "features": str(r.features) if r.features else ""
-        })
+        rooms = []
+        for r in rows:
+            rooms.append({
+                "id": int(r.id),
+                "name": str(r.name),
+                "capacity": int(r.capacity) if r.capacity is not None else 0,
+                "location": str(r.location) if r.location else "General",
+                "features": str(r.features) if r.features else ""
+            })
 
-    # 30-minute slots based on ENV configuration
-    time_slots = []
+        # 30-minute slots based on ENV configuration
+        time_slots = []
 
-    for h in range(TIMELINE_START_HOUR, TIMELINE_END_HOUR + 1):
+        for h in range(TIMELINE_START_HOUR, TIMELINE_END_HOUR + 1):
 
-        time_slots.append(f"{h:02d}:00")
+            time_slots.append(f"{h:02d}:00")
 
-        if h != TIMELINE_END_HOUR:
-            time_slots.append(f"{h:02d}:30")
+            if h != TIMELINE_END_HOUR:
+                time_slots.append(f"{h:02d}:30")
 
-    embed = (request.args.get("embed") or "").strip() == "1"
+        embed = (request.args.get("embed") or "").strip() == "1"
 
-    return render_template(
-        "calendar_view_v2_embed.html" if embed else "calendar_view_v2.html",
-        selected_date=selected_date,
-        location_filter=location_filter,
-        room_filter=room_filter,
-        locations=locations,
-        rooms=rooms,
-        time_slots=time_slots,
-        TIMELINE_START_HOUR=TIMELINE_START_HOUR,
-        TIMELINE_END_HOUR=TIMELINE_END_HOUR,
-        MAX_RECUR_MONTHS=MAX_RECUR_MONTHS,
-        MAX_HOURS=MAX_HOURS
-    )
-
+        return render_template(
+            "calendar_view_v2_embed.html" if embed else "calendar_view_v2.html",
+            selected_date=selected_date,
+            location_filter=location_filter,
+            room_filter=room_filter,
+            locations=locations,
+            rooms=rooms,
+            time_slots=time_slots,
+            TIMELINE_START_HOUR=TIMELINE_START_HOUR,
+            TIMELINE_END_HOUR=TIMELINE_END_HOUR,
+            MAX_RECUR_MONTHS=MAX_RECUR_MONTHS,
+            MAX_HOURS=MAX_HOURS
+        )
 
 @app.route("/api/reservations_v2_day")
 @login_required
@@ -1639,8 +1642,8 @@ def api_reservations_v2_day():
     except:
         return jsonify([])
 
-    day_start = datetime.combine(d, dt_time.min)  # 00:00
-    day_end = day_start + timedelta(days=1)  # next day 00:00
+    day_start = datetime.combine(d, dt_time.min)          # 00:00
+    day_end = day_start + timedelta(days=1)               # next day 00:00
 
     conn = get_db_connection()
     cur = conn.cursor()
@@ -1659,7 +1662,6 @@ def api_reservations_v2_day():
             JOIN user_locations ul (NOLOCK) on r.location = ul.location_name
             WHERE status='Active'
             and ul.user_id= ?
-
         """, (current_user.id,))
         allowed_locations = [r[0] for r in cur.fetchall()]
 
@@ -1718,7 +1720,7 @@ def api_reservations_v2_day():
     events = []
     for row in rows:
         events.append({
-            "id": int(row.reservation_id),  # ✅ unique reservation id
+            "id": int(row.reservation_id),   # ✅ unique reservation id
             "room_id": int(row.room_id),
             "room": str(row.room_name),
             "location": str(row.location),
@@ -1776,8 +1778,13 @@ def calendar_view():
                 ORDER BY location, name
             """, allowed_locations)
         else:
-            cur.execute("SELECT * FROM rooms WHERE 1=0")
-
+            # Load rooms for this user/location
+            cur.execute("""
+                SELECT *
+                FROM rooms
+                WHERE status='Active'
+                  AND location = ?
+            """, (selected_location,))
         rows = cur.fetchall()
 
         rooms = [
@@ -1785,7 +1792,7 @@ def calendar_view():
             for row in rows
         ]
 
-        # Group rooms by location: {"Tower 1": ["Room A",...], "Tower 2": [...]}
+        # Group rooms for dropdown
         grouped_rooms = {}
         for r in rooms:
             grouped_rooms.setdefault(r["location"], []).append(r["name"])
@@ -1804,7 +1811,6 @@ def calendar_view():
         print("❌ ERROR in calendar_view:", e)
         return "Calendar Error", 500
 
-
 def get_room_by_id(conn, room_id):
     cursor = conn.cursor()
     cursor.execute("""
@@ -1819,11 +1825,10 @@ def get_room_by_id(conn, room_id):
             "id": row[0],
             "name": row[1],
             "group_code": row[2],
-            "location": row[3],  # <-- FIXED
+            "location": row[3],          # <-- FIXED
             "is_combined": bool(row[4])
         }
     return None
-
 
 def get_linked_rooms(conn, group_code, exclude_id=None):
     cursor = conn.cursor()
@@ -1833,17 +1838,13 @@ def get_linked_rooms(conn, group_code, exclude_id=None):
         cursor.execute("SELECT id FROM dbo.rooms WHERE group_code = ?", (group_code,))
     return [r[0] for r in cursor.fetchall()]
 
-
 @app.route('/confirm')
 @login_required
 def confirm():
     return render_template('confirmation.html')
 
-
 # --- Helper: get_combined_group_rooms ---
 import uuid
-
-
 # from datetime import datetime, timedelta
 
 def get_combined_group_rooms(room_id):
@@ -1885,7 +1886,6 @@ def get_combined_group_rooms(room_id):
 
 from datetime import datetime, timedelta, timezone
 
-
 def snap_to_30min_floor(dt: datetime) -> datetime:
     """Floor to previous :00 or :30, preserve tz awareness."""
     minutes = dt.minute
@@ -1918,10 +1918,17 @@ def reserve_post(room_id):
 
         start_time = payload.get("start_time")
         end_time = payload.get("end_time")
-        remarks = payload.get("remarks", "")
+        remarks = (payload.get("remarks") or "").strip()
         email = payload.get("email") or getattr(current_user, "email", None)
         reserved_by = payload.get("reserved_by") or getattr(current_user, "display_name", "") or getattr(current_user,
                                                                                                          "username", "")
+
+        # ── Server-side validation: meeting title required, min 5 chars ──
+        if not remarks:
+            return jsonify(success=False, message="Meeting title is required."), 400
+        if len(remarks) < 5:
+            return jsonify(success=False,
+                           message=f"Meeting title must be at least 5 characters (got {len(remarks)})."), 400
 
         recurrence_type = payload.get("recurrence_type", "none")
         weekdays = payload.get("weekdays", "")
@@ -1948,7 +1955,7 @@ def reserve_post(room_id):
             if selected_end.date() > max_allowed_date.date():
                 return jsonify(
                     success=False,
-                    message=f"Recurring reservations cannot exceed {MAX_RECUR_MONTHS} month(s)."
+                    message=f"Recurring reservations cannot exceed {MAX_RECUR_MONTHS} months."
                 ), 400
 
         # ---- ROOM INFO ----
@@ -1995,7 +2002,7 @@ def reserve_post(room_id):
             if selected_end.date() > max_allowed_date.date():
                 return jsonify(
                     success=False,
-                    message=f"Recurring reservations cannot exceed {MAX_RECUR_MONTHS} month(s)."
+                    message=f"Recurring reservations cannot exceed {MAX_RECUR_MONTHS} months."
                 ), 400
 
         if recurrence_type == "none":
@@ -2222,7 +2229,6 @@ def reserve_post(room_id):
             pass
         return jsonify(success=False, message=str(e)), 500
 
-
 @app.route('/api/cancel_reservation/<int:res_id>', methods=['POST'])
 @login_required
 def api_cancel_reservation(res_id):
@@ -2238,7 +2244,7 @@ def api_cancel_reservation(res_id):
     """
     try:
         conn = get_db_connection()
-        cur = conn.cursor()
+        cur  = conn.cursor()
 
         # ── Read mode from JSON body ──────────────────────────────────
         body = request.get_json(silent=True) or {}
@@ -2266,15 +2272,15 @@ def api_cancel_reservation(res_id):
         if not row:
             return jsonify({"success": False, "message": "Reservation not found."}), 404
 
-        rid = row[1]
-        reserved_by = row[2] or ""
-        status = row[3] or ""
-        start_time = row[4]
-        recurrence_id = row[6]
+        rid            = row[1]
+        reserved_by    = row[2] or ""
+        status         = row[3] or ""
+        start_time     = row[4]
+        recurrence_id  = row[6]
 
         # ── Authorization ─────────────────────────────────────────────
         cur.execute("SELECT group_code FROM dbo.rooms WHERE id = ?", (rid,))
-        room_row = cur.fetchone()
+        room_row   = cur.fetchone()
         group_code = room_row[0] if room_row else None
 
         allowed = False
@@ -2403,12 +2409,12 @@ def api_cancel_reservation(res_id):
         )
 
         return jsonify({
-            "success": True,
-            "room_id": rid,
-            "res_id": res_id,
-            "mode": mode,
+            "success":        True,
+            "room_id":        rid,
+            "res_id":         res_id,
+            "mode":           mode,
             "cancelled_count": cancelled_count,
-            "message": message
+            "message":        message
         })
 
     except Exception as e:
@@ -2417,7 +2423,6 @@ def api_cancel_reservation(res_id):
 
     finally:
         conn.close()
-
 
 @app.route('/reservation/edit/<int:res_id>', methods=['POST'])
 @login_required
@@ -2428,13 +2433,20 @@ def edit_reservation(res_id):
 
         data = request.get_json()
 
-        new_start = data.get("start_time")
-        new_end = data.get("end_time")
-        new_remarks = data.get("remarks", "")
-        mode = data.get("mode", "single")  # single | future
+        new_start   = data.get("start_time")
+        new_end     = data.get("end_time")
+        new_remarks = (data.get("remarks") or "").strip()
+        mode        = data.get("mode", "single")  # single | future
 
         if not new_start or not new_end:
             return jsonify(success=False, message="Missing data"), 400
+
+        # ── Server-side validation: meeting title required, min 5 chars ──
+        if not new_remarks:
+            return jsonify(success=False, message="Meeting title is required."), 400
+        if len(new_remarks) < 5:
+            return jsonify(success=False,
+                           message=f"Meeting title must be at least 5 characters (got {len(new_remarks)})."), 400
 
         new_start_dt = datetime.fromisoformat(new_start)
         new_end_dt = datetime.fromisoformat(new_end)
@@ -2459,8 +2471,8 @@ def edit_reservation(res_id):
         # ==============================
         is_admin = current_user.is_admin()
         is_owner = (
-                current_user.username == reserved_by or
-                current_user.display_name == reserved_by
+            current_user.username == reserved_by or
+            current_user.display_name == reserved_by
         )
 
         if not (is_admin or is_owner):
@@ -2483,9 +2495,9 @@ def edit_reservation(res_id):
             return jsonify(success=False, message="Room not found"), 404
 
         approvals_required_raw = room_row[0]
-        room_location = room_row[1] or ""
-        approvals_required = str(approvals_required_raw).strip().lower() \
-            if approvals_required_raw else "auto"
+        room_location          = room_row[1] or ""
+        approvals_required     = str(approvals_required_raw).strip().lower() \
+                                 if approvals_required_raw else "auto"
 
         cur.execute("""
             SELECT COUNT(*)
@@ -2617,7 +2629,6 @@ def edit_reservation(res_id):
     finally:
         conn.close()
 
-
 @app.route('/api/booked_slots')
 @login_required
 def api_booked_slots():
@@ -2658,7 +2669,6 @@ def api_booked_slots():
     except Exception as e:
         print(f"⚠️ api_booked_slots error: {e}")
         return jsonify({'error': str(e)}), 500
-
 
 @app.route('/room_schedule', methods=['GET'])
 @login_required
@@ -2744,7 +2754,6 @@ def room_schedule():
                            rooms=rooms,
                            reservations=reservations,
                            selected_date=selected_date)
-
 
 @app.route('/export_excel')
 @login_required
@@ -2838,9 +2847,9 @@ def export_excel():
     for room_name, bookings in reservations_by_room.items():
         ws = wb.add_worksheet(room_name[:31])
         ws.merge_range("A1:D1",
-                       f"{room_name} — Schedule ({start} to {end})",
-                       title_fmt
-                       )
+            f"{room_name} — Schedule ({start} to {end})",
+            title_fmt
+        )
         ws.write("A3", "Time", time_fmt)
         ws.write("B3", "Reservation Details", time_fmt)
         ws.set_column("A:A", 12)
@@ -2892,7 +2901,6 @@ def export_excel():
         download_name=filename,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-
 
 @app.route("/api/reservations")
 @login_required
@@ -2985,13 +2993,14 @@ def api_reservations():
 
     for (reservation_id, room_id, room_name, location,
          reserved_by, start_time, end_time, remarks, status) in rows:
+
         start_local = start_time.replace(tzinfo=tz)
         end_local = end_time.replace(tzinfo=tz)
 
         color = "#0047AB" if status == "Approved" else "#FFA726"
 
         events.append({
-            "id": reservation_id,  # FIXED
+            "id": reservation_id,         # FIXED
             "room_id": room_id,
             "title": f"{room_name} - {reserved_by}",
             "start": start_local.isoformat(),
@@ -3005,7 +3014,6 @@ def api_reservations():
 
     print(f"✅ Returned {len(events)} events (Group={group}, Room={room})")
     return jsonify(events)
-
 
 @app.route("/api/room_availability/<int:room_id>")
 @login_required
@@ -3059,78 +3067,64 @@ def api_room_availability(room_id):
         print(f"⚠️ Error loading room availability for {room_id}: {e}")
         return jsonify([])
 
-
 # (remaining routes & functions—api_reservations, api_room_availability, api_booked_slots, room_schedule, admin dashboard, etc.—should remain as in your working copy)
 # Keep the rest of your original file unchanged below this line (export_excel, api_reservations, api_room_availability, api_booked_slots, room_schedule, etc.)
 
 def assign_user_locations(user_id, locations):
-    """Replace all user-location assignments."""
-    try:
-        conn = get_db_connection();
-        cur = conn.cursor()
-        cur.execute("DELETE FROM dbo.user_locations WHERE user_id = ?", (user_id,))
-        for loc in locations:
-            cur.execute(
-                "INSERT INTO dbo.user_locations (user_id, location_name) VALUES (?, ?)",
-                (user_id, loc)
-            )
-        conn.commit()
-    except Exception as e:
-        print("⚠ assign_user_locations error:", e)
-    finally:
-        conn.close()
-
-
+   """Replace all user-location assignments."""
+   try:
+       conn = get_db_connection(); cur = conn.cursor()
+       cur.execute("DELETE FROM dbo.user_locations WHERE user_id = ?", (user_id,))
+       for loc in locations:
+           cur.execute(
+               "INSERT INTO dbo.user_locations (user_id, location_name) VALUES (?, ?)",
+               (user_id, loc)
+           )
+       conn.commit()
+   except Exception as e:
+       print("⚠ assign_user_locations error:", e)
+   finally:
+       conn.close()
 def get_user_locations(user_id):
-    try:
-        conn = get_db_connection();
-        cur = conn.cursor()
-        cur.execute("SELECT location_name FROM dbo.user_locations WHERE user_id = ?", (user_id,))
-        rows = [r[0] for r in cur.fetchall()]
-        conn.close()
-        return rows
-    except:
-        return []
-
-
+   try:
+       conn = get_db_connection(); cur = conn.cursor()
+       cur.execute("SELECT location_name FROM dbo.user_locations WHERE user_id = ?", (user_id,))
+       rows = [r[0] for r in cur.fetchall()]
+       conn.close()
+       return rows
+   except:
+       return []
 def assign_location_approvers(location, usernames):
-    """Replace all approvers of a location."""
-    try:
-        conn = get_db_connection();
-        cur = conn.cursor()
-        cur.execute("DELETE FROM dbo.group_approvers WHERE group_code = ?", (location,))
-        for user in usernames:
-            cur.execute("""
+   """Replace all approvers of a location."""
+   try:
+       conn = get_db_connection(); cur = conn.cursor()
+       cur.execute("DELETE FROM dbo.group_approvers WHERE group_code = ?", (location,))
+       for user in usernames:
+           cur.execute("""
                INSERT INTO dbo.group_approvers (group_code, approver_username, is_active)
                VALUES (?, ?, 1)
            """, (location, user))
-        conn.commit()
-    except Exception as e:
-        print("⚠ assign_location_approvers error:", e)
-    finally:
-        conn.close()
-
-
+       conn.commit()
+   except Exception as e:
+       print("⚠ assign_location_approvers error:", e)
+   finally:
+       conn.close()
 def get_location_approvers(location):
-    try:
-        conn = get_db_connection();
-        cur = conn.cursor()
-        cur.execute("""
+   try:
+       conn = get_db_connection(); cur = conn.cursor()
+       cur.execute("""
            SELECT approver_username
            FROM dbo.group_approvers
            WHERE group_code = ? AND is_active = 1
        """, (location,))
-        rows = [r[0] for r in cur.fetchall()]
-        conn.close()
-        return rows
-    except:
-        return []
-
-
+       rows = [r[0] for r in cur.fetchall()]
+       conn.close()
+       return rows
+   except:
+       return []
 def get_all_room_locations():
     try:
-        conn = get_db_connection();
-        cur = conn.cursor()
+        conn = get_db_connection(); cur = conn.cursor()
         cur.execute("SELECT DISTINCT location FROM dbo.rooms WHERE location IS NOT NULL")
         rows = [r[0] for r in cur.fetchall()]
         conn.close()
@@ -3138,7 +3132,6 @@ def get_all_room_locations():
     except Exception as e:
         print("⚠️ get_all_room_locations error:", e)
         return []
-
 
 # --- Edit User ---
 @app.route('/edit_user/<int:user_id>', methods=['GET', 'POST'])
@@ -3252,8 +3245,7 @@ def user_edit(user_id):
         flash("Access denied: Admins only.")
         return redirect(url_for('main_menu'))
 
-    conn = get_db_connection();
-    cursor = conn.cursor()
+    conn = get_db_connection(); cursor = conn.cursor()
 
     if request.method == 'POST':
         display_name = request.form.get('display_name', '').strip()
@@ -3307,8 +3299,7 @@ def user_edit(user_id):
                         new_list = [u for u in existing if u != username]
                         assign_location_approvers(loc, new_list)
 
-            log_audit("USER_UPDATED",
-                      f"Updated user {username}: locations={locations}, approver_locations={approver_locations}")
+            log_audit("USER_UPDATED", f"Updated user {username}: locations={locations}, approver_locations={approver_locations}")
             flash("✅ User updated successfully.", "success")
             return redirect(url_for('user_maintenance'))
         except Exception as e:
@@ -3332,9 +3323,7 @@ def user_edit(user_id):
     username = user[1]
     approver_locations = [loc for loc in locations if username in get_location_approvers(loc)]
 
-    return render_template("edit_user.html", user=user, locations=locations, user_locations=user_locations,
-                           approver_locations=approver_locations)
-
+    return render_template("edit_user.html", user=user, locations=locations, user_locations=user_locations, approver_locations=approver_locations)
 
 @app.route('/admin')
 @login_required
@@ -3418,7 +3407,6 @@ def admin_dashboard():
         loc_counts=loc_counts
     )
 
-
 # User maintenance (admin-only)
 @app.route('/add_user', methods=['POST'])
 @login_required
@@ -3490,10 +3478,8 @@ def add_user():
     except Exception as e:
         print("❌ add_user ERROR:", e)
         flash(f"⚠️ Error adding user: {e}", "danger")
-        try:
-            conn.rollback()
-        except:
-            pass
+        try: conn.rollback()
+        except: pass
     finally:
         try:
             conn.close()
@@ -3519,7 +3505,6 @@ def delete_user(user_id):
 
     flash("🗑️ User deleted successfully.")
     return redirect(url_for('user_maintenance'))
-
 
 @app.route('/user_maintenance', methods=['GET', 'POST'])
 @login_required
@@ -3594,19 +3579,19 @@ def user_maintenance():
 
     # Reload connection for GET
     conn = get_db_connection()
-    cur = conn.cursor()
+    cur  = conn.cursor()
 
     # ── Search & pagination params ────────────────────────────
-    search = request.args.get('search', '').strip()
-    page = max(1, int(request.args.get('page', 1)))
+    search   = request.args.get('search', '').strip()
+    page     = max(1, int(request.args.get('page', 1)))
     per_page = 25
-    offset = (page - 1) * per_page
+    offset   = (page - 1) * per_page
 
     # ── Base query with optional search filter ────────────────
-    where = ""
+    where  = ""
     params = []
     if search:
-        where = """
+        where  = """
             WHERE (
                 username     LIKE ?
                 OR display_name LIKE ?
@@ -3620,7 +3605,7 @@ def user_maintenance():
     # Total count for pagination
     cur.execute(f"SELECT COUNT(*) FROM dbo.users {where}", params)
     total = cur.fetchone()[0]
-    total_pages = max(1, -(-total // per_page))  # ceiling division
+    total_pages = max(1, -(-total // per_page))   # ceiling division
 
     # Paginated result
     cur.execute(f"""
@@ -3887,14 +3872,20 @@ def main_menu():
 
 
 if __name__ == '__main__':
+    import platform
+
     print("Initializing WebAXIS System...")
     ensure_default_admin()
 
-    is_dev = os.getenv("FLASK_ENV", "development").lower() == "development"
-    print(f"Running in {'Development' if is_dev else 'Production'} mode")
+    FLASK_ENV  = os.getenv("FLASK_ENV", "development").lower()
+    is_dev     = FLASK_ENV == "development"
+    is_windows = platform.system() == "Windows"
 
+    print(f"Running in {'Development' if is_dev else 'Production'} mode "
+          f"on {'Windows' if is_windows else 'Linux/Docker'}")
+
+    # ── Development — Flask built-in server ──────────────────────────────
     if is_dev:
-        # Development — local machine, single process is fine
         print("WebAXIS RoomSys available at http://127.0.0.1:5000/login")
 
         if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
@@ -3907,21 +3898,54 @@ if __name__ == '__main__':
             host="127.0.0.1",
             port=5000,
             debug=True,
-            threaded=True,  # handle concurrent requests during dev
+            threaded=True,
             use_reloader=True
         )
 
+    # ── Production on Windows — Waitress (for IIS reverse proxy) ─────────
+    elif is_windows:
+        try:
+            from waitress import serve
+        except ImportError:
+            raise RuntimeError(
+                "Waitress not installed. Run: pip install waitress\n"
+                "Waitress is required for production on Windows/IIS."
+            )
+
+        host    = os.getenv("WAITRESS_HOST",    "127.0.0.1")
+        port    = int(os.getenv("WAITRESS_PORT",    "8000"))
+        threads = int(os.getenv("WAITRESS_THREADS", "8"))
+
+        print(f"WebAXIS RoomSys — Waitress on {host}:{port} "
+              f"({threads} threads)")
+        print("IIS should proxy requests to "
+              f"http://{host}:{port}")
+        print("TIP: To run as a Windows Service use webaxis_service.py")
+
+        serve(
+            app,
+            host            = host,
+            port            = port,
+            threads         = threads,
+            channel_timeout = 60,
+            cleanup_interval= 30,
+            connection_limit= 200,
+        )
+
+    # ── Production on Linux / Docker — Gunicorn ───────────────────────────
     else:
-        # Production fallback — prefer Gunicorn (see gunicorn.conf.py)
-        # Run with:  gunicorn -c gunicorn.conf.py app:app
+        # Gunicorn is started by Docker CMD, not by this block.
+        # This fallback runs only if someone does "python app.py" on Linux.
         print("WebAXIS RoomSys available at http://0.0.0.0:5000/login")
-        print("TIP: For production use Gunicorn — gunicorn -c gunicorn.conf.py app:app")
+        print("TIP: For Docker use Gunicorn — "
+              "gunicorn -c gunicorn.conf.py wsgi:app")
 
         app.run(
             host="0.0.0.0",
             port=5000,
             debug=False,
-            threaded=True,  # each request in its own thread
+            threaded=True,
             use_reloader=False
         )
+
 

@@ -274,13 +274,24 @@
             </div>
 
             <div class="mb-3">
-              <label class="form-label small fw-semibold text-secondary">Meeting Title</label>
+              <label class="form-label small fw-semibold text-secondary">
+                Meeting Title <span class="text-danger">*</span>
+              </label>
               <textarea id="modalMeetingTitle"
                         class="form-control border-2 shadow-sm-hover"
                         maxlength="60"
+                        minlength="5"
                         rows="5"
-                        placeholder="Purpose of the meeting..."></textarea>
-              <div class="form-text text-end" style="font-size: 0.7rem;">Max 60 chars</div>
+                        placeholder="Purpose of the meeting... (min. 5 characters)"
+                        required></textarea>
+              <div class="d-flex justify-content-between align-items-center mt-1">
+                <div id="titleMinHint" class="text-muted" style="font-size:0.7rem;">
+                  Minimum 5 characters required
+                </div>
+                <div id="titleCharCount" class="text-muted" style="font-size:0.7rem;">
+                  0 / 60
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -809,6 +820,49 @@ document.addEventListener("DOMContentLoaded", function () {
     document.getElementById("modalStartTime")
             ?.addEventListener("change", updateEndTimeOptions);
 
+    /* ── Meeting title — live char counter + min-length indicator ── */
+    const titleInput     = document.getElementById("modalMeetingTitle");
+    const titleCharCount = document.getElementById("titleCharCount");
+    const titleMinHint   = document.getElementById("titleMinHint");
+    const MIN_TITLE_LEN  = 5;
+
+    function updateTitleUI() {
+        const len = titleInput.value.trim().length;
+        titleCharCount.textContent = `${len} / 60`;
+
+        if (len === 0) {
+            titleInput.classList.remove("is-valid", "is-invalid");
+            titleMinHint.textContent = "Minimum 5 characters required";
+            titleMinHint.style.color = "";
+        } else if (len < MIN_TITLE_LEN) {
+            titleInput.classList.add("is-invalid");
+            titleInput.classList.remove("is-valid");
+            titleMinHint.textContent = `${MIN_TITLE_LEN - len} more character${MIN_TITLE_LEN - len > 1 ? "s" : ""} needed`;
+            titleMinHint.style.color = "var(--bs-danger)";
+        } else {
+            titleInput.classList.add("is-valid");
+            titleInput.classList.remove("is-invalid");
+            titleMinHint.textContent = "✓ Looks good";
+            titleMinHint.style.color = "var(--bs-success)";
+        }
+
+        titleCharCount.style.color = len >= 55 ? "var(--bs-danger)"
+                                   : len >= 40 ? "var(--bs-warning)"
+                                   : "";
+    }
+
+    titleInput.addEventListener("input", updateTitleUI);
+
+    /* ── Reset title UI when modal closes ── */
+    document.getElementById("reserveModal")?.addEventListener("hidden.bs.modal", () => {
+        if (titleInput) {
+            titleInput.classList.remove("is-valid", "is-invalid");
+            if (titleCharCount) titleCharCount.textContent = "0 / 60";
+            if (titleMinHint)   titleMinHint.textContent  = "Minimum 5 characters required";
+            if (titleMinHint)   titleMinHint.style.color  = "";
+        }
+    });
+
     /* ── Reset modal to create mode when closed ── */
     document.getElementById("reserveModal")
             ?.addEventListener("hidden.bs.modal", () => setModalMode("create"));
@@ -961,6 +1015,25 @@ document.addEventListener("DOMContentLoaded", function () {
         }
         if (!dateInput.value) {
             Swal.fire("Missing Date", "Please select a date.", "warning");
+            return;
+        }
+
+        /* ── Meeting title — required, minimum 5 characters ── */
+        const titleVal = remarksInput.value.trim();
+        if (!titleVal) {
+            remarksInput.classList.add("is-invalid");
+            remarksInput.focus();
+            Swal.fire("Meeting Title Required",
+                "Please enter a meeting title before submitting.",
+                "warning");
+            return;
+        }
+        if (titleVal.length < 5) {
+            remarksInput.classList.add("is-invalid");
+            remarksInput.focus();
+            Swal.fire("Title Too Short",
+                `Meeting title must be at least 5 characters. You entered ${titleVal.length}.`,
+                "warning");
             return;
         }
 
