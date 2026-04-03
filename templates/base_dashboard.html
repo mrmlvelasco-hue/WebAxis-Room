@@ -415,6 +415,128 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 </script>
 {% block scripts %}{% endblock %}
+
+<!-- ========================
+     SESSION EXPIRY WARNING
+     Covers ALL pages that extend base_dashboard.html
+     ======================== -->
+<div id="sessionWarningOverlay" style="
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 9999;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+">
+  <div style="
+    background: #fff;
+    border-radius: 16px;
+    padding: 40px 48px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+    max-width: 480px;
+    width: 90%;
+    text-align: center;
+  ">
+    <div style="font-size: 48px; margin-bottom: 12px;">⏳</div>
+    <h4 style="font-weight: 700; color: #1e293b; margin-bottom: 10px;">
+      Your session will expire soon.
+    </h4>
+    <p style="color: #64748b; margin-bottom: 6px;">
+      Please click anywhere to extend your session.
+    </p>
+    <p style="color: #ef4444; font-weight: 600; font-size: 1.1rem;"
+       id="sessionCountdown"></p>
+  </div>
+</div>
+
+<script>
+(function () {
+    /* Session lifetime injected by Flask on every protected route.
+       Falls back to 30 min if not passed.
+       Minimum 2 minutes enforced so warning has room to show. */
+    const SESSION_MINUTES = Math.max(2, parseInt("{{ session_lifetime_minutes | default(30) }}", 10));
+    const WARN_BEFORE_SEC = Math.min(60, (SESSION_MINUTES * 60) - 30); // never > total session
+    const SESSION_SEC     = SESSION_MINUTES * 60;
+    const IDLE_TIMEOUT_MS = (SESSION_SEC - WARN_BEFORE_SEC) * 1000;
+
+    let warningTimer   = null;
+    let countdownTimer = null;
+    let countdownSec   = WARN_BEFORE_SEC;
+    let isWarning      = false;
+    let throttlePending = false;  // throttle flag for high-frequency events
+
+    const overlay   = document.getElementById("sessionWarningOverlay");
+    const countdown = document.getElementById("sessionCountdown");
+
+    /* ── Show warning ── */
+    function showWarning() {
+        if (isWarning) return;
+        isWarning    = true;
+        countdownSec = WARN_BEFORE_SEC;
+        overlay.style.display = "flex";
+        updateCountdown();
+        countdownTimer = setInterval(function () {
+            countdownSec--;
+            updateCountdown();
+            if (countdownSec <= 0) {
+                clearInterval(countdownTimer);
+                window.location.href = "/session-expired";
+            }
+        }, 1000);
+    }
+
+    function updateCountdown() {
+        countdown.textContent = "Logging out in " + countdownSec +
+            " second" + (countdownSec !== 1 ? "s" : "") + "…";
+    }
+
+    /* ── Reset timer on user activity ── */
+    function resetTimer() {
+        if (isWarning) {
+            isWarning = false;
+            overlay.style.display = "none";
+            clearInterval(countdownTimer);
+        }
+        clearTimeout(warningTimer);
+        warningTimer = setTimeout(showWarning, IDLE_TIMEOUT_MS);
+    }
+
+    /* ── Throttled reset — prevents mousemove firing hundreds/sec ── */
+    function throttledReset() {
+        if (throttlePending) return;
+        throttlePending = true;
+        setTimeout(function () {
+            throttlePending = false;
+            resetTimer();
+        }, 500);  // at most once per 500ms
+    }
+
+    /* High-frequency events use throttled version */
+    ["mousemove", "scroll", "touchmove"].forEach(function (evt) {
+        document.addEventListener(evt, throttledReset, { passive: true });
+    });
+
+    /* Low-frequency events reset immediately */
+    ["click", "keydown", "touchstart"].forEach(function (evt) {
+        document.addEventListener(evt, resetTimer, { passive: true });
+    });
+
+    /* ── SESSION_EXPIRED postMessage from iframe embed ── */
+    window.addEventListener("message", function (e) {
+        if (e.data && e.data.type === "SESSION_EXPIRED") {
+            clearTimeout(warningTimer);
+            clearInterval(countdownTimer);
+            window.location.href = "/session-expired";
+        }
+    });
+
+    /* Start timer only after page is fully loaded */
+    window.addEventListener("load", resetTimer);
+})();
+</script>
+
 </body>
 <style>
     /* ============================

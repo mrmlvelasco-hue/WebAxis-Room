@@ -994,6 +994,11 @@ document.addEventListener("DOMContentLoaded", function () {
         if (event.data.type === "SHOW_RESERVATION") {
             showReservationDetails(event.data.data);
         }
+
+        /* ── Session expired inside iframe → full-page redirect ── */
+        if (event.data.type === "SESSION_EXPIRED") {
+            window.location.href = "/session-expired";
+        }
     });
 
     /* =========================================================
@@ -1170,13 +1175,25 @@ document.addEventListener("DOMContentLoaded", function () {
 /* =============================================================
    REFRESH IFRAME
 ============================================================= */
-function refreshAvailability() {
+async function refreshAvailability() {
     const loc          = document.getElementById("locationFilterHeader")?.value || "all";
     const room         = document.getElementById("roomFilterHeader")?.value || "all";
     const selectedDate = document.getElementById("viewDate")?.value;
     if (!selectedDate) return;
     const frame = document.getElementById("availabilityFrame");
     if (!frame) return;
+
+    /* ── Ping session before loading iframe to avoid login-in-iframe ── */
+    try {
+        const check = await fetch("/ping", { headers: { "Accept": "application/json" } });
+        if (check.status === 401) {
+            window.location.href = "/session-expired";
+            return;
+        }
+    } catch (err) {
+        console.warn("Session ping failed:", err);
+    }
+
     frame.src = `/calendar_view_v2?embed=1`
               + `&date=${encodeURIComponent(selectedDate)}`
               + `&location=${encodeURIComponent(loc)}`
@@ -1219,4 +1236,5 @@ function getJsWeekday(date) {
     border-color: #93c5fd !important;
   }
 </style>
+
 {% endblock %}

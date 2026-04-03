@@ -53,7 +53,8 @@ if not SHARED_SECRET_KEY:
     raise RuntimeError("SHARED_SECRET_KEY is not set in environment variables")
 
 app.secret_key = SHARED_SECRET_KEY
-app.permanent_session_lifetime = timedelta(days=7)
+SESSION_LIFETIME_MINUTES = int(os.getenv("SESSION_LIFETIME_MINUTES", "30"))
+app.permanent_session_lifetime = timedelta(minutes=SESSION_LIFETIME_MINUTES)
 NATIONAL_ADMINS = ['admin', 'systemadmin']  # add more if needed
 
 
@@ -218,6 +219,21 @@ login_manager = LoginManager()
 login_manager.login_view = 'login'
 login_manager.init_app(app)
 
+@login_manager.unauthorized_handler
+def unauthorized():
+    """
+    Session expired:
+    - fetch/AJAX requests → JSON 401 (iframe handles via postMessage)
+    - Normal page requests → redirect to login
+    """
+    if (
+        request.is_json
+        or request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        or "application/json" in request.headers.get("Accept", "")
+    ):
+        return jsonify({"error": "session_expired"}), 401
+    return redirect(url_for('login'))
+
 class User(UserMixin):
     def __init__(self, id, username, email=None, display_name=None, role='user'):
         self.id = str(id)
@@ -228,6 +244,15 @@ class User(UserMixin):
 
     def is_admin(self):
         return (self.role or '').lower() == 'admin'
+
+@app.context_processor
+def inject_session_lifetime():
+    """Injects session_lifetime_minutes into every template automatically.
+    This means base_dashboard.html always has the correct value without
+    each route needing to pass it manually."""
+    return {
+        "session_lifetime_minutes": int(os.getenv("SESSION_LIFETIME_MINUTES", "30"))
+    }
 
 def rows_to_dicts(cursor):
     columns = [col[0] for col in cursor.description]
@@ -810,6 +835,7 @@ def login():
     # ------------------------------
     # SUCCESS LOGIN
     # ------------------------------
+    session.permanent = True
     login_user(user, remember=remember)
     log_audit("LOGIN_SUCCESS", f"User {user.username} logged in")
 
@@ -978,6 +1004,7 @@ def sso_login():
     uid, uname, email, display_name, role = row
     user = User(uid, uname, email, display_name, role)
 
+    session.permanent = True
     login_user(user)
 
     return redirect(url_for("reserve_v2"))
@@ -989,6 +1016,22 @@ def logout():
     logout_user()
     flash("You have been logged out successfully.")
     return redirect(url_for('login'))
+
+@app.route('/ping')
+@login_required
+def ping():
+    """Lightweight session check — 200 if alive, 401 (via unauthorized_handler) if expired."""
+    return jsonify({"ok": True}), 200
+
+@app.route('/session-expired')
+def session_expired_page():
+    """Full-page session expiry screen — redirects user back to WebAXIS portal."""
+    logout_user()
+    return render_template(
+        "sso_error.html",
+        title="Session Expired",
+        message="Your session has expired. Please return to WebAXIS to log in again."
+    ), 401
 
 @app.route('/rooms/maintenance')
 @login_required
@@ -1439,6 +1482,7 @@ def reserve_v2():
     TIMELINE_END_HOUR   = int(os.getenv("TIMELINE_END_HOUR", 22))
     MAX_RECUR_MONTHS    = int(os.getenv("MAX_RECUR_MONTHS", 4))
     MAX_HOURS           = int(os.getenv("MAX_HOURS", 8))
+    SESSION_LIFETIME_MINUTES = int(os.getenv("SESSION_LIFETIME_MINUTES", "30"))
     return render_template(
         "reserve_v2.html",
         locations=sorted(locations_set),
@@ -1446,7 +1490,8 @@ def reserve_v2():
         TIMELINE_START_HOUR=TIMELINE_START_HOUR,
         TIMELINE_END_HOUR=TIMELINE_END_HOUR,
         MAX_RECUR_MONTHS=MAX_RECUR_MONTHS,
-        MAX_HOURS=MAX_HOURS
+        MAX_HOURS=MAX_HOURS,
+        session_lifetime_minutes=SESSION_LIFETIME_MINUTES
     )
 
 

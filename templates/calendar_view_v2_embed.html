@@ -224,7 +224,16 @@ async function loadAndPaint() {
         + `&room=${encodeURIComponent(room)}`;
 
     try {
-        const res  = await fetch(url);
+        const res = await fetch(url, {
+            headers: { "Accept": "application/json" }
+        });
+
+        if (res.status === 401) {
+            /* Session expired — tell parent to do a full-page redirect */
+            window.parent.postMessage({ type: "SESSION_EXPIRED" }, "*");
+            return;
+        }
+
         const data = await res.json();
         (data || []).forEach(paintReservation);
     } catch (err) {
