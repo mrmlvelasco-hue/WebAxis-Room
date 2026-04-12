@@ -918,14 +918,16 @@ document.addEventListener("DOMContentLoaded", function () {
         syncEnds();
     });
 
-    /* ── endsOnDate max constraint ───────────────────────────── */
+    /* ── endsOnDate max constraint — always based on meeting start date ── */
     document.getElementById("endsOnDate")?.addEventListener("change", function () {
-        const selectedDate = this.value;
-        if (!selectedDate) return;
-        const max = new Date(selectedDate);
+        const meetingDate = document.getElementById("modalDate")?.value;
+        if (!meetingDate) return;
+        const max = new Date(meetingDate);
         max.setMonth(max.getMonth() + MAX_RECUR_MONTHS);
-        this.max = max.toISOString().split("T")[0];
-        this.min = selectedDate;
+        const maxStr = max.toISOString().split("T")[0];
+        if (this.value > maxStr) this.value = maxStr;  // clamp if over limit
+        this.max = maxStr;
+        this.min = meetingDate;
     });
 
     /* ── Date change listener ────────────────────────────────── */
@@ -1124,11 +1126,25 @@ document.addEventListener("DOMContentLoaded", function () {
             if (document.getElementById("endsOn")?.checked)    endMode = "on";
             if (document.getElementById("endsAfter")?.checked) endMode = "after";
 
+            // ── Hard ceiling: max allowed end date ────────────────────────
+            const maxAllowed = new Date(dateInput.value);
+            maxAllowed.setMonth(maxAllowed.getMonth() + MAX_RECUR_MONTHS);
+            const maxAllowedStr = maxAllowed.toISOString().split("T")[0];
+
             if (endMode === "never") {
-                const maxDate = new Date(dateInput.value);
-                maxDate.setMonth(maxDate.getMonth() + MAX_RECUR_MONTHS);
-                endOnDate = maxDate.toISOString().split("T")[0];
+                endOnDate = maxAllowedStr;
                 endMode   = "on";
+            }
+
+            // ── Frontend guard before hitting the server ──────────────────
+            const recurrenceType = document.getElementById("repeat_rule")?.value || "none";
+            if (recurrenceType !== "none" && endMode === "on" && endOnDate > maxAllowedStr) {
+                await Swal.fire({
+                    icon : "warning",
+                    title: "Date Limit Exceeded",
+                    text : `Recurring reservations cannot exceed ${MAX_RECUR_MONTHS} month(s). Max date allowed: ${maxAllowedStr}.`
+                });
+                return;
             }
             fd.append("end_mode",         endMode);
             fd.append("end_on_date",      endOnDate);

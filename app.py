@@ -251,7 +251,8 @@ def inject_session_lifetime():
     This means base_dashboard.html always has the correct value without
     each route needing to pass it manually."""
     return {
-        "session_lifetime_minutes": int(os.getenv("SESSION_LIFETIME_MINUTES", "30"))
+        "session_lifetime_minutes": int(os.getenv("SESSION_LIFETIME_MINUTES", "30")),
+        "webaxis_portal_url": os.getenv("WEBAXIS_PORTAL_URL", "http://webaxis.pcppi.com/Home/Index"),
     }
 
 def rows_to_dicts(cursor):
@@ -1994,13 +1995,20 @@ def reserve_post(room_id):
 
         max_allowed_date = start_dt + relativedelta(months=MAX_RECUR_MONTHS)
 
+        # ── Convert "never" to "on" capped at max_allowed_date ────────────
+        # This ensures the loop builders always work with a concrete end date
+        # and the validation below covers all modes uniformly.
+        if recurrence_type != "none" and end_mode == "never":
+            end_mode    = "on"
+            end_on_date = max_allowed_date.strftime("%Y-%m-%d")
+
+        # ── Validate end_on_date does not exceed max allowed ──────────────
         if recurrence_type != "none" and end_mode == "on" and end_on_date:
             selected_end = datetime.fromisoformat(end_on_date)
-
             if selected_end.date() > max_allowed_date.date():
                 return jsonify(
                     success=False,
-                    message=f"Recurring reservations cannot exceed {MAX_RECUR_MONTHS} months."
+                    message=f"Recurring reservations cannot exceed {MAX_RECUR_MONTHS} month(s) from the start date."
                 ), 400
 
         # ---- ROOM INFO ----
@@ -2041,14 +2049,6 @@ def reserve_post(room_id):
 
         count = 0
         MAX_LIMIT = 200  # safety cap only (not time-based)
-
-        if recurrence_type != "none" and end_mode == "on" and end_on_date:
-            selected_end = datetime.fromisoformat(end_on_date)
-            if selected_end.date() > max_allowed_date.date():
-                return jsonify(
-                    success=False,
-                    message=f"Recurring reservations cannot exceed {MAX_RECUR_MONTHS} months."
-                ), 400
 
         if recurrence_type == "none":
             all_dates = [start_dt]
